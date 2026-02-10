@@ -1061,8 +1061,7 @@ defmodule LiteskillWeb.ChatLive do
 
   @impl true
   def handle_event("report_edit_mode", _params, socket) do
-    {:noreply,
-     socket |> assign(report_mode: :edit, editing_section_id: nil) |> reload_report()}
+    {:noreply, socket |> assign(report_mode: :edit, editing_section_id: nil) |> reload_report()}
   end
 
   @impl true
