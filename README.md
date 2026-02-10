@@ -8,14 +8,16 @@ A self-hosted AI chat application built with Elixir and Phoenix. Liteskill conne
 - **MCP tool support** -- Connect external tool servers so the AI can call APIs, query databases, and more
 - **Conversation forking** -- Branch any conversation at any message to explore alternate paths
 - **Event sourcing** -- Every state change is an immutable event, giving you a full audit trail and the ability to replay or rebuild state
+- **RAG (Retrieval-Augmented Generation)** -- Organize knowledge into collections, embed documents with Cohere embed-v4, and search with pgvector. Ingest URLs asynchronously via Oban background jobs
+- **Structured reports** -- Create documents with infinitely-nested sections, collaborative comments with replies, ACL sharing, and markdown rendering
 - **Dual authentication** -- OpenID Connect (SSO) and password-based registration
-- **Access control** -- Share conversations with specific users or groups via ACLs
+- **Access control** -- Share conversations, reports, and groups with specific users or groups via ACLs
 - **Encrypted secrets** -- MCP API keys are encrypted at rest using AES-256-GCM
 
 ## Prerequisites
 
 - [mise](https://mise.jdx.dev/) (manages Elixir, Erlang, and Node versions)
-- PostgreSQL 14+
+- PostgreSQL 14+ with the [pgvector](https://github.com/pgvector/pgvector) extension (used for RAG vector similarity search)
 
 The project pins its toolchain via `mise.toml`:
 
@@ -95,6 +97,8 @@ lib/
     event_store/        # Append-only event store with optimistic concurrency
     llm/                # AWS Bedrock client, streaming handler, event-stream parser
     mcp_servers/        # MCP server registry and JSON-RPC 2.0 client
+    rag/                # RAG: collections, sources, documents, chunking, embedding, search
+    reports/            # Structured reports with nested sections and comments
     accounts/           # User management (OIDC + password auth)
     groups/             # Group memberships for ACL
     crypto/             # AES-256-GCM encryption for sensitive fields
@@ -114,6 +118,26 @@ Command -> Aggregate -> EventStore (append) -> PubSub -> Projector -> Projection
 ```
 
 The `ConversationAggregate` enforces a state machine: **created -> active <-> streaming -> archived**. Tool calls are handled during streaming, with support for both automatic execution and manual approval via the UI.
+
+### RAG (Retrieval-Augmented Generation)
+
+Liteskill includes a full RAG pipeline for grounding LLM responses in your own documents.
+
+**Data model:** Collections → Sources → Documents → Chunks. Each collection has a configurable embedding dimension (256–1536, default 1024). Sources categorize documents by origin (`manual`, `upload`, `web`, `api`).
+
+**Embedding and search:** Documents are chunked using a recursive text splitter that tries paragraph, line, sentence, and word boundaries before force-splitting. Chunks are embedded via Cohere embed-v4 on AWS Bedrock and stored as pgvector vectors. Search uses cosine distance with optional reranking via Cohere rerank-v3.5.
+
+**URL ingestion:** `Rag.ingest_url/4` enqueues an Oban background job that fetches a URL, validates it contains text content (rejects binary types like images), auto-creates a source from the domain name, chunks the response body, and embeds the chunks. Jobs retry up to 3 times on transient failures; binary content is permanently rejected without retry.
+
+### Reports
+
+Structured documents with infinitely-nesting sections, rendered as markdown.
+
+- **Sections** use a `path > notation` for nesting (e.g. `"Parent > Child > Grandchild"`) and are stored as a flat table with `parent_id` references
+- **Comments** can be added to individual sections or at the report level, with support for replies and resolution workflows (`open` → `addressed`)
+- **Batch operations** via `modify_sections/3` and `manage_comments/3` for bulk edits in a single transaction
+- **ACL sharing** with owner/member roles, similar to conversation access control
+- **Markdown rendering** with `render_markdown/2`, including optional comment output as blockquotes
 
 ## API
 
