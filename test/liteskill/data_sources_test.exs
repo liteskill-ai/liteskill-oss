@@ -23,6 +23,106 @@ defmodule Liteskill.DataSourcesTest do
     %{owner: owner, other: other}
   end
 
+  # --- Config & Types ---
+
+  describe "config_fields_for/1" do
+    test "returns fields for known source type" do
+      fields = DataSources.config_fields_for("github")
+      assert length(fields) > 0
+      assert Enum.all?(fields, &is_map/1)
+      assert Enum.all?(fields, &Map.has_key?(&1, :key))
+      assert Enum.all?(fields, &Map.has_key?(&1, :label))
+      assert Enum.all?(fields, &Map.has_key?(&1, :type))
+    end
+
+    test "returns empty list for unknown source type" do
+      assert DataSources.config_fields_for("nonexistent") == []
+    end
+
+    test "all available source types have config fields" do
+      for st <- DataSources.available_source_types() do
+        assert DataSources.config_fields_for(st.source_type) != [],
+               "#{st.source_type} should have config fields"
+      end
+    end
+  end
+
+  describe "available_source_types/0" do
+    test "returns a list" do
+      types = DataSources.available_source_types()
+      assert is_list(types)
+      assert length(types) > 0
+    end
+
+    test "each entry has name and source_type" do
+      for t <- DataSources.available_source_types() do
+        assert Map.has_key?(t, :name)
+        assert Map.has_key?(t, :source_type)
+      end
+    end
+
+    test "source_types match config_fields_for keys" do
+      for t <- DataSources.available_source_types() do
+        assert DataSources.config_fields_for(t.source_type) != []
+      end
+    end
+  end
+
+  describe "validate_metadata/2" do
+    test "filters unknown keys" do
+      metadata = %{"personal_access_token" => "ghp_x", "repository" => "o/r", "extra" => "bad"}
+      assert {:ok, filtered} = DataSources.validate_metadata("github", metadata)
+      assert Map.has_key?(filtered, "personal_access_token")
+      assert Map.has_key?(filtered, "repository")
+      refute Map.has_key?(filtered, "extra")
+    end
+
+    test "returns error for unknown source type" do
+      assert {:error, :unknown_source_type} =
+               DataSources.validate_metadata("nonexistent", %{"key" => "val"})
+    end
+
+    test "handles empty metadata" do
+      assert {:ok, %{}} = DataSources.validate_metadata("github", %{})
+    end
+
+    test "passes through all valid keys" do
+      metadata = %{"personal_access_token" => "ghp_x", "repository" => "o/r"}
+      assert {:ok, ^metadata} = DataSources.validate_metadata("github", metadata)
+    end
+  end
+
+  describe "list_sources_with_counts/1" do
+    test "returns sources with document_count", %{owner: owner} do
+      {:ok, _source} =
+        DataSources.create_source(%{name: "Counted", source_type: "manual"}, owner.id)
+
+      sources = DataSources.list_sources_with_counts(owner.id)
+      assert is_list(sources)
+      assert Enum.all?(sources, &Map.has_key?(&1, :document_count))
+    end
+
+    test "includes builtin sources", %{owner: owner} do
+      sources = DataSources.list_sources_with_counts(owner.id)
+      assert Enum.any?(sources, &(Map.get(&1, :builtin) == true))
+    end
+
+    test "document_count reflects actual documents", %{owner: owner} do
+      {:ok, source} =
+        DataSources.create_source(%{name: "With Docs", source_type: "manual"}, owner.id)
+
+      {:ok, _} =
+        DataSources.create_document(source.id, %{title: "Doc 1"}, owner.id)
+
+      {:ok, _} =
+        DataSources.create_document(source.id, %{title: "Doc 2"}, owner.id)
+
+      sources = DataSources.list_sources_with_counts(owner.id)
+      counted = Enum.find(sources, &(&1.id == source.id))
+      assert counted.document_count == 2
+    end
+  end
+
   # --- Sources ---
 
   describe "list_sources/1" do
@@ -130,6 +230,39 @@ defmodule Liteskill.DataSourcesTest do
         DataSources.create_source(%{name: "Other", source_type: "manual"}, other.id)
 
       assert {:error, :not_found} = DataSources.delete_source(source.id, owner.id)
+    end
+
+    test "cascade-deletes associated documents", %{owner: owner} do
+      {:ok, source} =
+        DataSources.create_source(%{name: "With Docs", source_type: "manual"}, owner.id)
+
+      {:ok, _} = DataSources.create_document(source.id, %{title: "Doc 1"}, owner.id)
+      {:ok, _} = DataSources.create_document(source.id, %{title: "Doc 2"}, owner.id)
+
+      assert DataSources.document_count(source.id) == 2
+      assert {:ok, _} = DataSources.delete_source(source.id, owner.id)
+      assert DataSources.document_count(source.id) == 0
+    end
+
+    test "admin can delete another user's source", %{owner: owner, other: other} do
+      {:ok, source} =
+        DataSources.create_source(%{name: "Other's Source", source_type: "manual"}, other.id)
+
+      {:ok, _} = DataSources.create_document(source.id, %{title: "Doc"}, other.id)
+
+      assert {:ok, _} = DataSources.delete_source(source.id, owner.id, is_admin: true)
+      assert {:error, :not_found} = DataSources.get_source(source.id, other.id)
+      assert DataSources.document_count(source.id) == 0
+    end
+
+    test "admin cannot delete builtin source", %{owner: owner} do
+      assert {:error, :cannot_delete_builtin} =
+               DataSources.delete_source("builtin:wiki", owner.id, is_admin: true)
+    end
+
+    test "returns :not_found for nonexistent source", %{owner: owner} do
+      assert {:error, :not_found} =
+               DataSources.delete_source(Ecto.UUID.generate(), owner.id)
     end
   end
 

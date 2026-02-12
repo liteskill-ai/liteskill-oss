@@ -201,6 +201,7 @@ defmodule LiteskillWeb.ChatComponents do
   attr :message, :string, required: true
   attr :confirm_event, :string, required: true
   attr :cancel_event, :string, required: true
+  attr :confirm_label, :string, default: "Delete"
 
   def confirm_modal(assigns) do
     ~H"""
@@ -218,7 +219,7 @@ defmodule LiteskillWeb.ChatComponents do
         </div>
         <div class="flex justify-end gap-2 px-5 pb-5">
           <button phx-click={@cancel_event} class="btn btn-ghost btn-sm">Cancel</button>
-          <button phx-click={@confirm_event} class="btn btn-error btn-sm">Archive</button>
+          <button phx-click={@confirm_event} class="btn btn-error btn-sm">{@confirm_label}</button>
         </div>
       </div>
     </div>

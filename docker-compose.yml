@@ -1,5 +1,5 @@
 x-app-env: &app-env
-  DATABASE_URL: "ecto://liteskill:liteskill@db/liteskill"
+  DATABASE_URL: "ecto://${POSTGRES_USER:-liteskill}:${POSTGRES_PASSWORD:-liteskill}@db/${POSTGRES_DB:-liteskill}"
   SECRET_KEY_BASE: "${SECRET_KEY_BASE:?SECRET_KEY_BASE is required. Generate with: openssl rand -base64 64}"
   ENCRYPTION_KEY: "${ENCRYPTION_KEY:?ENCRYPTION_KEY is required. Generate with: openssl rand -base64 32}"
   AWS_BEARER_TOKEN_BEDROCK: "${AWS_BEARER_TOKEN_BEDROCK:?AWS_BEARER_TOKEN_BEDROCK is required. Set this to your AWS Bedrock bearer token for LLM access.}"
@@ -8,22 +8,24 @@ x-app-env: &app-env
 services:
   db:
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: liteskill
-      POSTGRES_PASSWORD: liteskill
-      POSTGRES_DB: liteskill
+      POSTGRES_USER: ${POSTGRES_USER:-liteskill}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-liteskill}
+      POSTGRES_DB: ${POSTGRES_DB:-liteskill}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U liteskill"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-liteskill}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   app:
     build: .
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -37,6 +39,8 @@ services:
       # OIDC_CLIENT_ID: ""
       # OIDC_CLIENT_SECRET: ""
 
+  # bin/server already runs migrations on boot. This profile is for
+  # manual / offline migration runs (e.g. docker compose run --rm migrate).
   migrate:
     build: .
     command: ["bin/migrate"]

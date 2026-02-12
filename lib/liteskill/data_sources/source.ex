@@ -9,7 +9,7 @@ defmodule Liteskill.DataSources.Source do
     field :name, :string
     field :source_type, :string
     field :description, :string
-    field :metadata, :map, default: %{}
+    field :metadata, Liteskill.Crypto.EncryptedMap, default: %{}
 
     belongs_to :user, Liteskill.Accounts.User
 

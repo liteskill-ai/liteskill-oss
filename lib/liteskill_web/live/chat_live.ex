@@ -55,6 +55,7 @@ defmodule LiteskillWeb.ChatLive do
        inspecting_tools_loading: false,
        sidebar_open: true,
        confirm_delete_id: nil,
+       confirm_delete_source_id: nil,
        data_sources: [],
        current_source: nil,
        source_documents: %{documents: [], page: 1, page_size: 20, total: 0, total_pages: 1},
@@ -193,15 +194,7 @@ defmodule LiteskillWeb.ChatLive do
   defp apply_action(socket, :sources, _params) do
     maybe_unsubscribe(socket)
     user_id = socket.assigns.current_user.id
-    sources = Liteskill.DataSources.list_sources(user_id)
-
-    sources =
-      Enum.map(sources, fn source ->
-        source_ref =
-          if is_struct(source, Liteskill.DataSources.Source), do: source.id, else: source.id
-
-        Map.put(source, :document_count, Liteskill.DataSources.document_count(source_ref))
-      end)
+    sources = Liteskill.DataSources.list_sources_with_counts(user_id)
 
     rag_collections = Liteskill.Rag.list_collections(user_id)
 
@@ -522,6 +515,7 @@ defmodule LiteskillWeb.ChatLive do
               <SourcesComponents.source_card
                 :for={source <- @data_sources}
                 source={source}
+                current_user={@current_user}
               />
               <SourcesComponents.add_source_card />
             </div>
@@ -546,6 +540,14 @@ defmodule LiteskillWeb.ChatLive do
           <SourcesComponents.add_source_modal
             show={@show_add_source}
             source_types={@available_source_types}
+          />
+
+          <ChatComponents.confirm_modal
+            show={@confirm_delete_source_id != nil}
+            title="Delete data source"
+            message="Are you sure? This will permanently delete the data source and all its documents."
+            confirm_event="delete_source"
+            cancel_event="cancel_delete_source"
           />
         <% end %>
         <%= if @live_action == :source_show && @current_source do %>
@@ -1285,6 +1287,7 @@ defmodule LiteskillWeb.ChatLive do
             message={"Are you sure you want to archive #{MapSet.size(@conversations_selected)} conversation(s)?"}
             confirm_event="bulk_archive_conversations"
             cancel_event="cancel_bulk_archive"
+            confirm_label="Archive"
           />
         <% end %>
         <%= if @live_action not in [:sources, :source_show, :wiki, :wiki_page_show, :mcp_servers, :reports, :report_show, :conversations] and not ProfileLive.profile_action?(@live_action) do %>
@@ -1488,6 +1491,7 @@ defmodule LiteskillWeb.ChatLive do
         message="Are you sure you want to archive this conversation?"
         confirm_event="delete_conversation"
         cancel_event="cancel_delete_conversation"
+        confirm_label="Archive"
       />
 
       <McpComponents.tool_call_modal tool_call={@tool_call_modal} />
@@ -1570,12 +1574,20 @@ defmodule LiteskillWeb.ChatLive do
       {:ok, source} ->
         fields = Liteskill.DataSources.config_fields_for(source.source_type)
 
+        # Pre-fill form with existing metadata (skip password fields for security)
+        prefill =
+          (source.metadata || %{})
+          |> Map.filter(fn {k, _v} ->
+            field = Enum.find(fields, &(&1.key == k))
+            field != nil && field.type != :password
+          end)
+
         {:noreply,
          assign(socket,
            show_configure_source: true,
            configure_source: source,
            configure_source_fields: fields,
-           configure_source_form: to_form(%{}, as: :config)
+           configure_source_form: to_form(prefill, as: :config)
          )}
 
       {:error, _} ->
@@ -1607,29 +1619,29 @@ defmodule LiteskillWeb.ChatLive do
       |> Enum.reject(fn {_k, v} -> v == "" end)
       |> Map.new()
 
-    if metadata != %{} do
-      Liteskill.DataSources.update_source(source_id, %{metadata: metadata}, user_id)
+    result =
+      if metadata != %{} do
+        Liteskill.DataSources.update_source(source_id, %{metadata: metadata}, user_id)
+      else
+        {:ok, :noop}
+      end
+
+    case result do
+      {:ok, _} ->
+        sources = Liteskill.DataSources.list_sources_with_counts(user_id)
+
+        {:noreply,
+         assign(socket,
+           show_configure_source: false,
+           configure_source: nil,
+           configure_source_fields: [],
+           configure_source_form: to_form(%{}, as: :config),
+           data_sources: sources
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to save source configuration.")}
     end
-
-    # Refresh sources list and close modal
-    sources = Liteskill.DataSources.list_sources(user_id)
-
-    sources =
-      Enum.map(sources, fn source ->
-        source_ref =
-          if is_struct(source, Liteskill.DataSources.Source), do: source.id, else: source.id
-
-        Map.put(source, :document_count, Liteskill.DataSources.document_count(source_ref))
-      end)
-
-    {:noreply,
-     assign(socket,
-       show_configure_source: false,
-       configure_source: nil,
-       configure_source_fields: [],
-       configure_source_form: to_form(%{}, as: :config),
-       data_sources: sources
-     )}
   end
 
   @impl true
@@ -1646,35 +1658,60 @@ defmodule LiteskillWeb.ChatLive do
   def handle_event("add_source", %{"source-type" => source_type, "name" => name}, socket) do
     user_id = socket.assigns.current_user.id
 
-    {:ok, new_source} =
-      Liteskill.DataSources.create_source(
-        %{name: name, source_type: source_type, description: ""},
-        user_id
-      )
+    case Liteskill.DataSources.create_source(
+           %{name: name, source_type: source_type, description: ""},
+           user_id
+         ) do
+      {:ok, new_source} ->
+        fields = Liteskill.DataSources.config_fields_for(source_type)
+        sources = Liteskill.DataSources.list_sources_with_counts(user_id)
 
-    # Open the configure modal for the newly created source
-    fields = Liteskill.DataSources.config_fields_for(source_type)
+        {:noreply,
+         assign(socket,
+           show_add_source: false,
+           data_sources: sources,
+           show_configure_source: true,
+           configure_source: new_source,
+           configure_source_fields: fields,
+           configure_source_form: to_form(%{}, as: :config)
+         )}
 
-    # Refresh sources list
-    sources = Liteskill.DataSources.list_sources(user_id)
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to add data source.")}
+    end
+  end
 
-    sources =
-      Enum.map(sources, fn source ->
-        source_ref =
-          if is_struct(source, Liteskill.DataSources.Source), do: source.id, else: source.id
+  @impl true
+  def handle_event("confirm_delete_source", %{"id" => id}, socket) do
+    {:noreply, assign(socket, confirm_delete_source_id: id)}
+  end
 
-        Map.put(source, :document_count, Liteskill.DataSources.document_count(source_ref))
-      end)
+  @impl true
+  def handle_event("cancel_delete_source", _params, socket) do
+    {:noreply, assign(socket, confirm_delete_source_id: nil)}
+  end
 
-    {:noreply,
-     assign(socket,
-       show_add_source: false,
-       data_sources: sources,
-       show_configure_source: true,
-       configure_source: new_source,
-       configure_source_fields: fields,
-       configure_source_form: to_form(%{}, as: :config)
-     )}
+  @impl true
+  def handle_event("delete_source", _params, socket) do
+    user = socket.assigns.current_user
+    id = socket.assigns.confirm_delete_source_id
+    is_admin = Liteskill.Accounts.User.admin?(user)
+
+    case Liteskill.DataSources.delete_source(id, user.id, is_admin: is_admin) do
+      {:ok, _} ->
+        sources = Liteskill.DataSources.list_sources_with_counts(user.id)
+
+        {:noreply,
+         socket
+         |> assign(data_sources: sources, confirm_delete_source_id: nil)
+         |> put_flash(:info, "Data source deleted.")}
+
+      {:error, _} ->
+        {:noreply,
+         socket
+         |> assign(confirm_delete_source_id: nil)
+         |> put_flash(:error, "Failed to delete data source.")}
+    end
   end
 
   @impl true

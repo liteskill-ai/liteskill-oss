@@ -106,18 +106,41 @@ defmodule Liteskill.DataSources do
     ]
   }
 
+  @doc "Returns the list of configuration fields for a given source type."
+  @spec config_fields_for(String.t()) :: [map()]
   def config_fields_for(source_type), do: Map.get(@source_config_fields, source_type, [])
 
   @available_source_types [
-    %{key: "google_drive", name: "Google Drive", source_type: "google_drive"},
-    %{key: "sharepoint", name: "SharePoint", source_type: "sharepoint"},
-    %{key: "confluence", name: "Confluence", source_type: "confluence"},
-    %{key: "jira", name: "Jira", source_type: "jira"},
-    %{key: "github", name: "GitHub", source_type: "github"},
-    %{key: "gitlab", name: "GitLab", source_type: "gitlab"}
+    %{name: "Google Drive", source_type: "google_drive"},
+    %{name: "SharePoint", source_type: "sharepoint"},
+    %{name: "Confluence", source_type: "confluence"},
+    %{name: "Jira", source_type: "jira"},
+    %{name: "GitHub", source_type: "github"},
+    %{name: "GitLab", source_type: "gitlab"}
   ]
 
+  @doc "Returns the list of available (non-builtin) source type definitions."
+  @spec available_source_types() :: [map()]
   def available_source_types, do: @available_source_types
+
+  @doc """
+  Validates metadata keys against the allowed config fields for the given source type.
+
+  Returns `{:ok, filtered_map}` with unknown keys stripped, or
+  `{:error, :unknown_source_type}` if the source type has no config fields.
+  """
+  @spec validate_metadata(String.t(), map()) :: {:ok, map()} | {:error, :unknown_source_type}
+  def validate_metadata(source_type, metadata) when is_map(metadata) do
+    case config_fields_for(source_type) do
+      [] ->
+        {:error, :unknown_source_type}
+
+      fields ->
+        allowed_keys = MapSet.new(fields, & &1.key)
+        filtered = Map.filter(metadata, fn {k, _v} -> MapSet.member?(allowed_keys, k) end)
+        {:ok, filtered}
+    end
+  end
 
   # --- Sources ---
 
@@ -129,6 +152,15 @@ defmodule Liteskill.DataSources do
       |> Repo.all()
 
     Liteskill.BuiltinSources.virtual_sources() ++ db_sources
+  end
+
+  @doc "Like `list_sources/1` but includes `:document_count` on each source."
+  @spec list_sources_with_counts(Ecto.UUID.t()) :: [map()]
+  def list_sources_with_counts(user_id) do
+    list_sources(user_id)
+    |> Enum.map(fn source ->
+      Map.put(source, :document_count, document_count(source.id))
+    end)
   end
 
   def get_source("builtin:" <> _ = id, _user_id) do
@@ -154,6 +186,9 @@ defmodule Liteskill.DataSources do
 
   def update_source("builtin:" <> _, _attrs, _user_id), do: {:error, :cannot_update_builtin}
 
+  @doc "Updates a user's data source by ID."
+  @spec update_source(Ecto.UUID.t(), map(), Ecto.UUID.t()) ::
+          {:ok, Source.t()} | {:error, term()}
   def update_source(id, attrs, user_id) do
     with {:ok, source} <- get_source(id, user_id) do
       source
@@ -162,12 +197,30 @@ defmodule Liteskill.DataSources do
     end
   end
 
-  def delete_source("builtin:" <> _, _user_id), do: {:error, :cannot_delete_builtin}
+  def delete_source(id, user_id, opts \\ [])
 
-  def delete_source(id, user_id) do
-    case get_source(id, user_id) do
-      {:ok, %Source{} = source} -> Repo.delete(source)
-      error -> error
+  def delete_source("builtin:" <> _, _user_id, _opts), do: {:error, :cannot_delete_builtin}
+
+  def delete_source(id, user_id, opts) do
+    source =
+      if Keyword.get(opts, :is_admin, false) do
+        Repo.get(Source, id)
+      else
+        case get_source(id, user_id) do
+          {:ok, %Source{} = s} -> s
+          _ -> nil
+        end
+      end
+
+    case source do
+      nil ->
+        {:error, :not_found}
+
+      %Source{} ->
+        Repo.transaction(fn ->
+          from(d in Document, where: d.source_ref == ^source.id) |> Repo.delete_all()
+          Repo.delete!(source)
+        end)
     end
   end
 

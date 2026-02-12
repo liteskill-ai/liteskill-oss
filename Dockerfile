@@ -1,3 +1,6 @@
+# Stage 0: Node binary donor
+FROM node:24-bookworm-slim AS node
+
 # Stage 1: Build
 ARG ELIXIR_VERSION=1.18.4
 ARG OTP_VERSION=28.3.1
@@ -10,13 +13,13 @@ FROM ${BUILDER_IMAGE} AS build
 
 # Install build dependencies
 RUN apt-get update -y && \
-    apt-get install -y build-essential git curl && \
+    apt-get install -y build-essential git && \
     apt-get clean && rm -f /var/lib/apt/lists/*_*
 
-# Install Node.js 24 for asset compilation
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
-    apt-get install -y nodejs && \
-    apt-get clean && rm -f /var/lib/apt/lists/*_*
+# Copy Node.js from official image (avoids curl|bash from NodeSource)
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 WORKDIR /app
 
@@ -26,7 +29,9 @@ ENV MIX_ENV="prod"
 
 # Install mix dependencies
 COPY mix.exs mix.lock ./
-RUN mix deps.get --only prod
+RUN --mount=type=cache,target=/root/.hex \
+    --mount=type=cache,target=/root/.mix \
+    mix deps.get --only prod
 RUN mkdir config
 
 # Copy compile-time config before compiling deps
@@ -35,7 +40,8 @@ RUN mix deps.compile
 
 # Install npm dependencies for assets
 COPY assets/package.json assets/package-lock.json ./assets/
-RUN npm ci --prefix assets
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefix assets
 
 # Copy application code
 COPY priv priv
@@ -46,7 +52,7 @@ COPY assets assets
 RUN mix assets.setup
 
 # Compile the application
-RUN mix compile
+RUN mix compile --warnings-as-errors
 
 # Build assets
 RUN mix assets.deploy
