@@ -133,6 +133,38 @@ defmodule Liteskill.DataSourcesTest do
     end
   end
 
+  describe "update_source/3" do
+    test "updates own DB source metadata", %{owner: owner} do
+      {:ok, source} =
+        DataSources.create_source(%{name: "My Source", source_type: "github"}, owner.id)
+
+      metadata = %{"personal_access_token" => "ghp_test", "repository" => "owner/repo"}
+
+      assert {:ok, updated} =
+               DataSources.update_source(source.id, %{metadata: metadata}, owner.id)
+
+      assert updated.metadata == metadata
+    end
+
+    test "returns :not_found for other user's source", %{owner: owner, other: other} do
+      {:ok, source} =
+        DataSources.create_source(%{name: "Other Source", source_type: "github"}, other.id)
+
+      assert {:error, :not_found} =
+               DataSources.update_source(source.id, %{metadata: %{"key" => "val"}}, owner.id)
+    end
+
+    test "returns :cannot_update_builtin for builtin source", %{owner: owner} do
+      assert {:error, :cannot_update_builtin} =
+               DataSources.update_source("builtin:wiki", %{metadata: %{}}, owner.id)
+    end
+
+    test "returns :not_found for nonexistent source", %{owner: owner} do
+      assert {:error, :not_found} =
+               DataSources.update_source(Ecto.UUID.generate(), %{metadata: %{}}, owner.id)
+    end
+  end
+
   # --- Documents ---
 
   describe "create_document/3" do

@@ -50,13 +50,15 @@ Visit [localhost:4000](http://localhost:4000) in your browser.
 
 All runtime configuration is loaded from environment variables. Set them before starting the server or add them to a `.env` file.
 
-### Required (production)
+### Required
 
-| Variable          | Description                          |
-|-------------------|--------------------------------------|
-| `DATABASE_URL`    | PostgreSQL connection string         |
-| `SECRET_KEY_BASE` | Phoenix signing/encryption key       |
-| `ENCRYPTION_KEY`  | Encryption key for secrets at rest   |
+| Variable                   | Description                          |
+|----------------------------|--------------------------------------|
+| `DATABASE_URL`             | PostgreSQL connection string         |
+| `SECRET_KEY_BASE`          | Phoenix signing/encryption key       |
+| `ENCRYPTION_KEY`           | Encryption key for secrets at rest   |
+| `AWS_BEARER_TOKEN_BEDROCK` | AWS Bedrock bearer token for LLM access |
+| `AWS_REGION`               | AWS region for Bedrock (e.g. `us-east-1`) |
 
 ### Optional
 
@@ -65,8 +67,6 @@ All runtime configuration is loaded from environment variables. Set them before 
 | `PORT`                    | HTTP port                                | `4000`                                                  |
 | `PHX_HOST`                | Public hostname                          | `example.com`                                           |
 | `PHX_SERVER`              | Set to `true` to start the HTTP server   | --                                                      |
-| `AWS_BEARER_TOKEN_BEDROCK`| AWS Bedrock bearer token                 | --                                                      |
-| `AWS_REGION`              | AWS region for Bedrock                   | `us-east-1`                                             |
 | `OIDC_ISSUER`             | OpenID Connect issuer URL                | --                                                      |
 | `OIDC_CLIENT_ID`          | OIDC client ID                           | --                                                      |
 | `OIDC_CLIENT_SECRET`      | OIDC client secret                       | --                                                      |
@@ -160,6 +160,82 @@ Liteskill exposes a JSON API under `/api` for programmatic access. All endpoints
 | `POST`   | `/api/groups/:id/members`                 | Add a member                |
 | `DELETE` | `/api/groups/:id/members/:user_id`        | Remove a member             |
 
+## Running with Docker
+
+The quickest way to run Liteskill locally. You need [Docker](https://docs.docker.com/get-docker/) with the Compose plugin.
+
+### Quick start (Docker Compose)
+
+**1. Create a `.env` file**
+
+Liteskill requires secret keys and AWS Bedrock credentials. Generate the secrets and add your AWS config:
+
+```bash
+cat <<EOF > .env
+SECRET_KEY_BASE=$(openssl rand -base64 64 | tr -d '\n')
+ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')
+AWS_BEARER_TOKEN_BEDROCK=<your-bedrock-token>
+AWS_REGION=us-east-1
+EOF
+```
+
+Replace `<your-bedrock-token>` with your actual AWS Bedrock bearer token. Compose reads `.env` automatically.
+
+**2. Start the application**
+
+```bash
+docker compose up
+```
+
+This starts PostgreSQL, waits for it to be healthy, runs database migrations, and starts the server. Visit [localhost:4000](http://localhost:4000) once the logs show the server is running. Register an account to get started — the first user is automatically made an admin.
+
+**3. Stop everything**
+
+```bash
+docker compose down        # stop containers, keep data
+docker compose down -v     # stop containers AND delete database volume
+```
+
+If any required environment variables are missing, Compose will exit with a descriptive error message telling you what to set.
+
+### Running without Compose
+
+If you prefer plain `docker run` or already have a PostgreSQL instance with pgvector:
+
+```bash
+# Build the image
+docker build -t liteskill .
+
+# Start the server (runs migrations automatically on startup)
+docker run -d \
+  -p 4000:4000 \
+  -e DATABASE_URL="ecto://user:pass@host/liteskill" \
+  -e SECRET_KEY_BASE="$(openssl rand -base64 64 | tr -d '\n')" \
+  -e ENCRYPTION_KEY="$(openssl rand -base64 32 | tr -d '\n')" \
+  -e AWS_BEARER_TOKEN_BEDROCK="<your-bedrock-token>" \
+  -e AWS_REGION="us-east-1" \
+  -e PHX_HOST="localhost" \
+  liteskill
+```
+
+If your PostgreSQL is on the host machine, add `--network host` instead of `-p 4000:4000` and use `localhost` in `DATABASE_URL`.
+
+### Environment variable reference
+
+All configuration is loaded at startup from environment variables. See the [Configuration](#configuration) section above for the full list. The database **must** have the [pgvector](https://github.com/pgvector/pgvector) extension available — the `pgvector/pgvector:pg16` image used in `docker-compose.yml` includes it.
+
+### Image tags
+
+CI automatically builds and pushes images to Docker Hub on every push to `main` and on version tags:
+
+| Event | Tags | Push? |
+|-------|------|-------|
+| Push to `main` | `main`, `sha-<hash>` | Yes |
+| Tag `v1.2.3` | `1.2.3`, `1.2`, `latest`, `sha-<hash>` | Yes |
+| Pull request | `pr-<number>` | No (build only) |
+
+To pull a published image instead of building locally, replace `build: .` with `image: liteskill/liteskill:latest` in `docker-compose.yml`.
+
 ## Deployment
 
 Build a release:
@@ -175,12 +251,14 @@ Run it:
 DATABASE_URL="ecto://..." \
 SECRET_KEY_BASE="$(mix phx.gen.secret)" \
 ENCRYPTION_KEY="$(mix phx.gen.secret)" \
+AWS_BEARER_TOKEN_BEDROCK="<your-bedrock-token>" \
+AWS_REGION="us-east-1" \
 PHX_HOST="your-domain.com" \
 PHX_SERVER=true \
 _build/prod/rel/liteskill/bin/liteskill start
 ```
 
-See the [Phoenix deployment guides](https://hexdocs.pm/phoenix/deployment.html) for more options including Docker and fly.io.
+See the [Phoenix deployment guides](https://hexdocs.pm/phoenix/deployment.html) for more options.
 
 ## License
 

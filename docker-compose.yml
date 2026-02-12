@@ -1,0 +1,52 @@
+x-app-env: &app-env
+  DATABASE_URL: "ecto://liteskill:liteskill@db/liteskill"
+  SECRET_KEY_BASE: "${SECRET_KEY_BASE:?SECRET_KEY_BASE is required. Generate with: openssl rand -base64 64}"
+  ENCRYPTION_KEY: "${ENCRYPTION_KEY:?ENCRYPTION_KEY is required. Generate with: openssl rand -base64 32}"
+  AWS_BEARER_TOKEN_BEDROCK: "${AWS_BEARER_TOKEN_BEDROCK:?AWS_BEARER_TOKEN_BEDROCK is required. Set this to your AWS Bedrock bearer token for LLM access.}"
+  AWS_REGION: "${AWS_REGION:?AWS_REGION is required. Set this to your AWS region (e.g. us-east-1).}"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: liteskill
+      POSTGRES_PASSWORD: liteskill
+      POSTGRES_DB: liteskill
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liteskill"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    environment:
+      <<: *app-env
+      PHX_HOST: "localhost"
+      # Optional — uncomment and set to enable SSO
+      # OIDC_ISSUER: ""
+      # OIDC_CLIENT_ID: ""
+      # OIDC_CLIENT_SECRET: ""
+
+  migrate:
+    build: .
+    command: ["bin/migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *app-env
+    profiles:
+      - tools
+
+volumes:
+  pgdata:

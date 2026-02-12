@@ -70,6 +70,14 @@ defmodule LiteskillWeb.ChatLive do
        show_source_modal: false,
        source_modal_data: %{},
        stream_error: nil,
+       # Source configuration modal
+       show_configure_source: false,
+       configure_source: nil,
+       configure_source_fields: [],
+       configure_source_form: to_form(%{}, as: :config),
+       # Add source modal
+       show_add_source: false,
+       available_source_types: Liteskill.DataSources.available_source_types(),
        # Edit message state
        editing_message_id: nil,
        editing_message_content: "",
@@ -510,21 +518,13 @@ defmodule LiteskillWeb.ChatLive do
           </header>
 
           <div class="flex-1 overflow-y-auto p-4">
-            <div
-              :if={@data_sources != []}
-              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-            >
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <SourcesComponents.source_card
                 :for={source <- @data_sources}
                 source={source}
               />
+              <SourcesComponents.add_source_card />
             </div>
-            <p
-              :if={@data_sources == []}
-              class="text-base-content/50 text-center py-12"
-            >
-              No data sources available.
-            </p>
           </div>
 
           <SourcesComponents.rag_query_modal
@@ -533,6 +533,19 @@ defmodule LiteskillWeb.ChatLive do
             results={@rag_query_results}
             loading={@rag_query_loading}
             error={@rag_query_error}
+          />
+
+          <SourcesComponents.configure_source_modal
+            :if={@configure_source}
+            show={@show_configure_source}
+            source={@configure_source}
+            config_fields={@configure_source_fields}
+            config_form={@configure_source_form}
+          />
+
+          <SourcesComponents.add_source_modal
+            show={@show_add_source}
+            source_types={@available_source_types}
           />
         <% end %>
         <%= if @live_action == :source_show && @current_source do %>
@@ -1546,6 +1559,121 @@ defmodule LiteskillWeb.ChatLive do
        rag_query_results: [],
        rag_query_error: nil,
        rag_query_loading: false
+     )}
+  end
+
+  @impl true
+  def handle_event("open_configure_source", %{"source-id" => source_id}, socket) do
+    user_id = socket.assigns.current_user.id
+
+    case Liteskill.DataSources.get_source(source_id, user_id) do
+      {:ok, source} ->
+        fields = Liteskill.DataSources.config_fields_for(source.source_type)
+
+        {:noreply,
+         assign(socket,
+           show_configure_source: true,
+           configure_source: source,
+           configure_source_fields: fields,
+           configure_source_form: to_form(%{}, as: :config)
+         )}
+
+      {:error, _} ->
+        {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("close_configure_source", _params, socket) do
+    {:noreply,
+     assign(socket,
+       show_configure_source: false,
+       configure_source: nil,
+       configure_source_fields: [],
+       configure_source_form: to_form(%{}, as: :config)
+     )}
+  end
+
+  @impl true
+  def handle_event(
+        "save_source_config",
+        %{"source_id" => source_id, "config" => config_params},
+        socket
+      ) do
+    user_id = socket.assigns.current_user.id
+
+    metadata =
+      config_params
+      |> Enum.reject(fn {_k, v} -> v == "" end)
+      |> Map.new()
+
+    if metadata != %{} do
+      Liteskill.DataSources.update_source(source_id, %{metadata: metadata}, user_id)
+    end
+
+    # Refresh sources list and close modal
+    sources = Liteskill.DataSources.list_sources(user_id)
+
+    sources =
+      Enum.map(sources, fn source ->
+        source_ref =
+          if is_struct(source, Liteskill.DataSources.Source), do: source.id, else: source.id
+
+        Map.put(source, :document_count, Liteskill.DataSources.document_count(source_ref))
+      end)
+
+    {:noreply,
+     assign(socket,
+       show_configure_source: false,
+       configure_source: nil,
+       configure_source_fields: [],
+       configure_source_form: to_form(%{}, as: :config),
+       data_sources: sources
+     )}
+  end
+
+  @impl true
+  def handle_event("open_add_source", _params, socket) do
+    {:noreply, assign(socket, show_add_source: true)}
+  end
+
+  @impl true
+  def handle_event("close_add_source", _params, socket) do
+    {:noreply, assign(socket, show_add_source: false)}
+  end
+
+  @impl true
+  def handle_event("add_source", %{"source-type" => source_type, "name" => name}, socket) do
+    user_id = socket.assigns.current_user.id
+
+    {:ok, new_source} =
+      Liteskill.DataSources.create_source(
+        %{name: name, source_type: source_type, description: ""},
+        user_id
+      )
+
+    # Open the configure modal for the newly created source
+    fields = Liteskill.DataSources.config_fields_for(source_type)
+
+    # Refresh sources list
+    sources = Liteskill.DataSources.list_sources(user_id)
+
+    sources =
+      Enum.map(sources, fn source ->
+        source_ref =
+          if is_struct(source, Liteskill.DataSources.Source), do: source.id, else: source.id
+
+        Map.put(source, :document_count, Liteskill.DataSources.document_count(source_ref))
+      end)
+
+    {:noreply,
+     assign(socket,
+       show_add_source: false,
+       data_sources: sources,
+       show_configure_source: true,
+       configure_source: new_source,
+       configure_source_fields: fields,
+       configure_source_form: to_form(%{}, as: :config)
      )}
   end
 

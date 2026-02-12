@@ -1,0 +1,32 @@
+# Version control
+.git
+
+# Build artifacts
+_build/
+deps/
+cover/
+doc/
+
+# Asset build output (rebuilt during docker build)
+priv/static/assets/
+priv/static/cache_manifest.json
+assets/node_modules/
+
+# Environment and secrets
+.env
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# CI/CD
+.github/
+
+# Editor and tool config
+.claude/
+tmp/
+
+# Archives and crash dumps
+*.ez
+erl_crash.dump

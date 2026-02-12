@@ -11,6 +11,114 @@ defmodule Liteskill.DataSources do
 
   import Ecto.Query
 
+  # --- Source Config Fields ---
+
+  @source_config_fields %{
+    "google_drive" => [
+      %{
+        key: "service_account_json",
+        label: "Service Account JSON",
+        placeholder: "Paste JSON key contents...",
+        type: :textarea
+      },
+      %{
+        key: "folder_id",
+        label: "Folder / Drive ID",
+        placeholder: "e.g. 1AbC_dEfGhIjKlM",
+        type: :text
+      }
+    ],
+    "sharepoint" => [
+      %{
+        key: "tenant_id",
+        label: "Tenant ID",
+        placeholder: "e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        type: :text
+      },
+      %{
+        key: "site_url",
+        label: "Site URL",
+        placeholder: "https://yourorg.sharepoint.com/sites/...",
+        type: :text
+      },
+      %{
+        key: "client_id",
+        label: "Client ID",
+        placeholder: "Application (client) ID",
+        type: :text
+      },
+      %{
+        key: "client_secret",
+        label: "Client Secret",
+        placeholder: "Client secret value",
+        type: :password
+      }
+    ],
+    "confluence" => [
+      %{
+        key: "base_url",
+        label: "Base URL",
+        placeholder: "https://yourorg.atlassian.net/wiki",
+        type: :text
+      },
+      %{key: "username", label: "Username / Email", placeholder: "user@example.com", type: :text},
+      %{
+        key: "api_token",
+        label: "API Token",
+        placeholder: "Atlassian API token",
+        type: :password
+      },
+      %{key: "space_key", label: "Space Key", placeholder: "e.g. ENG", type: :text}
+    ],
+    "jira" => [
+      %{
+        key: "base_url",
+        label: "Base URL",
+        placeholder: "https://yourorg.atlassian.net",
+        type: :text
+      },
+      %{key: "username", label: "Username / Email", placeholder: "user@example.com", type: :text},
+      %{
+        key: "api_token",
+        label: "API Token",
+        placeholder: "Atlassian API token",
+        type: :password
+      },
+      %{key: "project_key", label: "Project Key", placeholder: "e.g. PROJ", type: :text}
+    ],
+    "github" => [
+      %{
+        key: "personal_access_token",
+        label: "Personal Access Token",
+        placeholder: "ghp_...",
+        type: :password
+      },
+      %{key: "repository", label: "Repository", placeholder: "owner/repo", type: :text}
+    ],
+    "gitlab" => [
+      %{
+        key: "personal_access_token",
+        label: "Personal Access Token",
+        placeholder: "glpat-...",
+        type: :password
+      },
+      %{key: "project_path", label: "Project Path", placeholder: "group/project", type: :text}
+    ]
+  }
+
+  def config_fields_for(source_type), do: Map.get(@source_config_fields, source_type, [])
+
+  @available_source_types [
+    %{key: "google_drive", name: "Google Drive", source_type: "google_drive"},
+    %{key: "sharepoint", name: "SharePoint", source_type: "sharepoint"},
+    %{key: "confluence", name: "Confluence", source_type: "confluence"},
+    %{key: "jira", name: "Jira", source_type: "jira"},
+    %{key: "github", name: "GitHub", source_type: "github"},
+    %{key: "gitlab", name: "GitLab", source_type: "gitlab"}
+  ]
+
+  def available_source_types, do: @available_source_types
+
   # --- Sources ---
 
   def list_sources(user_id) do
@@ -42,6 +150,16 @@ defmodule Liteskill.DataSources do
     %Source{}
     |> Source.changeset(Map.put(attrs, :user_id, user_id))
     |> Repo.insert()
+  end
+
+  def update_source("builtin:" <> _, _attrs, _user_id), do: {:error, :cannot_update_builtin}
+
+  def update_source(id, attrs, user_id) do
+    with {:ok, source} <- get_source(id, user_id) do
+      source
+      |> Source.changeset(attrs)
+      |> Repo.update()
+    end
   end
 
   def delete_source("builtin:" <> _, _user_id), do: {:error, :cannot_delete_builtin}

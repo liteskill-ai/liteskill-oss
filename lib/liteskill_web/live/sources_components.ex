@@ -17,34 +17,77 @@ defmodule LiteskillWeb.SourcesComponents do
   def source_card(assigns) do
     assigns = assign(assigns, :builtin?, Map.get(assigns.source, :builtin, false))
 
+    assigns =
+      assign(
+        assigns,
+        :needs_config?,
+        !Map.get(assigns.source, :builtin, false) &&
+          (!is_map(Map.get(assigns.source, :metadata)) ||
+             Map.get(assigns.source, :metadata) == %{})
+      )
+
     ~H"""
-    <.link navigate={~p"/sources/#{source_url_id(@source)}"} class="block">
-      <div class="card bg-base-100 border border-base-300 shadow-sm hover:border-primary/50 hover:shadow-md transition-all cursor-pointer">
-        <div class="card-body p-4">
-          <div class="flex items-start justify-between gap-2">
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <.icon name={source_icon(@source)} class="size-4 text-base-content/60" />
-                <h3 class="font-semibold text-sm truncate">{@source.name}</h3>
+    <%= if @needs_config? do %>
+      <button
+        phx-click="open_configure_source"
+        phx-value-source-id={@source.id}
+        class="block w-full text-left"
+      >
+        <div class="card bg-warning/10 border-2 border-warning shadow-sm hover:border-warning hover:shadow-md transition-all cursor-pointer">
+          <div class="card-body p-4">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <.icon name={source_icon(@source)} class="size-4 text-base-content/60" />
+                  <h3 class="font-semibold text-sm truncate">{@source.name}</h3>
+                </div>
+                <p class="text-xs text-base-content/70 mt-1">
+                  Click to configure connection settings
+                </p>
               </div>
-              <p :if={@source.description} class="text-xs text-base-content/70 mt-1 line-clamp-2">
-                {@source.description}
-              </p>
+              <div class="flex items-center gap-1">
+                <span class="badge badge-sm badge-warning">needs-configuration</span>
+              </div>
             </div>
-            <div class="flex items-center gap-1">
-              <span :if={@builtin?} class="badge badge-sm badge-primary">built-in</span>
+            <div class="flex items-center justify-between mt-2">
+              <span class="text-xs text-base-content/50">
+                {Map.get(@source, :document_count, 0)} {if Map.get(@source, :document_count, 0) == 1,
+                  do: "document",
+                  else: "documents"}
+              </span>
             </div>
-          </div>
-          <div class="flex items-center justify-between mt-2">
-            <span class="text-xs text-base-content/50">
-              {Map.get(@source, :document_count, 0)} {if Map.get(@source, :document_count, 0) == 1,
-                do: "document",
-                else: "documents"}
-            </span>
           </div>
         </div>
-      </div>
-    </.link>
+      </button>
+    <% else %>
+      <.link navigate={~p"/sources/#{source_url_id(@source)}"} class="block">
+        <div class="card bg-base-100 border border-base-300 shadow-sm hover:border-primary/50 hover:shadow-md transition-all cursor-pointer">
+          <div class="card-body p-4">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <.icon name={source_icon(@source)} class="size-4 text-base-content/60" />
+                  <h3 class="font-semibold text-sm truncate">{@source.name}</h3>
+                </div>
+                <p :if={@source.description} class="text-xs text-base-content/70 mt-1 line-clamp-2">
+                  {@source.description}
+                </p>
+              </div>
+              <div class="flex items-center gap-1">
+                <span :if={@builtin?} class="badge badge-sm badge-primary">built-in</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between mt-2">
+              <span class="text-xs text-base-content/50">
+                {Map.get(@source, :document_count, 0)} {if Map.get(@source, :document_count, 0) == 1,
+                  do: "document",
+                  else: "documents"}
+              </span>
+            </div>
+          </div>
+        </div>
+      </.link>
+    <% end %>
     """
   end
 
@@ -302,6 +345,126 @@ defmodule LiteskillWeb.SourcesComponents do
       <div class="px-3 py-1.5 bg-base-200/30 text-[10px] text-base-content/40 flex gap-3">
         <span>Position: {@result.chunk.position}</span>
         <span :if={@result.chunk.token_count}>Tokens: {@result.chunk.token_count}</span>
+      </div>
+    </div>
+    """
+  end
+
+  def add_source_card(assigns) do
+    ~H"""
+    <button phx-click="open_add_source" class="block w-full text-left">
+      <div class="card bg-base-100 border-2 border-dashed border-base-300 shadow-sm hover:border-primary/50 hover:shadow-md transition-all cursor-pointer">
+        <div class="card-body p-4 flex flex-col items-center justify-center min-h-[100px]">
+          <.icon name="hero-plus-micro" class="size-8 text-base-content/30" />
+          <span class="text-sm text-base-content/50 mt-1">Add Data Source</span>
+        </div>
+      </div>
+    </button>
+    """
+  end
+
+  attr :show, :boolean, required: true
+  attr :source_types, :list, required: true
+
+  def add_source_modal(assigns) do
+    ~H"""
+    <div
+      :if={@show}
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      phx-window-keydown="close_add_source"
+      phx-key="Escape"
+    >
+      <div class="fixed inset-0 bg-black/50" phx-click="close_add_source" />
+      <div class="relative bg-base-100 rounded-xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col z-10 mx-4">
+        <div class="flex items-center justify-between p-4 border-b border-base-300">
+          <h3 class="text-lg font-semibold">Add Data Source</h3>
+          <button phx-click="close_add_source" class="btn btn-ghost btn-sm btn-square">
+            <.icon name="hero-x-mark-micro" class="size-5" />
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <p class="text-base-content/70 text-sm mb-4">
+            Select a data source type to add.
+          </p>
+          <div class="grid grid-cols-2 gap-3">
+            <button
+              :for={source_type <- @source_types}
+              phx-click="add_source"
+              phx-value-source-type={source_type.source_type}
+              phx-value-name={source_type.name}
+              class="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border-2 border-base-300 hover:border-primary hover:bg-primary/5 transition-all cursor-pointer"
+            >
+              <.icon name="hero-folder-micro" class="size-6 text-base-content/60" />
+              <span class="text-sm font-medium">{source_type.name}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :show, :boolean, required: true
+  attr :source, :map, required: true
+  attr :config_fields, :list, required: true
+  attr :config_form, :any, required: true
+
+  def configure_source_modal(assigns) do
+    ~H"""
+    <div
+      :if={@show}
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      phx-window-keydown="close_configure_source"
+      phx-key="Escape"
+    >
+      <div class="fixed inset-0 bg-black/50" phx-click="close_configure_source" />
+      <div class="relative bg-base-100 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col z-10 mx-4">
+        <div class="flex items-center justify-between p-4 border-b border-base-300">
+          <h3 class="text-lg font-semibold">Configure {@source.name}</h3>
+          <button phx-click="close_configure_source" class="btn btn-ghost btn-sm btn-square">
+            <.icon name="hero-x-mark-micro" class="size-5" />
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <p class="text-base-content/70 text-sm mb-4">
+            Enter connection details for {@source.name}.
+          </p>
+
+          <form phx-submit="save_source_config" class="space-y-4">
+            <input type="hidden" name="source_id" value={@source.id} />
+            <div :for={field <- @config_fields} class="form-control">
+              <label class="label"><span class="label-text">{field.label}</span></label>
+              <%= if field.type == :textarea do %>
+                <textarea
+                  name={"config[#{field.key}]"}
+                  placeholder={field.placeholder}
+                  class="textarea textarea-bordered w-full"
+                  rows="4"
+                />
+              <% else %>
+                <input
+                  type={if field.type == :password, do: "password", else: "text"}
+                  name={"config[#{field.key}]"}
+                  placeholder={field.placeholder}
+                  class="input input-bordered w-full"
+                />
+              <% end %>
+            </div>
+
+            <div class="flex gap-3 mt-6">
+              <button
+                type="button"
+                phx-click="close_configure_source"
+                class="btn btn-ghost flex-1"
+              >
+                Cancel
+              </button>
+              <button type="submit" class="btn btn-primary flex-1">
+                Save Configuration
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
     """
