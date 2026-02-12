@@ -103,25 +103,65 @@ defmodule Liteskill.Aggregate.LoaderTest do
       assert events == []
     end
 
-    test "returns error on concurrent modification (wrong_expected_version)" do
+    test "retries on concurrent modification and succeeds" do
       stream = stream_id()
 
-      # Execute first command
+      # Execute first command to establish version 1
       {:ok, _, _} = Loader.execute(Counter, stream, {:increment, %{amount: 1}})
 
       # Simulate a concurrent modification by directly appending an event
-      # at version 2, then trying to execute which will also try version 2
+      # The loader will reload and retry on wrong_expected_version
       Store.append_events(stream, 1, [
         %{event_type: "CounterIncremented", data: %{"amount" => 100}}
       ])
 
-      # Now load will see version 2, but execute at version 2 should succeed
-      # since we're using the correct version. To actually trigger wrong_expected_version,
-      # we need to load state, then have another write happen before our append.
-      # Let's test the simpler case: the loader properly returns the error
-      # when the event store rejects.
-      # Force a wrong version by manipulating the stream directly
+      # Execute should succeed after retry — loads fresh state at version 2
+      {:ok, state, _events} = Loader.execute(Counter, stream, {:increment, %{amount: 5}})
+      assert state.count == 106
+    end
+  end
+
+  describe "automatic snapshotting" do
+    test "saves snapshot when crossing 100-event boundary" do
+      stream = stream_id()
+
+      # Append 99 events (versions 1..99)
+      events = for _i <- 1..99, do: %{event_type: "CounterIncremented", data: %{"amount" => 1}}
+      {:ok, _} = Store.append_events(stream, 0, events)
+
+      # The 100th event should trigger a snapshot
+      {:ok, state, _events} = Loader.execute(Counter, stream, {:increment, %{amount: 1}})
+      assert state.count == 100
+
+      {:ok, snapshot} = Store.get_latest_snapshot(stream)
+      assert snapshot.stream_version == 100
+      assert snapshot.data["count"] == 100
+    end
+
+    test "does not save snapshot before reaching interval" do
+      stream = stream_id()
+
+      {:ok, _state, _events} = Loader.execute(Counter, stream, {:increment, %{amount: 5}})
+
+      assert {:error, :not_found} = Store.get_latest_snapshot(stream)
+    end
+
+    test "loads from snapshot after snapshotting" do
+      stream = stream_id()
+
+      # Create 99 events then the 100th via execute
+      events = for _i <- 1..99, do: %{event_type: "CounterIncremented", data: %{"amount" => 1}}
+      {:ok, _} = Store.append_events(stream, 0, events)
       {:ok, _, _} = Loader.execute(Counter, stream, {:increment, %{amount: 1}})
+
+      # Add one more event after snapshot
+      {:ok, state, _} = Loader.execute(Counter, stream, {:increment, %{amount: 10}})
+      assert state.count == 110
+
+      # Load should use snapshot + 1 event
+      {loaded_state, version} = Loader.load(Counter, stream)
+      assert loaded_state.count == 110
+      assert version == 101
     end
   end
 

@@ -9,6 +9,8 @@ defmodule Liteskill.Aggregate.Loader do
 
   alias Liteskill.EventStore.Postgres, as: Store
 
+  @snapshot_interval 100
+
   @doc """
   Loads the current state of an aggregate from the event store.
 
@@ -19,7 +21,9 @@ defmodule Liteskill.Aggregate.Loader do
     {state, version} =
       case Store.get_latest_snapshot(stream_id) do
         {:ok, snapshot} ->
-          state = struct(aggregate_module, atomize_keys(snapshot.data))
+          base = Map.from_struct(aggregate_module.init())
+          restored = Map.merge(base, atomize_keys(snapshot.data))
+          state = struct(aggregate_module, restored)
           {state, snapshot.stream_version}
 
         {:error, :not_found} ->
@@ -45,6 +49,17 @@ defmodule Liteskill.Aggregate.Loader do
   and new events on success.
   """
   def execute(aggregate_module, stream_id, command) do
+    do_execute(aggregate_module, stream_id, command, 0)
+  end
+
+  # coveralls-ignore-start
+  defp do_execute(_aggregate_module, _stream_id, _command, 3) do
+    {:error, :wrong_expected_version}
+  end
+
+  # coveralls-ignore-stop
+
+  defp do_execute(aggregate_module, stream_id, command, attempt) do
     {state, version} = load(aggregate_module, stream_id)
 
     case aggregate_module.handle_command(state, command) do
@@ -59,16 +74,35 @@ defmodule Liteskill.Aggregate.Loader do
                 aggregate_module.apply_event(acc, event)
               end)
 
+            new_version = List.last(stored_events).stream_version
+            maybe_snapshot(aggregate_module, stream_id, new_state, version, new_version)
+
             {:ok, new_state, stored_events}
 
-          # coveralls-ignore-next-line
           {:error, :wrong_expected_version} ->
-            {:error, :wrong_expected_version}
+            # coveralls-ignore-next-line - requires true concurrent writes between load and append
+            do_execute(aggregate_module, stream_id, command, attempt + 1)
         end
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp maybe_snapshot(aggregate_module, stream_id, state, old_version, new_version) do
+    # Save snapshot when we cross a @snapshot_interval boundary
+    old_bucket = div(old_version, @snapshot_interval)
+    new_bucket = div(new_version, @snapshot_interval)
+
+    if new_bucket > old_bucket do
+      snapshot_type = aggregate_module |> Module.split() |> List.last()
+      data = state |> Map.from_struct() |> stringify_keys()
+      Store.save_snapshot(stream_id, new_version, snapshot_type, data)
+    end
+  end
+
+  defp stringify_keys(map) when is_map(map) do
+    Map.new(map, fn {key, value} -> {to_string(key), value} end)
   end
 
   defp atomize_keys(map) when is_map(map) do

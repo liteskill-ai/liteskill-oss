@@ -1,0 +1,6 @@
+accent: #7C5CFF
+base_black: #0B0F14
+offwhite: #F5F7FA
+dark_accent: #43328A
+charcoal (alt color): #2A313C
+

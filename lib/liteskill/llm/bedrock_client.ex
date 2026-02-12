@@ -2,8 +2,11 @@ defmodule Liteskill.LLM.BedrockClient do
   @moduledoc """
   Req-based HTTP client for AWS Bedrock Converse API.
 
-  Uses bearer token authentication.
+  Uses bearer token authentication. Implements the `Liteskill.LLM.Provider`
+  behaviour so StreamHandler can work with any provider.
   """
+
+  @behaviour Liteskill.LLM.Provider
 
   alias Liteskill.LLM.EventStreamParser
 

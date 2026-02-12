@@ -33,7 +33,6 @@ defmodule Liteskill.Chat do
     case Loader.execute(ConversationAggregate, stream_id, command) do
       {:ok, _state, events} ->
         Projector.project_events(stream_id, events)
-        Process.sleep(50)
         conversation = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
 
         # Auto-create owner ACL
@@ -53,17 +52,18 @@ defmodule Liteskill.Chat do
     end
   end
 
-  def send_message(conversation_id, user_id, content) do
+  def send_message(conversation_id, user_id, content, opts \\ []) do
     with {:ok, conversation} <- authorize_conversation(conversation_id, user_id) do
       stream_id = conversation.stream_id
       message_id = Ecto.UUID.generate()
+      tool_config = Keyword.get(opts, :tool_config)
 
-      command = {:add_user_message, %{message_id: message_id, content: content}}
+      command =
+        {:add_user_message, %{message_id: message_id, content: content, tool_config: tool_config}}
 
       case Loader.execute(ConversationAggregate, stream_id, command) do
         {:ok, _state, events} ->
           Projector.project_events(stream_id, events)
-          Process.sleep(50)
           {:ok, Repo.get!(Message, message_id)}
 
         {:error, reason} ->
@@ -97,7 +97,7 @@ defmodule Liteskill.Chat do
           "new_conversation_id" => new_conversation_id,
           "parent_stream_id" => parent_stream_id,
           "fork_at_version" => fork_at_version,
-          "user_id" => conversation.user_id,
+          "user_id" => user_id,
           "timestamp" => now
         }
       }
@@ -115,7 +115,6 @@ defmodule Liteskill.Chat do
       case Store.append_events(new_stream_id, 0, all_events) do
         {:ok, stored_events} ->
           Projector.project_events(new_stream_id, stored_events)
-          Process.sleep(50)
           new_conv = Repo.one!(from c in Conversation, where: c.stream_id == ^new_stream_id)
 
           # Auto-create owner ACL for forked conversation
@@ -141,7 +140,6 @@ defmodule Liteskill.Chat do
       case Loader.execute(ConversationAggregate, conversation.stream_id, {:archive, %{}}) do
         {:ok, _state, events} ->
           Projector.project_events(conversation.stream_id, events)
-          Process.sleep(50)
           {:ok, Repo.get!(Conversation, conversation_id)}
 
         {:error, reason} ->
@@ -159,7 +157,6 @@ defmodule Liteskill.Chat do
            ) do
         {:ok, _state, events} ->
           Projector.project_events(conversation.stream_id, events)
-          Process.sleep(50)
           {:ok, Repo.get!(Conversation, conversation_id)}
 
         {:error, reason} ->
@@ -294,10 +291,15 @@ defmodule Liteskill.Chat do
     end
   end
 
-  def update_message_rag_sources(message_id, rag_sources) do
+  def update_message_rag_sources(message_id, user_id, rag_sources) do
     case Repo.get(Message, message_id) do
-      nil -> {:error, :not_found}
-      msg -> msg |> Message.changeset(%{rag_sources: rag_sources}) |> Repo.update()
+      nil ->
+        {:error, :not_found}
+
+      msg ->
+        with {:ok, _conv} <- authorize_conversation(msg.conversation_id, user_id) do
+          msg |> Message.changeset(%{rag_sources: rag_sources}) |> Repo.update()
+        end
     end
   end
 
@@ -336,6 +338,106 @@ defmodule Liteskill.Chat do
     end
   end
 
+  @doc """
+  Recovers a conversation stuck in streaming state by failing the streaming message.
+
+  Returns `{:ok, conversation}` after recovery, or `{:ok, conversation}` if nothing
+  needed recovering, or `{:error, reason}`.
+  """
+  def recover_stream(conversation_id, user_id) do
+    with {:ok, conversation} <- authorize_conversation(conversation_id, user_id) do
+      streaming_msg =
+        Repo.one(
+          from m in Message,
+            where: m.conversation_id == ^conversation_id and m.status == "streaming",
+            order_by: [desc: m.inserted_at],
+            limit: 1
+        )
+
+      if streaming_msg do
+        command =
+          {:fail_stream,
+           %{
+             message_id: streaming_msg.id,
+             error_type: "task_crashed",
+             error_message: "Stream handler process terminated unexpectedly"
+           }}
+
+        case Loader.execute(ConversationAggregate, conversation.stream_id, command) do
+          {:ok, _state, events} ->
+            Projector.project_events(conversation.stream_id, events)
+
+          # coveralls-ignore-next-line
+          {:error, _reason} ->
+            :ok
+        end
+      end
+
+      {:ok, Repo.get!(Conversation, conversation_id)}
+    end
+  end
+
+  @doc """
+  Broadcasts a tool call decision (approve/reject) to the streaming process.
+  """
+  def broadcast_tool_decision(stream_id, tool_use_id, decision)
+      when decision in [:approved, :rejected] do
+    Phoenix.PubSub.broadcast(
+      Liteskill.PubSub,
+      "tool_approval:#{stream_id}",
+      {:tool_decision, tool_use_id, decision}
+    )
+  end
+
+  @doc """
+  Returns conversations stuck in streaming status for longer than `threshold_minutes`.
+  Used by the periodic sweeper to recover orphaned streams.
+  """
+  def list_stuck_streaming(threshold_minutes \\ 5) do
+    cutoff = DateTime.utc_now() |> DateTime.add(-threshold_minutes * 60, :second)
+
+    Repo.all(
+      from c in Conversation,
+        where: c.status == "streaming" and c.updated_at < ^cutoff
+    )
+  end
+
+  @doc """
+  Recovers a stuck conversation without authorization checks.
+  Used by the periodic sweeper which operates without a user context.
+  """
+  def recover_stream_by_id(conversation_id) do
+    conversation = Repo.get!(Conversation, conversation_id)
+
+    streaming_msg =
+      Repo.one(
+        from m in Message,
+          where: m.conversation_id == ^conversation_id and m.status == "streaming",
+          order_by: [desc: m.inserted_at],
+          limit: 1
+      )
+
+    if streaming_msg do
+      command =
+        {:fail_stream,
+         %{
+           message_id: streaming_msg.id,
+           error_type: "orphaned_stream",
+           error_message: "Stream recovered by periodic sweep — no active handler"
+         }}
+
+      case Loader.execute(ConversationAggregate, conversation.stream_id, command) do
+        {:ok, _state, events} ->
+          Projector.project_events(conversation.stream_id, events)
+
+        {:error, _reason} ->
+          :ok
+      end
+    end
+
+    :ok
+  end
+
   # --- Internal Helpers ---
 
   defp authorize_conversation(conversation_id, user_id) do
@@ -370,13 +472,11 @@ defmodule Liteskill.Chat do
     conversation.user_id == user_id or
       Repo.exists?(
         from a in ConversationAcl,
-          where: a.conversation_id == ^conversation.id and a.user_id == ^user_id
-      ) or
-      Repo.exists?(
-        from a in ConversationAcl,
-          join: gm in GroupMembership,
+          left_join: gm in GroupMembership,
           on: gm.group_id == a.group_id and gm.user_id == ^user_id,
-          where: a.conversation_id == ^conversation.id and not is_nil(a.group_id)
+          where:
+            a.conversation_id == ^conversation.id and
+              (a.user_id == ^user_id or not is_nil(gm.id))
       )
   end
 
@@ -405,17 +505,30 @@ defmodule Liteskill.Chat do
     |> elem(1)
   end
 
-  defp find_root(conversation), do: find_root(conversation, 0)
+  defp find_root(%Conversation{parent_conversation_id: nil} = conversation), do: conversation
 
-  # coveralls-ignore-start
-  defp find_root(conversation, depth) when depth >= 100, do: conversation
-  # coveralls-ignore-stop
+  defp find_root(%Conversation{id: id}) do
+    root_query =
+      {"ancestors", Conversation}
+      |> recursive_ctes(true)
+      |> with_cte("ancestors",
+        as:
+          fragment(
+            """
+            SELECT c.* FROM conversations c WHERE c.id = ?
+            UNION ALL
+            SELECT p.* FROM conversations p
+            INNER JOIN ancestors a ON a.parent_conversation_id = p.id
+            """,
+            type(^id, :binary_id)
+          )
+      )
+      |> where([a], is_nil(a.parent_conversation_id))
+      |> select([a], a.id)
+      |> limit(1)
 
-  defp find_root(conversation, depth) do
-    case conversation.parent_conversation_id do
-      nil -> conversation
-      parent_id -> find_root(Repo.get!(Conversation, parent_id), depth + 1)
-    end
+    root_id = Repo.one!(root_query)
+    Repo.get!(Conversation, root_id)
   end
 
   defp remap_event_data(%{event_type: "ConversationCreated", data: data}, new_conv_id, id_map) do

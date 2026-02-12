@@ -38,7 +38,7 @@ const Hooks = {
         }
       })
       this.handleEvent("set-accent", ({color}) => {
-        if (color && color !== "orange") {
+        if (color && color !== "purple") {
           localStorage.setItem("phx:accent", color)
           document.documentElement.setAttribute("data-accent", color)
         } else {

@@ -9,7 +9,7 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
       assert state.status == :created
       assert state.messages == []
       assert state.current_stream == nil
-      assert state.version == 0
+      assert state.conversation_id == nil
     end
   end
 
@@ -29,7 +29,6 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
       assert new_state.user_id == "user-1"
       assert new_state.title == "Test"
       assert new_state.model_id == "claude"
-      assert new_state.version == 1
     end
 
     test "cannot create conversation twice" do
@@ -54,8 +53,8 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
 
       new_state = apply_events(state, events)
       assert length(new_state.messages) == 1
-      assert Enum.at(new_state.messages, 0).role == "user"
-      assert Enum.at(new_state.messages, 0).content == "hello"
+      assert hd(new_state.messages).role == "user"
+      assert hd(new_state.messages).content == "hello"
     end
 
     test "cannot add message when archived" do
@@ -78,6 +77,29 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
 
       assert {:error, :currently_streaming} =
                ConversationAggregate.handle_command(state, {:add_user_message, %{content: "hi"}})
+    end
+
+    test "includes tool_config in event and state" do
+      state =
+        apply_commands(ConversationAggregate.init(), [{:create_conversation, create_params()}])
+
+      tool_config = %{
+        "servers" => [%{"id" => "srv-1", "name" => "TestServer"}],
+        "tools" => [%{"toolSpec" => %{"name" => "my-tool"}}],
+        "auto_confirm" => true
+      }
+
+      {:ok, events} =
+        ConversationAggregate.handle_command(
+          state,
+          {:add_user_message, %{content: "hello", tool_config: tool_config}}
+        )
+
+      [event] = events
+      assert event.data["tool_config"] == tool_config
+
+      new_state = apply_events(state, events)
+      assert hd(new_state.messages).tool_config == tool_config
     end
   end
 
@@ -138,7 +160,7 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
         ])
 
       assert length(state.current_stream.chunks) == 1
-      assert Enum.at(state.current_stream.chunks, 0).delta_text == "Hello"
+      assert hd(state.current_stream.chunks).delta_text == "Hello"
     end
 
     test "cannot receive chunk when not streaming" do
@@ -180,7 +202,8 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
       assert state.status == :active
       assert state.current_stream == nil
       assert length(state.messages) == 2
-      assistant_msg = Enum.at(state.messages, 1)
+      # Messages are prepended, so newest is first
+      assistant_msg = hd(state.messages)
       assert assistant_msg.role == "assistant"
       assert assistant_msg.content == "Hello there!"
     end
@@ -250,7 +273,7 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
         ])
 
       assert length(state.current_stream.tool_calls) == 1
-      assert Enum.at(state.current_stream.tool_calls, 0).status == :started
+      assert hd(state.current_stream.tool_calls).status == :started
 
       state =
         apply_commands(state, [
@@ -265,7 +288,7 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
            }}
         ])
 
-      assert Enum.at(state.current_stream.tool_calls, 0).status == :completed
+      assert hd(state.current_stream.tool_calls).status == :completed
     end
 
     test "cannot start tool call when not streaming" do
@@ -353,8 +376,8 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
   end
 
   describe "apply_event for ToolCallCompleted with nil current_stream" do
-    test "increments version without updating tool calls" do
-      state = %ConversationAggregate{status: :active, current_stream: nil, version: 5}
+    test "preserves state without updating tool calls" do
+      state = %ConversationAggregate{status: :active, current_stream: nil}
 
       new_state =
         ConversationAggregate.apply_event(state, %{
@@ -368,7 +391,6 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
           }
         })
 
-      assert new_state.version == 6
       assert new_state.current_stream == nil
     end
   end

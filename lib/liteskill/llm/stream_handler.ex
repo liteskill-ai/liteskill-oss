@@ -14,7 +14,6 @@ defmodule Liteskill.LLM.StreamHandler do
 
   alias Liteskill.Aggregate.Loader
   alias Liteskill.Chat.{ConversationAggregate, Projector}
-  alias Liteskill.LLM.BedrockClient
   alias Liteskill.McpServers.Client, as: McpClient
 
   require Logger
@@ -31,9 +30,10 @@ defmodule Liteskill.LLM.StreamHandler do
 
   ## Options
 
-    * `:model_id` - Bedrock model ID
+    * `:provider` - LLM provider module (default from config, falls back to `BedrockClient`)
+    * `:model_id` - Model ID
     * `:system` - System prompt
-    * `:tools` - List of Bedrock toolConfig tool specs
+    * `:tools` - List of toolConfig tool specs
     * `:tool_servers` - Map of `"tool_name" => server` for MCP execution
     * `:auto_confirm` - Boolean, auto-execute tool calls (default false)
     * `:plug` - Req.Test plug for testing
@@ -94,10 +94,8 @@ defmodule Liteskill.LLM.StreamHandler do
     {:ok, text_agent} = Agent.start_link(fn -> [] end)
     {:ok, tool_calls_agent} = Agent.start_link(fn -> [] end)
     current_tool_ref = make_ref()
-    current_tool = :persistent_term.put(current_tool_ref, nil)
-    _ = current_tool
+    Process.put(current_tool_ref, nil)
 
-    # coveralls-ignore-start - closure body only executes during actual HTTP streaming
     callback = fn {event_type, payload} ->
       handle_stream_event(
         stream_id,
@@ -111,25 +109,24 @@ defmodule Liteskill.LLM.StreamHandler do
       )
     end
 
-    # coveralls-ignore-stop
-
     system = Keyword.get(opts, :system)
     call_opts = if system, do: [system: system], else: []
 
     call_opts =
       Keyword.merge(call_opts, Keyword.take(opts, [:max_tokens, :temperature, :plug, :tools]))
 
-    case BedrockClient.converse_stream(model_id, messages, callback, call_opts) do
+    provider = Keyword.get(opts, :provider, default_provider())
+
+    case provider.converse_stream(model_id, messages, callback, call_opts) do
       :ok ->
         latency_ms = System.monotonic_time(:millisecond) - start_time
-        full_content = Agent.get(text_agent, &Enum.join(&1, ""))
-        tool_calls = Agent.get(tool_calls_agent, & &1)
+        full_content = text_agent |> Agent.get(& &1) |> Enum.reverse() |> Enum.join("")
+        tool_calls = Agent.get(tool_calls_agent, &Enum.reverse(&1))
         Agent.stop(text_agent)
         Agent.stop(tool_calls_agent)
         cleanup_tool_ref(current_tool_ref)
 
         if tool_calls != [] do
-          # coveralls-ignore-start - tool_calls is always [] in tests (Req.Test limitation)
           handle_tool_calls(
             stream_id,
             message_id,
@@ -140,8 +137,6 @@ defmodule Liteskill.LLM.StreamHandler do
             latency_ms,
             opts
           )
-
-          # coveralls-ignore-stop
         else
           complete_stream(stream_id, message_id, full_content, latency_ms, opts)
         end
@@ -151,7 +146,8 @@ defmodule Liteskill.LLM.StreamHandler do
         Agent.stop(tool_calls_agent)
         cleanup_tool_ref(current_tool_ref)
         base_backoff = Keyword.get(opts, :backoff_ms, @default_backoff_ms)
-        backoff = base_backoff * Integer.pow(2, retry_count)
+        jitter = :rand.uniform()
+        backoff = trunc(base_backoff * Integer.pow(2, retry_count) * (1 + jitter))
         Logger.warning("Bedrock #{status}, retrying in #{backoff}ms (attempt #{retry_count + 1})")
         Process.sleep(backoff)
         do_stream_with_retry(stream_id, message_id, model_id, messages, opts, retry_count + 1)
@@ -165,7 +161,6 @@ defmodule Liteskill.LLM.StreamHandler do
     end
   end
 
-  # coveralls-ignore-start - only invoked during actual HTTP streaming (Req.Test.stub does not support into: callbacks)
   defp handle_stream_event(
          stream_id,
          message_id,
@@ -189,14 +184,12 @@ defmodule Liteskill.LLM.StreamHandler do
               do: input_fragment,
               else: Jason.encode!(input_fragment)
 
-          Agent.update(tool_calls_agent, fn calls ->
-            case List.pop_at(calls, -1) do
-              {nil, calls} ->
-                calls
+          Agent.update(tool_calls_agent, fn
+            [] ->
+              []
 
-              {last, rest} ->
-                rest ++ [%{last | input_parts: last.input_parts ++ [fragment]}]
-            end
+            [latest | rest] ->
+              [%{latest | input_parts: [fragment | latest.input_parts]} | rest]
           end)
         end
 
@@ -207,7 +200,7 @@ defmodule Liteskill.LLM.StreamHandler do
         idx = :counters.get(chunk_counter, 1)
         :counters.add(chunk_counter, 1, 1)
 
-        Agent.update(text_agent, fn parts -> parts ++ [delta_text] end)
+        Agent.update(text_agent, fn parts -> [delta_text | parts] end)
 
         command =
           {:receive_chunk,
@@ -220,7 +213,7 @@ defmodule Liteskill.LLM.StreamHandler do
            }}
 
         case Loader.execute(ConversationAggregate, stream_id, command) do
-          {:ok, _state, events} -> Projector.project_events(stream_id, events)
+          {:ok, _state, events} -> Projector.project_events_async(stream_id, events)
           {:error, reason} -> Logger.error("Failed to record chunk: #{inspect(reason)}")
         end
 
@@ -241,14 +234,14 @@ defmodule Liteskill.LLM.StreamHandler do
        ) do
     case get_in(payload, ["start", "toolUse"]) do
       %{"toolUseId" => tool_use_id, "name" => name} ->
-        :persistent_term.put(current_tool_ref, %{
+        Process.put(current_tool_ref, %{
           tool_use_id: tool_use_id,
           name: name,
           input_parts: []
         })
 
         Agent.update(tool_calls_agent, fn calls ->
-          calls ++ [%{tool_use_id: tool_use_id, name: name, input_parts: []}]
+          [%{tool_use_id: tool_use_id, name: name, input_parts: []} | calls]
         end)
 
       _ ->
@@ -269,9 +262,81 @@ defmodule Liteskill.LLM.StreamHandler do
     :ok
   end
 
-  # coveralls-ignore-stop
+  @doc """
+  Parses raw tool call accumulations (with input_parts as JSON fragments)
+  into structured tool calls with decoded input maps.
+  """
+  def parse_tool_calls(tool_calls) do
+    Enum.map(tool_calls, fn tc ->
+      input_json = tc.input_parts |> Enum.reverse() |> Enum.join("")
 
-  # coveralls-ignore-start - tool-call path requires streaming callbacks (Req.Test does not trigger into: callbacks)
+      input =
+        case Jason.decode(input_json) do
+          {:ok, parsed} -> parsed
+          _ -> %{}
+        end
+
+      %{tool_use_id: tc.tool_use_id, name: tc.name, input: input}
+    end)
+  end
+
+  @doc """
+  Filters tool calls to only include those whose names appear in the
+  allowed tools list. Returns no tool calls if tools list is empty (deny-all).
+  """
+  def validate_tool_calls(tool_calls, tools) do
+    allowed = tools |> Enum.map(&get_in(&1, ["toolSpec", "name"])) |> MapSet.new()
+
+    if MapSet.size(allowed) == 0 do
+      []
+    else
+      Enum.filter(tool_calls, &MapSet.member?(allowed, &1.name))
+    end
+  end
+
+  @doc """
+  Builds the assistant content blocks (text + toolUse) for the next
+  conversation round after tool calls.
+  """
+  def build_assistant_content(full_content, tool_calls) do
+    text_blocks =
+      if full_content != "" do
+        [%{"text" => full_content}]
+      else
+        []
+      end
+
+    tool_use_blocks =
+      Enum.map(tool_calls, fn tc ->
+        %{
+          "toolUse" => %{
+            "toolUseId" => tc.tool_use_id,
+            "name" => tc.name,
+            "input" => tc.input
+          }
+        }
+      end)
+
+    text_blocks ++ tool_use_blocks
+  end
+
+  @doc """
+  Formats tool execution output into a string for inclusion in
+  conversation messages.
+  """
+  def format_tool_output({:ok, %{"content" => content}}) when is_list(content) do
+    content
+    |> Enum.map(fn
+      %{"text" => text} -> text
+      other -> Jason.encode!(other)
+    end)
+    |> Enum.join("\n")
+  end
+
+  def format_tool_output({:ok, data}) when is_map(data), do: Jason.encode!(data)
+  def format_tool_output({:ok, data}), do: inspect(data)
+  def format_tool_output({:error, err}), do: "Error: #{inspect(err)}"
+
   defp handle_tool_calls(
          stream_id,
          message_id,
@@ -283,19 +348,37 @@ defmodule Liteskill.LLM.StreamHandler do
          opts
        ) do
     # Parse accumulated input JSON for each tool call
-    parsed_tool_calls =
-      Enum.map(tool_calls, fn tc ->
-        input_json = Enum.join(tc.input_parts, "")
+    parsed_tool_calls = parse_tool_calls(tool_calls)
 
-        input =
-          case Jason.decode(input_json) do
-            {:ok, parsed} -> parsed
-            _ -> %{}
-          end
+    # Filter to only allowed tools
+    tools = Keyword.get(opts, :tools, [])
+    parsed_tool_calls = validate_tool_calls(parsed_tool_calls, tools)
 
-        %{tool_use_id: tc.tool_use_id, name: tc.name, input: input}
-      end)
+    # If all tool calls were filtered out, complete as a normal stream
+    if parsed_tool_calls == [] do
+      complete_stream(stream_id, message_id, full_content, latency_ms, opts)
+    else
+      do_handle_tool_calls(
+        stream_id,
+        message_id,
+        messages,
+        full_content,
+        parsed_tool_calls,
+        latency_ms,
+        opts
+      )
+    end
+  end
 
+  defp do_handle_tool_calls(
+         stream_id,
+         message_id,
+         messages,
+         full_content,
+         parsed_tool_calls,
+         latency_ms,
+         opts
+       ) do
     # Record ToolCallStarted events for each tool call
     Enum.each(parsed_tool_calls, fn tc ->
       command =
@@ -504,43 +587,6 @@ defmodule Liteskill.LLM.StreamHandler do
     {:error, "Tool call rejected by user"}
   end
 
-  defp build_assistant_content(full_content, tool_calls) do
-    text_blocks =
-      if full_content != "" do
-        [%{"text" => full_content}]
-      else
-        []
-      end
-
-    tool_use_blocks =
-      Enum.map(tool_calls, fn tc ->
-        %{
-          "toolUse" => %{
-            "toolUseId" => tc.tool_use_id,
-            "name" => tc.name,
-            "input" => tc.input
-          }
-        }
-      end)
-
-    text_blocks ++ tool_use_blocks
-  end
-
-  defp format_tool_output({:ok, %{"content" => content}}) when is_list(content) do
-    content
-    |> Enum.map(fn
-      %{"text" => text} -> text
-      other -> Jason.encode!(other)
-    end)
-    |> Enum.join("\n")
-  end
-
-  defp format_tool_output({:ok, data}) when is_map(data), do: Jason.encode!(data)
-  defp format_tool_output({:ok, data}), do: inspect(data)
-  defp format_tool_output({:error, err}), do: "Error: #{inspect(err)}"
-
-  # coveralls-ignore-stop
-
   defp complete_stream(stream_id, message_id, full_content, latency_ms, _opts) do
     command =
       {:complete_stream,
@@ -562,7 +608,6 @@ defmodule Liteskill.LLM.StreamHandler do
     end
   end
 
-  # coveralls-ignore-start - only reachable through tool-call path
   defp complete_stream_with_stop_reason(
          stream_id,
          message_id,
@@ -589,8 +634,6 @@ defmodule Liteskill.LLM.StreamHandler do
     end
   end
 
-  # coveralls-ignore-stop
-
   defp fail_stream(stream_id, message_id, error_type, error_message, retry_count) do
     command =
       {:fail_stream,
@@ -613,10 +656,13 @@ defmodule Liteskill.LLM.StreamHandler do
   end
 
   defp cleanup_tool_ref(ref) do
-    :persistent_term.erase(ref)
-  rescue
-    # coveralls-ignore-next-line
-    ArgumentError -> :ok
+    Process.delete(ref)
+    :ok
+  end
+
+  defp default_provider do
+    Application.get_env(:liteskill, Liteskill.LLM, [])
+    |> Keyword.get(:provider, Liteskill.LLM.BedrockClient)
   end
 
   defp default_model_id do

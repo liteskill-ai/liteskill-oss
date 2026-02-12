@@ -16,12 +16,19 @@ defmodule Liteskill.Chat.Projector do
 
   import Ecto.Query
 
-  @pubsub Liteskill.PubSub
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   def project_events(stream_id, events) do
+    GenServer.call(__MODULE__, {:project_events, stream_id, events}, 30_000)
+  end
+
+  @doc """
+  Asynchronously projects events. Use when the caller does not need to
+  query projected data immediately (e.g. streaming chunk projections).
+  """
+  def project_events_async(stream_id, events) do
     GenServer.cast(__MODULE__, {:project_events, stream_id, events})
   end
 
@@ -31,20 +38,19 @@ defmodule Liteskill.Chat.Projector do
 
   @impl true
   def init(_opts) do
-    Phoenix.PubSub.subscribe(@pubsub, "event_store:*")
     {:ok, %{}}
   end
 
-  # coveralls-ignore-start - PubSub broadcast handler, functionally identical to handle_cast
   @impl true
-  def handle_info({:events, stream_id, events}, state) do
+  def handle_call({:project_events, stream_id, events}, _from, state) do
     do_project(stream_id, events)
-    {:noreply, state}
+    {:reply, :ok, state}
   end
 
-  # coveralls-ignore-stop
-
-  def handle_info(_msg, state), do: {:noreply, state}
+  def handle_call(:rebuild, _from, state) do
+    result = do_rebuild()
+    {:reply, result, state}
+  end
 
   @impl true
   def handle_cast({:project_events, stream_id, events}, state) do
@@ -52,16 +58,19 @@ defmodule Liteskill.Chat.Projector do
     {:noreply, state}
   end
 
-  @impl true
-  def handle_call(:rebuild, _from, state) do
-    result = do_rebuild()
-    {:reply, result, state}
-  end
-
   # --- Projection Logic ---
 
   defp do_project(_stream_id, events) do
-    Enum.each(events, &project_event/1)
+    Enum.each(events, fn event ->
+      try do
+        project_event(event)
+      rescue
+        # coveralls-ignore-start
+        e ->
+          Logger.error("Projector failed on #{event.event_type}: #{Exception.message(e)}")
+          # coveralls-ignore-stop
+      end
+    end)
   end
 
   defp project_event(%Event{event_type: "ConversationCreated", data: data, stream_id: stream_id}) do
@@ -85,26 +94,29 @@ defmodule Liteskill.Chat.Projector do
          stream_version: version
        }) do
     with_conversation(stream_id, fn conversation ->
-      message_count = conversation.message_count + 1
+      Repo.transaction(fn ->
+        message_count = conversation.message_count + 1
 
-      %Message{}
-      |> Message.changeset(%{
-        id: data["message_id"],
-        conversation_id: conversation.id,
-        role: "user",
-        content: data["content"],
-        status: "complete",
-        position: message_count,
-        stream_version: version
-      })
-      |> Repo.insert!(on_conflict: :nothing)
+        %Message{}
+        |> Message.changeset(%{
+          id: data["message_id"],
+          conversation_id: conversation.id,
+          role: "user",
+          content: data["content"],
+          status: "complete",
+          position: message_count,
+          stream_version: version,
+          tool_config: data["tool_config"]
+        })
+        |> Repo.insert!(on_conflict: :nothing)
 
-      conversation
-      |> Conversation.changeset(%{
-        message_count: message_count,
-        last_message_at: DateTime.utc_now() |> DateTime.truncate(:second)
-      })
-      |> Repo.update!()
+        conversation
+        |> Conversation.changeset(%{
+          message_count: message_count,
+          last_message_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+        |> Repo.update!()
+      end)
     end)
   end
 
@@ -115,43 +127,51 @@ defmodule Liteskill.Chat.Projector do
          stream_version: version
        }) do
     with_conversation(stream_id, fn conversation ->
-      message_count = conversation.message_count + 1
+      Repo.transaction(fn ->
+        message_count = conversation.message_count + 1
 
-      %Message{}
-      |> Message.changeset(%{
-        id: data["message_id"],
-        conversation_id: conversation.id,
-        role: "assistant",
-        content: "",
-        status: "streaming",
-        model_id: data["model_id"],
-        position: message_count,
-        stream_version: version,
-        rag_sources: data["rag_sources"]
-      })
-      |> Repo.insert!(on_conflict: :nothing)
+        %Message{}
+        |> Message.changeset(%{
+          id: data["message_id"],
+          conversation_id: conversation.id,
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          model_id: data["model_id"],
+          position: message_count,
+          stream_version: version,
+          rag_sources: data["rag_sources"]
+        })
+        |> Repo.insert!(on_conflict: :nothing)
 
-      conversation
-      |> Conversation.changeset(%{
-        message_count: message_count,
-        status: "streaming"
-      })
-      |> Repo.update!()
+        conversation
+        |> Conversation.changeset(%{
+          message_count: message_count,
+          status: "streaming"
+        })
+        |> Repo.update!()
+      end)
     end)
   end
 
   defp project_event(%Event{event_type: "AssistantChunkReceived", data: data}) do
-    message = Repo.get!(Message, data["message_id"])
+    case Repo.get(Message, data["message_id"]) do
+      # coveralls-ignore-start
+      nil ->
+        Logger.warning("Projector: message not found for chunk, skipping")
 
-    %MessageChunk{}
-    |> MessageChunk.changeset(%{
-      message_id: message.id,
-      chunk_index: data["chunk_index"],
-      content_block_index: data["content_block_index"] || 0,
-      delta_type: data["delta_type"] || "text_delta",
-      delta_text: data["delta_text"]
-    })
-    |> Repo.insert!()
+      # coveralls-ignore-stop
+      message ->
+        %MessageChunk{}
+        |> MessageChunk.changeset(%{
+          message_id: message.id,
+          chunk_index: data["chunk_index"],
+          content_block_index: data["content_block_index"] || 0,
+          delta_type: data["delta_type"] || "text_delta",
+          delta_text: data["delta_text"]
+        })
+        |> Repo.insert!()
+    end
   end
 
   @uuid_re ~r/\[uuid:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/
@@ -161,37 +181,45 @@ defmodule Liteskill.Chat.Projector do
          data: data,
          stream_id: stream_id
        }) do
-    message = Repo.get!(Message, data["message_id"])
+    case Repo.get(Message, data["message_id"]) do
+      # coveralls-ignore-start
+      nil ->
+        Logger.warning("Projector: message not found for stream completion, skipping")
 
-    input_tokens = data["input_tokens"]
-    output_tokens = data["output_tokens"]
+      # coveralls-ignore-stop
+      message ->
+        input_tokens = data["input_tokens"]
+        output_tokens = data["output_tokens"]
 
-    total_tokens =
-      if input_tokens && output_tokens, do: input_tokens + output_tokens, else: nil
+        total_tokens =
+          if input_tokens && output_tokens, do: input_tokens + output_tokens, else: nil
 
-    filtered_sources = filter_cited_sources(message.rag_sources, data["full_content"])
+        filtered_sources = filter_cited_sources(message.rag_sources, data["full_content"])
 
-    message
-    |> Message.changeset(%{
-      content: data["full_content"],
-      status: "complete",
-      stop_reason: data["stop_reason"],
-      input_tokens: input_tokens,
-      output_tokens: output_tokens,
-      total_tokens: total_tokens,
-      latency_ms: data["latency_ms"],
-      rag_sources: filtered_sources
-    })
-    |> Repo.update!()
+        Repo.transaction(fn ->
+          message
+          |> Message.changeset(%{
+            content: data["full_content"],
+            status: "complete",
+            stop_reason: data["stop_reason"],
+            input_tokens: input_tokens,
+            output_tokens: output_tokens,
+            total_tokens: total_tokens,
+            latency_ms: data["latency_ms"],
+            rag_sources: filtered_sources
+          })
+          |> Repo.update!()
 
-    with_conversation(stream_id, fn conversation ->
-      conversation
-      |> Conversation.changeset(%{
-        status: "active",
-        last_message_at: DateTime.utc_now() |> DateTime.truncate(:second)
-      })
-      |> Repo.update!()
-    end)
+          with_conversation(stream_id, fn conversation ->
+            conversation
+            |> Conversation.changeset(%{
+              status: "active",
+              last_message_at: DateTime.utc_now() |> DateTime.truncate(:second)
+            })
+            |> Repo.update!()
+          end)
+        end)
+    end
   end
 
   defp project_event(%Event{

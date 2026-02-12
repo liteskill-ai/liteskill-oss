@@ -29,7 +29,7 @@
         window.addEventListener("phx:set-theme", (e) => setTheme(e.target.dataset.phxTheme));
 
         const accent = localStorage.getItem("phx:accent");
-        if (accent && accent !== "orange") {
+        if (accent && accent !== "purple") {
           document.documentElement.setAttribute("data-accent", accent);
         }
       })();

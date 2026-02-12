@@ -22,6 +22,7 @@ defmodule Liteskill.Chat.Message do
     field :stream_version, :integer
     field :position, :integer
     field :rag_sources, {:array, :map}
+    field :tool_config, :map
 
     belongs_to :conversation, Liteskill.Chat.Conversation
     has_many :chunks, Liteskill.Chat.MessageChunk
@@ -46,7 +47,8 @@ defmodule Liteskill.Chat.Message do
       :latency_ms,
       :stream_version,
       :position,
-      :rag_sources
+      :rag_sources,
+      :tool_config
     ])
     |> validate_required([:conversation_id, :role, :position])
     |> foreign_key_constraint(:conversation_id)

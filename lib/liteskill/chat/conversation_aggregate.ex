@@ -19,8 +19,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
     :fork_at_version,
     status: :created,
     messages: [],
-    current_stream: nil,
-    version: 0
+    current_stream: nil
   ]
 
   @impl true
@@ -62,7 +61,8 @@ defmodule Liteskill.Chat.ConversationAggregate do
       Events.serialize(%Events.UserMessageAdded{
         message_id: params[:message_id] || Ecto.UUID.generate(),
         content: params.content,
-        timestamp: now
+        timestamp: now,
+        tool_config: params[:tool_config]
       })
 
     {:ok, [event]}
@@ -234,8 +234,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
         title: data["title"],
         model_id: data["model_id"],
         system_prompt: data["system_prompt"],
-        status: :active,
-        version: state.version + 1
+        status: :active
     }
   end
 
@@ -244,10 +243,11 @@ defmodule Liteskill.Chat.ConversationAggregate do
       id: data["message_id"],
       role: "user",
       content: data["content"],
-      timestamp: data["timestamp"]
+      timestamp: data["timestamp"],
+      tool_config: data["tool_config"]
     }
 
-    %{state | messages: state.messages ++ [message], version: state.version + 1}
+    %{state | messages: [message | state.messages]}
   end
 
   def apply_event(state, %{event_type: "AssistantStreamStarted", data: data}) do
@@ -259,8 +259,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
           model_id: data["model_id"],
           chunks: [],
           tool_calls: []
-        },
-        version: state.version + 1
+        }
     }
   end
 
@@ -271,8 +270,8 @@ defmodule Liteskill.Chat.ConversationAggregate do
       delta_type: data["delta_type"]
     }
 
-    current_stream = %{state.current_stream | chunks: state.current_stream.chunks ++ [chunk]}
-    %{state | current_stream: current_stream, version: state.version + 1}
+    current_stream = %{state.current_stream | chunks: [chunk | state.current_stream.chunks]}
+    %{state | current_stream: current_stream}
   end
 
   def apply_event(state, %{event_type: "AssistantStreamCompleted", data: data}) do
@@ -290,14 +289,13 @@ defmodule Liteskill.Chat.ConversationAggregate do
     %{
       state
       | status: :active,
-        messages: state.messages ++ [message],
-        current_stream: nil,
-        version: state.version + 1
+        messages: [message | state.messages],
+        current_stream: nil
     }
   end
 
   def apply_event(state, %{event_type: "AssistantStreamFailed", data: _data}) do
-    %{state | status: :active, current_stream: nil, version: state.version + 1}
+    %{state | status: :active, current_stream: nil}
   end
 
   def apply_event(state, %{event_type: "ToolCallStarted", data: data}) do
@@ -310,17 +308,17 @@ defmodule Liteskill.Chat.ConversationAggregate do
 
     current_stream = %{
       state.current_stream
-      | tool_calls: state.current_stream.tool_calls ++ [tool_call]
+      | tool_calls: [tool_call | state.current_stream.tool_calls]
     }
 
-    %{state | current_stream: current_stream, version: state.version + 1}
+    %{state | current_stream: current_stream}
   end
 
   def apply_event(state, %{event_type: "ToolCallCompleted", data: data}) do
     case state.current_stream do
       nil ->
         # Tool call completed in :active state (manual confirm flow)
-        %{state | version: state.version + 1}
+        state
 
       current_stream ->
         tool_calls =
@@ -333,11 +331,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
             end
           end)
 
-        %{
-          state
-          | current_stream: %{current_stream | tool_calls: tool_calls},
-            version: state.version + 1
-        }
+        %{state | current_stream: %{current_stream | tool_calls: tool_calls}}
     end
   end
 
@@ -345,16 +339,15 @@ defmodule Liteskill.Chat.ConversationAggregate do
     %{
       state
       | parent_stream_id: data["parent_stream_id"],
-        fork_at_version: data["fork_at_version"],
-        version: state.version + 1
+        fork_at_version: data["fork_at_version"]
     }
   end
 
   def apply_event(state, %{event_type: "ConversationTitleUpdated", data: data}) do
-    %{state | title: data["title"], version: state.version + 1}
+    %{state | title: data["title"]}
   end
 
   def apply_event(state, %{event_type: "ConversationArchived", data: _data}) do
-    %{state | status: :archived, version: state.version + 1}
+    %{state | status: :archived}
   end
 end

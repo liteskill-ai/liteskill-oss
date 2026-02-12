@@ -12,6 +12,33 @@
 
 @plugin "@tailwindcss/typography";
 
+/* Custom fonts */
+@font-face {
+  font-family: 'Nunito';
+  src: url('/fonts/Nunito-Variable.woff2') format('woff2');
+  font-weight: 200 1000;
+  font-display: swap;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Nunito';
+  src: url('/fonts/Nunito-VariableItalic.woff2') format('woff2');
+  font-weight: 200 1000;
+  font-display: swap;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url('/fonts/BebasNeue-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  font-style: normal;
+}
+
+html {
+  font-family: 'Nunito', sans-serif;
+}
+
 /* daisyUI Tailwind Plugin. You can update this file by fetching the latest version with:
    curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui.js
    Make sure to look at the daisyUI changelog: https://daisyui.com/docs/changelog/ */
@@ -19,27 +46,25 @@
   themes: false;
 }
 
-/* daisyUI theme plugin. You can update this file by fetching the latest version with:
-  curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.js
-  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
-  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
+/* daisyUI themes — palette: accent #7C5CFF, dark_accent #43328A,
+   base_black #0B0F14, offwhite #F5F7FA, charcoal #2A313C */
 @plugin "../vendor/daisyui-theme" {
   name: "dark";
   default: false;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: oklch(30.33% 0.016 252.42);
-  --color-base-200: oklch(25.26% 0.014 253.1);
-  --color-base-300: oklch(20.15% 0.012 254.09);
-  --color-base-content: oklch(97.807% 0.029 256.847);
-  --color-primary: oklch(70% 0.213 47.604);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(70% 0.213 47.604);
-  --color-secondary-content: oklch(98% 0.016 73.684);
-  --color-accent: oklch(70% 0.213 47.604);
-  --color-accent-content: oklch(98% 0.016 73.684);
-  --color-neutral: oklch(37% 0.044 257.287);
-  --color-neutral-content: oklch(98% 0.003 247.858);
+  --color-base-100: oklch(16.7% 0.012 254.2);
+  --color-base-200: oklch(13% 0.010 254);
+  --color-base-300: oklch(31.1% 0.022 259.4);
+  --color-base-content: oklch(97.5% 0.005 258.3);
+  --color-primary: oklch(59.9% 0.230 286.2);
+  --color-primary-content: oklch(98% 0.01 286);
+  --color-secondary: oklch(38.9% 0.140 286.9);
+  --color-secondary-content: oklch(98% 0.01 286);
+  --color-accent: oklch(59.9% 0.230 286.2);
+  --color-accent-content: oklch(98% 0.01 286);
+  --color-neutral: oklch(31.1% 0.022 259.4);
+  --color-neutral-content: oklch(97.5% 0.005 258.3);
   --color-info: oklch(58% 0.158 241.966);
   --color-info-content: oklch(97% 0.013 236.62);
   --color-success: oklch(60% 0.118 184.704);
@@ -63,17 +88,17 @@
   default: true;
   prefersdark: false;
   color-scheme: "light";
-  --color-base-100: oklch(98% 0 0);
-  --color-base-200: oklch(96% 0.001 286.375);
-  --color-base-300: oklch(92% 0.004 286.32);
-  --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(70% 0.213 47.604);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
-  --color-secondary-content: oklch(98% 0.002 247.839);
-  --color-accent: oklch(0% 0 0);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(44% 0.017 285.786);
+  --color-base-100: oklch(97.5% 0.005 258.3);
+  --color-base-200: oklch(95% 0.005 258);
+  --color-base-300: oklch(90% 0.008 258);
+  --color-base-content: oklch(16.7% 0.012 254.2);
+  --color-primary: oklch(59.9% 0.230 286.2);
+  --color-primary-content: oklch(98% 0.01 286);
+  --color-secondary: oklch(38.9% 0.140 286.9);
+  --color-secondary-content: oklch(98% 0.01 286);
+  --color-accent: oklch(59.9% 0.230 286.2);
+  --color-accent-content: oklch(98% 0.01 286);
+  --color-neutral: oklch(44% 0.017 260);
   --color-neutral-content: oklch(98% 0 0);
   --color-info: oklch(62% 0.214 259.815);
   --color-info-content: oklch(97% 0.014 254.604);
@@ -93,47 +118,68 @@
   --noise: 0;
 }
 
-/* Accent color overrides — keyed on data-accent attribute on <html> */
+/* Accent color overrides — keyed on data-accent attribute on <html>.
+   Purple is the default palette — no override needed.
+   Each accent sets primary + secondary (darker shade). */
 [data-accent="pink"] {
   --color-primary: oklch(65% 0.2 0);
   --color-primary-content: oklch(98% 0.01 0);
+  --color-secondary: oklch(45% 0.15 0);
+  --color-secondary-content: oklch(98% 0.01 0);
 }
 [data-accent="red"] {
   --color-primary: oklch(55% 0.25 25);
   --color-primary-content: oklch(98% 0.01 25);
+  --color-secondary: oklch(38% 0.18 25);
+  --color-secondary-content: oklch(98% 0.01 25);
 }
-/* orange is the default — no override needed */
+[data-accent="orange"] {
+  --color-primary: oklch(70% 0.213 47.604);
+  --color-primary-content: oklch(98% 0.016 73.684);
+  --color-secondary: oklch(50% 0.16 47);
+  --color-secondary-content: oklch(98% 0.016 73.684);
+}
 [data-accent="yellow"] {
   --color-primary: oklch(80% 0.18 95);
   --color-primary-content: oklch(25% 0.05 95);
+  --color-secondary: oklch(60% 0.14 95);
+  --color-secondary-content: oklch(98% 0.01 95);
 }
 [data-accent="green"] {
   --color-primary: oklch(60% 0.18 145);
   --color-primary-content: oklch(98% 0.01 145);
+  --color-secondary: oklch(40% 0.12 145);
+  --color-secondary-content: oklch(98% 0.01 145);
 }
 [data-accent="cyan"] {
   --color-primary: oklch(70% 0.15 195);
   --color-primary-content: oklch(20% 0.03 195);
+  --color-secondary: oklch(50% 0.11 195);
+  --color-secondary-content: oklch(98% 0.01 195);
 }
 [data-accent="blue"] {
   --color-primary: oklch(60% 0.2 260);
   --color-primary-content: oklch(98% 0.01 260);
+  --color-secondary: oklch(40% 0.15 260);
+  --color-secondary-content: oklch(98% 0.01 260);
 }
 [data-accent="royal-blue"] {
   --color-primary: oklch(50% 0.25 270);
   --color-primary-content: oklch(98% 0.01 270);
-}
-[data-accent="purple"] {
-  --color-primary: oklch(55% 0.25 300);
-  --color-primary-content: oklch(98% 0.01 300);
+  --color-secondary: oklch(35% 0.18 270);
+  --color-secondary-content: oklch(98% 0.01 270);
 }
 [data-accent="brown"] {
   --color-primary: oklch(50% 0.1 50);
   --color-primary-content: oklch(98% 0.01 50);
+  --color-secondary: oklch(35% 0.07 50);
+  --color-secondary-content: oklch(98% 0.01 50);
 }
 [data-accent="black"] {
   --color-primary: oklch(25% 0 0);
   --color-primary-content: oklch(98% 0 0);
+  --color-secondary: oklch(15% 0 0);
+  --color-secondary-content: oklch(98% 0 0);
 }
 
 /* Add variants based on LiveView classes */
@@ -150,6 +196,11 @@
 /* This file is for your main application CSS */
 
 /* Markdown prose refinements */
+.prose :is(h1, h2, h3, h4, h5, h6) {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.025em;
+}
+
 .prose pre {
   position: relative;
   overflow-x: auto;

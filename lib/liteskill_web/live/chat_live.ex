@@ -2,15 +2,16 @@ defmodule LiteskillWeb.ChatLive do
   use LiteskillWeb, :live_view
 
   alias Liteskill.Chat
-  alias Liteskill.Chat.ToolCall
+  alias Liteskill.Chat.{MessageBuilder, ToolCall}
   alias Liteskill.LLM.StreamHandler
   alias Liteskill.McpServers
   alias Liteskill.McpServers.Client, as: McpClient
   alias Liteskill.Repo
   alias LiteskillWeb.ChatComponents
+  alias LiteskillWeb.McpComponents
   alias LiteskillWeb.ProfileLive
-
-  import Ecto.Query
+  alias LiteskillWeb.{ReportComponents, ReportsLive}
+  alias LiteskillWeb.{SourcesComponents, WikiComponents, WikiLive}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -57,21 +58,6 @@ defmodule LiteskillWeb.ChatLive do
        current_source: nil,
        source_documents: %{documents: [], page: 1, page_size: 20, total: 0, total_pages: 1},
        source_search: "",
-       wiki_document: nil,
-       wiki_tree: [],
-       wiki_sidebar_tree: [],
-       wiki_form: to_form(%{"title" => "", "content" => ""}, as: :wiki_page),
-       show_wiki_form: false,
-       wiki_editing: nil,
-       wiki_parent_id: nil,
-       wiki_space: nil,
-       reports: [],
-       report: nil,
-       report_markdown: "",
-       section_tree: [],
-       report_comments: [],
-       editing_section_id: nil,
-       report_mode: :view,
        # RAG query
        show_rag_query: false,
        rag_query_loading: false,
@@ -82,13 +68,10 @@ defmodule LiteskillWeb.ChatLive do
        sidebar_sources: [],
        show_source_modal: false,
        source_modal_data: %{},
-       stream_error: nil,
-       # Wiki export modal
-       show_wiki_export_modal: false,
-       wiki_export_title: "",
-       wiki_export_parent_id: nil,
-       wiki_export_tree: []
+       stream_error: nil
      )
+     |> assign(WikiLive.wiki_assigns())
+     |> assign(ReportsLive.reports_assigns())
      |> assign(ProfileLive.profile_assigns()), layout: {LiteskillWeb.Layouts, :chat}}
   end
 
@@ -191,79 +174,9 @@ defmodule LiteskillWeb.ChatLive do
     )
   end
 
-  defp apply_action(socket, :wiki, _params) do
+  defp apply_action(socket, action, params) when action in [:wiki, :wiki_page_show] do
     maybe_unsubscribe(socket)
-    user_id = socket.assigns.current_user.id
-
-    result =
-      Liteskill.DataSources.list_documents_paginated("builtin:wiki", user_id,
-        page: 1,
-        search: nil,
-        parent_id: nil
-      )
-
-    socket
-    |> assign(
-      conversation: nil,
-      messages: [],
-      streaming: false,
-      stream_content: "",
-      pending_tool_calls: [],
-      current_source: get_wiki_source(),
-      source_documents: result,
-      source_search: "",
-      wiki_sidebar_tree: [],
-      wiki_space: nil,
-      page_title: "Wiki"
-    )
-  end
-
-  defp apply_action(socket, :wiki_page_show, %{"document_id" => doc_id}) do
-    maybe_unsubscribe(socket)
-    user_id = socket.assigns.current_user.id
-
-    case Liteskill.DataSources.get_document(doc_id, user_id) do
-      {:ok, doc} ->
-        space =
-          if is_nil(doc.parent_document_id) do
-            doc
-          else
-            case Liteskill.DataSources.find_root_ancestor(doc.id, user_id) do
-              {:ok, root} -> root
-              _ -> nil
-            end
-          end
-
-        space_children_tree =
-          if space do
-            Liteskill.DataSources.space_tree("builtin:wiki", space.id, user_id)
-          else
-            []
-          end
-
-        socket
-        |> assign(
-          conversation: nil,
-          messages: [],
-          streaming: false,
-          stream_content: "",
-          pending_tool_calls: [],
-          current_source: get_wiki_source(),
-          wiki_document: doc,
-          wiki_tree: space_children_tree,
-          wiki_sidebar_tree: space_children_tree,
-          wiki_space: space,
-          show_wiki_form: false,
-          wiki_editing: nil,
-          wiki_parent_id: nil,
-          page_title: doc.title
-        )
-
-      {:error, _} ->
-        socket
-        |> put_flash(:error, "Page not found")
-        |> push_navigate(to: ~p"/wiki")
-    end
+    WikiLive.apply_wiki_action(socket, action, params)
   end
 
   defp apply_action(socket, :source_show, %{"source_id" => source_url_id}) do
@@ -304,61 +217,9 @@ defmodule LiteskillWeb.ChatLive do
     end
   end
 
-  defp apply_action(socket, :reports, _params) do
+  defp apply_action(socket, action, params) when action in [:reports, :report_show] do
     maybe_unsubscribe(socket)
-    user_id = socket.assigns.current_user.id
-    reports = Liteskill.Reports.list_reports(user_id)
-
-    socket
-    |> assign(
-      conversation: nil,
-      messages: [],
-      streaming: false,
-      stream_content: "",
-      pending_tool_calls: [],
-      reports: reports,
-      wiki_sidebar_tree: [],
-      page_title: "Reports"
-    )
-  end
-
-  defp apply_action(socket, :report_show, %{"report_id" => report_id}) do
-    maybe_unsubscribe(socket)
-    user_id = socket.assigns.current_user.id
-
-    case Liteskill.Reports.get_report(report_id, user_id) do
-      {:ok, report} ->
-        markdown = Liteskill.Reports.render_markdown(report, include_comments: false)
-        section_tree = Liteskill.Reports.section_tree(report)
-
-        report_comments =
-          case Liteskill.Reports.get_report_comments(report_id, user_id) do
-            {:ok, comments} -> comments
-            _ -> []
-          end
-
-        socket
-        |> assign(
-          conversation: nil,
-          messages: [],
-          streaming: false,
-          stream_content: "",
-          pending_tool_calls: [],
-          report: report,
-          report_markdown: markdown,
-          section_tree: section_tree,
-          report_comments: report_comments,
-          editing_section_id: nil,
-          report_mode: :view,
-          wiki_sidebar_tree: [],
-          page_title: report.title
-        )
-
-      {:error, _} ->
-        socket
-        |> put_flash(:error, "Report not found")
-        |> push_navigate(to: ~p"/reports")
-    end
+    ReportsLive.apply_reports_action(socket, action, params)
   end
 
   defp apply_action(socket, :show, %{"conversation_id" => conversation_id}) do
@@ -373,7 +234,17 @@ defmodule LiteskillWeb.ChatLive do
         topic = "event_store:#{conversation.stream_id}"
         Phoenix.PubSub.subscribe(Liteskill.PubSub, topic)
 
-        streaming = conversation.status == "streaming"
+        # If conversation is stuck in streaming but we have no active task, recover it
+        {conversation, streaming} =
+          if conversation.status == "streaming" && socket.assigns.stream_task_pid == nil do
+            Chat.recover_stream(conversation_id, user_id)
+            _ = :sys.get_state(Liteskill.Chat.Projector)
+            {:ok, recovered} = Chat.get_conversation(conversation_id, user_id)
+            {recovered, false}
+          else
+            {conversation, conversation.status == "streaming"}
+          end
+
         pending = if streaming, do: load_pending_tool_calls(conversation.messages), else: []
 
         socket
@@ -411,7 +282,13 @@ defmodule LiteskillWeb.ChatLive do
         ]}
       >
         <div class="flex items-center justify-between p-3 border-b border-base-300 min-w-64">
-          <img src={~p"/images/logo.svg"} class="size-7" />
+          <div class="flex items-center gap-2">
+            <img src={~p"/images/logo_dark_mode.svg"} class="size-7 hidden dark:block" />
+            <img src={~p"/images/logo_light_mode.svg"} class="size-7 block dark:hidden" />
+            <span class="text-lg tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+              LiteSkill
+            </span>
+          </div>
           <div class="flex items-center gap-1">
             <Layouts.theme_toggle />
             <button phx-click="toggle_sidebar" class="btn btn-circle btn-ghost btn-sm">
@@ -423,7 +300,7 @@ defmodule LiteskillWeb.ChatLive do
         <div class="p-3 min-w-64">
           <button
             phx-click="new_conversation"
-            class="btn btn-neutral btn-sm w-full gap-2"
+            class="btn btn-secondary btn-sm w-full gap-2"
           >
             <.icon name="hero-plus-micro" class="size-4" /> New Chat
           </button>
@@ -452,7 +329,7 @@ defmodule LiteskillWeb.ChatLive do
               >
                 {@wiki_space.title}
               </.link>
-              <ChatComponents.wiki_tree_sidebar
+              <WikiComponents.wiki_tree_sidebar
                 tree={@wiki_sidebar_tree}
                 active_doc_id={if @wiki_document, do: @wiki_document.id, else: nil}
               />
@@ -559,7 +436,7 @@ defmodule LiteskillWeb.ChatLive do
               :if={@data_sources != []}
               class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
             >
-              <ChatComponents.source_card
+              <SourcesComponents.source_card
                 :for={source <- @data_sources}
                 source={source}
               />
@@ -572,7 +449,7 @@ defmodule LiteskillWeb.ChatLive do
             </p>
           </div>
 
-          <ChatComponents.rag_query_modal
+          <SourcesComponents.rag_query_modal
             show={@show_rag_query}
             collections={@rag_query_collections}
             results={@rag_query_results}
@@ -607,7 +484,7 @@ defmodule LiteskillWeb.ChatLive do
           </header>
 
           <div class="flex-1 overflow-y-auto p-4 max-w-3xl mx-auto w-full">
-            <ChatComponents.document_list
+            <WikiComponents.document_list
               source={@current_source}
               result={@source_documents}
               search={@source_search}
@@ -626,7 +503,9 @@ defmodule LiteskillWeb.ChatLive do
                 >
                   <.icon name="hero-bars-3-micro" class="size-5" />
                 </button>
-                <h1 class="text-lg font-semibold">Wiki</h1>
+                <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                  Wiki
+                </h1>
               </div>
               <button phx-click="show_wiki_form" class="btn btn-primary btn-sm gap-1">
                 <.icon name="hero-plus-micro" class="size-4" /> New Space
@@ -639,7 +518,7 @@ defmodule LiteskillWeb.ChatLive do
               :if={@source_documents.documents != []}
               class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
             >
-              <ChatComponents.space_card
+              <WikiComponents.space_card
                 :for={space <- @source_documents.documents}
                 space={space}
               />
@@ -730,7 +609,12 @@ defmodule LiteskillWeb.ChatLive do
                 >
                   <.icon name="hero-arrow-left-micro" class="size-4" />
                 </.link>
-                <h1 class="text-lg font-semibold truncate">{@wiki_document.title}</h1>
+                <h1
+                  class="text-xl tracking-wide truncate"
+                  style="font-family: 'Bebas Neue', sans-serif;"
+                >
+                  {@wiki_document.title}
+                </h1>
               </div>
               <div :if={!@wiki_editing} class="flex gap-1">
                 <button phx-click="edit_wiki_page" class="btn btn-ghost btn-sm gap-1">
@@ -810,7 +694,7 @@ defmodule LiteskillWeb.ChatLive do
                 This page has no content yet. Click "Edit" to add some.
               </p>
 
-              <ChatComponents.wiki_children
+              <WikiComponents.wiki_children
                 source={@current_source}
                 document={@wiki_document}
                 tree={@wiki_tree}
@@ -887,7 +771,7 @@ defmodule LiteskillWeb.ChatLive do
               :if={@mcp_servers != []}
               class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
             >
-              <ChatComponents.mcp_server_card
+              <McpComponents.mcp_server_card
                 :for={server <- @mcp_servers}
                 server={server}
                 owned={server.user_id == @current_user.id}
@@ -999,7 +883,9 @@ defmodule LiteskillWeb.ChatLive do
                 >
                   <.icon name="hero-bars-3-micro" class="size-5" />
                 </button>
-                <h1 class="text-lg font-semibold">Reports</h1>
+                <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                  Reports
+                </h1>
               </div>
             </div>
           </header>
@@ -1009,7 +895,7 @@ defmodule LiteskillWeb.ChatLive do
               :if={@reports != []}
               class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
             >
-              <ChatComponents.report_card
+              <ReportComponents.report_card
                 :for={report <- @reports}
                 report={report}
                 owned={report.user_id == @current_user.id}
@@ -1042,7 +928,12 @@ defmodule LiteskillWeb.ChatLive do
                 <.link navigate={~p"/reports"} class="btn btn-ghost btn-sm btn-circle">
                   <.icon name="hero-arrow-left-micro" class="size-5" />
                 </.link>
-                <h1 class="text-lg font-semibold truncate">{@report && @report.title}</h1>
+                <h1
+                  class="text-xl tracking-wide truncate"
+                  style="font-family: 'Bebas Neue', sans-serif;"
+                >
+                  {@report && @report.title}
+                </h1>
               </div>
               <div class="flex flex-wrap gap-1">
                 <%= if @report_mode == :view do %>
@@ -1088,7 +979,7 @@ defmodule LiteskillWeb.ChatLive do
               <%!-- Edit mode: section tree with comments and inline editing --%>
               <div :if={@report_comments != []} class="space-y-2">
                 <h3 class="text-sm font-semibold text-base-content/70">Report Comments</h3>
-                <ChatComponents.section_comment :for={c <- @report_comments} comment={c} />
+                <ReportComponents.section_comment :for={c <- @report_comments} comment={c} />
               </div>
 
               <form phx-submit="add_report_comment" class="flex gap-2">
@@ -1102,7 +993,7 @@ defmodule LiteskillWeb.ChatLive do
               </form>
 
               <div :if={@section_tree != []} class="space-y-4">
-                <ChatComponents.section_node
+                <ReportComponents.section_node
                   :for={node <- @section_tree}
                   node={node}
                   depth={1}
@@ -1141,7 +1032,7 @@ defmodule LiteskillWeb.ChatLive do
                 <select name="parent_id" class="select select-bordered w-full" required>
                   <option value="" disabled selected>Select a space...</option>
                   <%= for node <- @wiki_export_tree do %>
-                    <ChatComponents.wiki_parent_option
+                    <WikiComponents.wiki_parent_option
                       node={node}
                       depth={0}
                       selected={@wiki_export_parent_id}
@@ -1196,18 +1087,18 @@ defmodule LiteskillWeb.ChatLive do
                       :if={msg.content && msg.content != ""}
                       message={msg}
                     />
-                    <ChatComponents.sources_button message={msg} />
+                    <SourcesComponents.sources_button message={msg} />
                     <%!-- Tool calls for completed messages (inline) --%>
                     <%= if msg.role == "assistant" && msg.stop_reason == "tool_use" do %>
-                      <%= for tc <- tool_calls_for_message(msg) do %>
-                        <ChatComponents.tool_call_display
+                      <%= for tc <- MessageBuilder.tool_calls_for_message(msg) do %>
+                        <McpComponents.tool_call_display
                           tool_call={tc}
                           show_actions={!@auto_confirm_tools && tc.status == "started"}
                         />
                       <% end %>
                     <% end %>
                     <ChatComponents.stream_error
-                      :if={msg.status == "failed" && msg == List.last(@messages)}
+                      :if={msg.status == "failed" && msg == List.last(@messages) && !@stream_error}
                       error={
                         %{
                           title: "The AI service was unavailable",
@@ -1224,7 +1115,7 @@ defmodule LiteskillWeb.ChatLive do
                   <ChatComponents.streaming_indicator :if={@streaming && @stream_content == ""} />
                   <%!-- Pending tool calls from streaming message (rendered from socket state, not DB) --%>
                   <%= for tc <- @pending_tool_calls do %>
-                    <ChatComponents.tool_call_display
+                    <McpComponents.tool_call_display
                       tool_call={tc}
                       show_actions={!@auto_confirm_tools && tc.status == "started"}
                     />
@@ -1233,48 +1124,50 @@ defmodule LiteskillWeb.ChatLive do
                 </div>
 
                 <div class="flex-shrink-0 border-t border-base-300 px-4 py-3">
-                  <ChatComponents.selected_server_badges
+                  <McpComponents.selected_server_badges
                     available_tools={@available_tools}
                     selected_server_ids={@selected_server_ids}
                   />
-                  <.form for={@form} phx-submit="send_message" class="flex gap-2 items-center">
-                    <ChatComponents.server_picker
+                  <.form
+                    for={@form}
+                    phx-submit="send_message"
+                    class="flex items-center gap-0 border border-base-300 rounded-xl bg-base-100 focus-within:border-primary/50 transition-colors"
+                  >
+                    <McpComponents.server_picker
                       available_tools={@available_tools}
                       selected_server_ids={@selected_server_ids}
                       show={@show_tool_picker}
                       auto_confirm={@auto_confirm_tools}
                       tools_loading={@tools_loading}
                     />
-                    <div class="flex-1">
-                      <textarea
-                        id="message-input"
-                        name="message[content]"
-                        phx-hook="TextareaAutoResize"
-                        placeholder="Type a message..."
-                        rows="1"
-                        class="textarea textarea-bordered w-full resize-none min-h-[2.5rem] max-h-40"
-                        disabled={@streaming}
-                      >{Phoenix.HTML.Form.input_value(@form, :content)}</textarea>
-                    </div>
+                    <textarea
+                      id="message-input"
+                      name="message[content]"
+                      phx-hook="TextareaAutoResize"
+                      placeholder="Type a message..."
+                      rows="1"
+                      class="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 resize-none min-h-[2.5rem] max-h-40 py-2 px-1 text-base-content placeholder:text-base-content/40"
+                      disabled={@streaming}
+                    >{Phoenix.HTML.Form.input_value(@form, :content)}</textarea>
                     <button
                       :if={!@streaming}
                       type="submit"
-                      class="btn btn-primary btn-sm"
+                      class="btn btn-ghost btn-sm text-primary hover:bg-primary/10 m-1"
                     >
-                      <.icon name="hero-paper-airplane-micro" class="size-4" />
+                      <.icon name="hero-paper-airplane-micro" class="size-5" />
                     </button>
                     <button
                       :if={@streaming}
                       type="button"
                       phx-click="cancel_stream"
-                      class="btn btn-error btn-sm"
+                      class="btn btn-ghost btn-sm text-error hover:bg-error/10 m-1"
                     >
-                      <.icon name="hero-stop-micro" class="size-4" />
+                      <.icon name="hero-stop-micro" class="size-5" />
                     </button>
                   </.form>
                 </div>
               </div>
-              <ChatComponents.sources_sidebar
+              <SourcesComponents.sources_sidebar
                 show={@show_sources_sidebar}
                 sources={@sidebar_sources}
               />
@@ -1291,30 +1184,35 @@ defmodule LiteskillWeb.ChatLive do
                 <h1 class="text-3xl font-bold mb-8 text-base-content">
                   What can I help you with?
                 </h1>
-                <ChatComponents.selected_server_badges
+                <McpComponents.selected_server_badges
                   available_tools={@available_tools}
                   selected_server_ids={@selected_server_ids}
                 />
-                <.form for={@form} phx-submit="send_message" class="flex gap-2 items-center">
-                  <ChatComponents.server_picker
+                <.form
+                  for={@form}
+                  phx-submit="send_message"
+                  class="flex items-center gap-0 border border-base-300 rounded-xl bg-base-100 focus-within:border-primary/50 transition-colors"
+                >
+                  <McpComponents.server_picker
                     available_tools={@available_tools}
                     selected_server_ids={@selected_server_ids}
                     show={@show_tool_picker}
                     auto_confirm={@auto_confirm_tools}
                     tools_loading={@tools_loading}
                   />
-                  <div class="flex-1">
-                    <textarea
-                      id="message-input"
-                      name="message[content]"
-                      phx-hook="TextareaAutoResize"
-                      placeholder="Type a message..."
-                      rows="1"
-                      class="textarea textarea-bordered w-full resize-none min-h-[2.5rem] max-h-40"
-                    />
-                  </div>
-                  <button type="submit" class="btn btn-primary btn-sm">
-                    <.icon name="hero-paper-airplane-micro" class="size-4" />
+                  <textarea
+                    id="message-input"
+                    name="message[content]"
+                    phx-hook="TextareaAutoResize"
+                    placeholder="Type a message..."
+                    rows="1"
+                    class="flex-1 bg-transparent border-0 focus:outline-none focus:ring-0 resize-none min-h-[2.5rem] max-h-40 py-2 px-1 text-base-content placeholder:text-base-content/40"
+                  />
+                  <button
+                    type="submit"
+                    class="btn btn-ghost btn-sm text-primary hover:bg-primary/10 m-1"
+                  >
+                    <.icon name="hero-paper-airplane-micro" class="size-5" />
                   </button>
                 </.form>
               </div>
@@ -1339,11 +1237,11 @@ defmodule LiteskillWeb.ChatLive do
           No tools found on this server.
         </div>
         <div :if={!@inspecting_tools_loading && @inspecting_tools != []} class="space-y-3">
-          <ChatComponents.tool_detail :for={tool <- @inspecting_tools} tool={tool} />
+          <McpComponents.tool_detail :for={tool <- @inspecting_tools} tool={tool} />
         </div>
       </ChatComponents.modal>
 
-      <ChatComponents.source_detail_modal
+      <SourcesComponents.source_detail_modal
         show={@show_source_modal}
         source={@source_modal_data}
       />
@@ -1506,161 +1404,14 @@ defmodule LiteskillWeb.ChatLive do
     end
   end
 
-  # --- Wiki Events ---
+  # --- Wiki Event Delegation ---
 
-  @impl true
-  def handle_event("show_wiki_form", params, socket) do
-    parent_id = params["parent-id"]
+  @wiki_events ~w(show_wiki_form close_wiki_form create_wiki_page edit_wiki_page
+    cancel_wiki_edit update_wiki_page delete_wiki_page open_wiki_export_modal
+    close_wiki_export_modal confirm_wiki_export)
 
-    {:noreply,
-     assign(socket,
-       show_wiki_form: true,
-       wiki_parent_id: parent_id,
-       wiki_editing: nil,
-       wiki_form: to_form(%{"title" => "", "content" => ""}, as: :wiki_page)
-     )}
-  end
-
-  @impl true
-  def handle_event("close_wiki_form", _params, socket) do
-    {:noreply, assign(socket, show_wiki_form: false, wiki_editing: nil)}
-  end
-
-  @impl true
-  def handle_event("create_wiki_page", %{"wiki_page" => params}, socket) do
-    user_id = socket.assigns.current_user.id
-    source_ref = socket.assigns.current_source.id
-    parent_id = socket.assigns.wiki_parent_id
-
-    attrs = %{
-      title: String.trim(params["title"]),
-      content: params["content"] || "",
-      content_type: "markdown"
-    }
-
-    result =
-      if parent_id do
-        Liteskill.DataSources.create_child_document(source_ref, parent_id, attrs, user_id)
-      else
-        Liteskill.DataSources.create_document(source_ref, attrs, user_id)
-      end
-
-    case result do
-      {:ok, doc} ->
-        enqueue_wiki_sync(doc.id, user_id, "upsert")
-
-        {:noreply,
-         socket
-         |> assign(show_wiki_form: false)
-         |> push_navigate(to: ~p"/wiki/#{doc.id}")}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to create page")}
-    end
-  end
-
-  @impl true
-  def handle_event("edit_wiki_page", _params, socket) do
-    doc = socket.assigns.wiki_document
-
-    {:noreply,
-     assign(socket,
-       wiki_editing: doc,
-       wiki_form: to_form(%{"title" => doc.title, "content" => doc.content || ""}, as: :wiki_page)
-     )}
-  end
-
-  @impl true
-  def handle_event("cancel_wiki_edit", _params, socket) do
-    {:noreply, assign(socket, wiki_editing: nil)}
-  end
-
-  @impl true
-  def handle_event("update_wiki_page", %{"wiki_page" => params}, socket) do
-    user_id = socket.assigns.current_user.id
-    doc = socket.assigns.wiki_editing
-
-    attrs = %{title: String.trim(params["title"]), content: params["content"] || ""}
-
-    case Liteskill.DataSources.update_document(doc.id, attrs, user_id) do
-      {:ok, updated} ->
-        enqueue_wiki_sync(updated.id, user_id, "upsert")
-
-        {:noreply,
-         socket
-         |> assign(show_wiki_form: false, wiki_editing: nil, wiki_document: updated)
-         |> reload_wiki_page()}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to update page")}
-    end
-  end
-
-  @impl true
-  def handle_event("delete_wiki_page", _params, socket) do
-    user_id = socket.assigns.current_user.id
-    doc = socket.assigns.wiki_document
-
-    case Liteskill.DataSources.delete_document(doc.id, user_id) do
-      {:ok, _} ->
-        enqueue_wiki_sync(doc.id, user_id, "delete")
-
-        redirect_to =
-          if doc.parent_document_id,
-            do: ~p"/wiki/#{doc.parent_document_id}",
-            else: ~p"/wiki"
-
-        {:noreply, push_navigate(socket, to: redirect_to)}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to delete page")}
-    end
-  end
-
-  @impl true
-  def handle_event("open_wiki_export_modal", _params, socket) do
-    user_id = socket.assigns.current_user.id
-    tree = Liteskill.DataSources.document_tree("builtin:wiki", user_id)
-
-    {:noreply,
-     assign(socket,
-       show_wiki_export_modal: true,
-       wiki_export_title: socket.assigns.report.title,
-       wiki_export_parent_id: nil,
-       wiki_export_tree: tree
-     )}
-  end
-
-  @impl true
-  def handle_event("close_wiki_export_modal", _params, socket) do
-    {:noreply, assign(socket, show_wiki_export_modal: false)}
-  end
-
-  @impl true
-  def handle_event("confirm_wiki_export", %{"title" => title, "parent_id" => parent_id}, socket) do
-    if parent_id == "" do
-      {:noreply, put_flash(socket, :error, "Please select a space for the wiki page")}
-    else
-      user_id = socket.assigns.current_user.id
-      report = socket.assigns.report
-
-      case Liteskill.DataSources.export_report_to_wiki(report.id, user_id,
-             title: title,
-             parent_id: parent_id
-           ) do
-        {:ok, doc} ->
-          enqueue_wiki_sync(doc.id, user_id, "upsert")
-
-          {:noreply,
-           socket
-           |> assign(show_wiki_export_modal: false)
-           |> put_flash(:info, "Report exported to wiki")
-           |> push_navigate(to: ~p"/wiki/#{doc.id}")}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Failed to export report to wiki")}
-      end
-    end
+  def handle_event(event, params, socket) when event in @wiki_events do
+    WikiLive.handle_event(event, params, socket)
   end
 
   @impl true
@@ -1681,15 +1432,16 @@ defmodule LiteskillWeb.ChatLive do
       {:noreply, socket}
     else
       user_id = socket.assigns.current_user.id
+      tool_config = build_tool_config(socket)
 
       case socket.assigns.conversation do
         nil ->
           # Create new conversation, send message, navigate to it
           case Chat.create_conversation(%{user_id: user_id, title: truncate_title(content)}) do
             {:ok, conversation} ->
-              case Chat.send_message(conversation.id, user_id, content) do
+              case Chat.send_message(conversation.id, user_id, content, tool_config: tool_config) do
                 {:ok, _message} ->
-                  pid = trigger_llm_stream(conversation, user_id, socket)
+                  pid = trigger_llm_stream(conversation, user_id, socket, tool_config)
 
                   {:noreply,
                    socket
@@ -1706,11 +1458,11 @@ defmodule LiteskillWeb.ChatLive do
 
         conversation ->
           # Send message to existing conversation
-          case Chat.send_message(conversation.id, user_id, content) do
+          case Chat.send_message(conversation.id, user_id, content, tool_config: tool_config) do
             {:ok, _message} ->
               # Reload messages and trigger LLM
               {:ok, messages} = Chat.list_messages(conversation.id, user_id)
-              pid = trigger_llm_stream(conversation, user_id, socket)
+              pid = trigger_llm_stream(conversation, user_id, socket, tool_config)
 
               {:noreply,
                socket
@@ -1774,7 +1526,14 @@ defmodule LiteskillWeb.ChatLive do
     user_id = socket.assigns.current_user.id
 
     if conversation do
-      pid = trigger_llm_stream(conversation, user_id, socket)
+      # Use tool config from the last user message (if any) for retry
+      last_user_msg =
+        socket.assigns.messages
+        |> Enum.filter(&(&1.role == "user"))
+        |> List.last()
+
+      tool_config = if last_user_msg, do: last_user_msg.tool_config
+      pid = trigger_llm_stream(conversation, user_id, socket, tool_config)
 
       {:noreply,
        socket
@@ -1837,27 +1596,13 @@ defmodule LiteskillWeb.ChatLive do
 
   @impl true
   def handle_event("approve_tool_call", %{"tool-use-id" => tool_use_id}, socket) do
-    stream_id = socket.assigns.conversation.stream_id
-
-    Phoenix.PubSub.broadcast(
-      Liteskill.PubSub,
-      "tool_approval:#{stream_id}",
-      {:tool_decision, tool_use_id, :approved}
-    )
-
+    Chat.broadcast_tool_decision(socket.assigns.conversation.stream_id, tool_use_id, :approved)
     {:noreply, socket}
   end
 
   @impl true
   def handle_event("reject_tool_call", %{"tool-use-id" => tool_use_id}, socket) do
-    stream_id = socket.assigns.conversation.stream_id
-
-    Phoenix.PubSub.broadcast(
-      Liteskill.PubSub,
-      "tool_approval:#{stream_id}",
-      {:tool_decision, tool_use_id, :rejected}
-    )
-
+    Chat.broadcast_tool_decision(socket.assigns.conversation.stream_id, tool_use_id, :rejected)
     {:noreply, socket}
   end
 
@@ -1975,134 +1720,14 @@ defmodule LiteskillWeb.ChatLive do
     end
   end
 
-  @impl true
-  def handle_event("delete_report", %{"id" => id}, socket) do
-    user_id = socket.assigns.current_user.id
+  # --- Reports Event Delegation ---
 
-    case Liteskill.Reports.delete_report(id, user_id) do
-      {:ok, _} ->
-        reports = Liteskill.Reports.list_reports(user_id)
-        {:noreply, assign(socket, reports: reports)}
+  @reports_events ~w(delete_report leave_report export_report add_section_comment
+    add_report_comment reply_to_comment report_edit_mode report_view_mode
+    edit_section cancel_edit_section save_section)
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to delete report")}
-    end
-  end
-
-  @impl true
-  def handle_event("leave_report", %{"id" => id}, socket) do
-    user_id = socket.assigns.current_user.id
-
-    case Liteskill.Reports.leave_report(id, user_id) do
-      {:ok, _} ->
-        reports = Liteskill.Reports.list_reports(user_id)
-        {:noreply, assign(socket, reports: reports)}
-
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to leave report")}
-    end
-  end
-
-  @impl true
-  def handle_event("export_report", _params, socket) do
-    report = socket.assigns.report
-    markdown = socket.assigns.report_markdown
-
-    filename =
-      report.title
-      |> String.downcase()
-      |> String.replace(~r/[^a-z0-9]+/, "-")
-      |> String.trim("-")
-      |> Kernel.<>(".md")
-
-    {:noreply, push_event(socket, "download_markdown", %{filename: filename, content: markdown})}
-  end
-
-  @impl true
-  def handle_event("add_section_comment", %{"section_id" => section_id, "body" => body}, socket) do
-    body = String.trim(body)
-
-    if body == "" do
-      {:noreply, socket}
-    else
-      user_id = socket.assigns.current_user.id
-      Liteskill.Reports.add_comment(section_id, user_id, body, "user")
-      {:noreply, reload_report(socket)}
-    end
-  end
-
-  @impl true
-  def handle_event("add_report_comment", %{"body" => body}, socket) do
-    body = String.trim(body)
-
-    if body == "" do
-      {:noreply, socket}
-    else
-      user_id = socket.assigns.current_user.id
-      report_id = socket.assigns.report.id
-      Liteskill.Reports.add_report_comment(report_id, user_id, body, "user")
-      {:noreply, reload_report(socket)}
-    end
-  end
-
-  @impl true
-  def handle_event("reply_to_comment", %{"comment_id" => comment_id, "body" => body}, socket) do
-    body = String.trim(body)
-
-    if body == "" do
-      {:noreply, socket}
-    else
-      user_id = socket.assigns.current_user.id
-      Liteskill.Reports.reply_to_comment(comment_id, user_id, body, "user")
-      {:noreply, reload_report(socket)}
-    end
-  end
-
-  @impl true
-  def handle_event("report_edit_mode", _params, socket) do
-    {:noreply, socket |> assign(report_mode: :edit, editing_section_id: nil) |> reload_report()}
-  end
-
-  @impl true
-  def handle_event("report_view_mode", _params, socket) do
-    {:noreply, socket |> assign(report_mode: :view, editing_section_id: nil) |> reload_report()}
-  end
-
-  @impl true
-  def handle_event("edit_section", %{"section-id" => section_id}, socket) do
-    {:noreply, assign(socket, editing_section_id: section_id)}
-  end
-
-  @impl true
-  def handle_event("cancel_edit_section", _params, socket) do
-    {:noreply, assign(socket, editing_section_id: nil)}
-  end
-
-  @impl true
-  def handle_event("save_section", params, socket) do
-    section_id = params["section-id"]
-    user_id = socket.assigns.current_user.id
-
-    attrs =
-      %{}
-      |> then(fn a ->
-        if params["content"], do: Map.put(a, :content, params["content"]), else: a
-      end)
-      |> then(fn a ->
-        title = params["title"]
-
-        if is_binary(title) && String.trim(title) != "",
-          do: Map.put(a, :title, String.trim(title)),
-          else: a
-      end)
-
-    case Liteskill.Reports.update_section_content(section_id, user_id, attrs) do
-      {:ok, _section} ->
-        {:noreply, socket |> assign(editing_section_id: nil) |> reload_report()}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to update section")}
-    end
+  def handle_event(event, params, socket) when event in @reports_events do
+    ReportsLive.handle_event(event, params, socket)
   end
 
   @impl true
@@ -2468,10 +2093,23 @@ defmodule LiteskillWeb.ChatLive do
 
   # --- Helpers ---
 
-  defp trigger_llm_stream(conversation, user_id, socket) do
+  defp trigger_llm_stream(conversation, user_id, socket, tool_config \\ nil) do
     {:ok, messages} = Chat.list_messages(conversation.id, user_id)
 
-    llm_messages = build_llm_messages(messages)
+    tool_opts =
+      if tool_config do
+        build_tool_opts_from_config(tool_config, user_id)
+      else
+        build_tool_opts(socket)
+      end
+
+    has_tools = Keyword.has_key?(tool_opts, :tools)
+
+    llm_messages = MessageBuilder.build_llm_messages(messages)
+    # Strip toolUse/toolResult blocks when no tools are selected — Bedrock
+    # returns 400 if messages contain toolUse but no tools config is provided.
+    llm_messages =
+      if has_tools, do: llm_messages, else: MessageBuilder.strip_tool_blocks(llm_messages)
 
     # RAG context augmentation
     last_user_msg = messages |> Enum.filter(&(&1.role == "user")) |> List.last()
@@ -2496,13 +2134,13 @@ defmodule LiteskillWeb.ChatLive do
     opts = if system_prompt, do: [system: system_prompt], else: []
 
     # Add tool options if tools are selected
-    opts = opts ++ build_tool_opts(socket)
+    opts = opts ++ tool_opts
 
     # Pass rag_sources through the event store so they survive navigation
     opts = if rag_sources_json, do: [{:rag_sources, rag_sources_json} | opts], else: opts
 
     {:ok, pid} =
-      Task.start(fn ->
+      Task.Supervisor.start_child(Liteskill.TaskSupervisor, fn ->
         StreamHandler.handle_stream(conversation.stream_id, llm_messages, opts)
       end)
 
@@ -2553,58 +2191,73 @@ defmodule LiteskillWeb.ChatLive do
     end
   end
 
-  defp reload_wiki_page(socket) do
-    user_id = socket.assigns.current_user.id
-    doc_id = socket.assigns.wiki_document.id
+  defp build_tool_config(socket) do
+    selected = socket.assigns.selected_server_ids
+    available = socket.assigns.available_tools
 
-    case Liteskill.DataSources.get_document(doc_id, user_id) do
-      {:ok, doc} ->
-        space = socket.assigns.wiki_space
+    selected_tools = Enum.filter(available, &MapSet.member?(selected, &1.server_id))
 
-        tree =
-          if space do
-            Liteskill.DataSources.space_tree("builtin:wiki", space.id, user_id)
-          else
-            []
-          end
+    if selected_tools == [] do
+      nil
+    else
+      servers =
+        selected_tools
+        |> Enum.map(& &1.server_id)
+        |> Enum.uniq()
+        |> Enum.map(fn sid ->
+          tool = Enum.find(selected_tools, &(&1.server_id == sid))
+          %{"id" => sid, "name" => tool.server_name}
+        end)
 
-        assign(socket, wiki_document: doc, wiki_tree: tree, wiki_sidebar_tree: tree)
+      tools =
+        Enum.map(selected_tools, fn tool ->
+          %{
+            "toolSpec" => %{
+              "name" => tool.name,
+              "description" => tool.description || "",
+              "inputSchema" => %{"json" => tool.input_schema || %{}}
+            }
+          }
+        end)
 
-      # coveralls-ignore-start
-      {:error, _} ->
-        socket
-        # coveralls-ignore-stop
+      tool_name_to_server_id = Map.new(selected_tools, &{&1.name, &1.server_id})
+
+      %{
+        "servers" => servers,
+        "tools" => tools,
+        "tool_name_to_server_id" => tool_name_to_server_id,
+        "auto_confirm" => socket.assigns.auto_confirm_tools
+      }
     end
   end
 
-  defp reload_report(socket) do
-    report = socket.assigns.report
-    user_id = socket.assigns.current_user.id
+  defp build_tool_opts_from_config(nil, _user_id), do: []
 
-    case Liteskill.Reports.get_report(report.id, user_id) do
-      {:ok, report} ->
-        section_tree = Liteskill.Reports.section_tree(report)
+  defp build_tool_opts_from_config(tool_config, user_id) do
+    tools = tool_config["tools"] || []
+    name_to_server = tool_config["tool_name_to_server_id"] || %{}
+    auto_confirm = tool_config["auto_confirm"] || false
 
-        report_comments =
-          case Liteskill.Reports.get_report_comments(report.id, user_id) do
-            {:ok, comments} -> comments
-            _ -> []
-          end
+    if tools == [] do
+      []
+    else
+      tool_servers =
+        Map.new(name_to_server, fn {tool_name, server_id} ->
+          server =
+            case McpServers.get_server(server_id, user_id) do
+              {:ok, s} -> s
+              _ -> nil
+            end
 
-        include_comments = socket.assigns[:report_mode] != :view
-        markdown = Liteskill.Reports.render_markdown(report, include_comments: include_comments)
+          {tool_name, server}
+        end)
 
-        assign(socket,
-          report: report,
-          section_tree: section_tree,
-          report_comments: report_comments,
-          report_markdown: markdown
-        )
-
-      # coveralls-ignore-start
-      {:error, _} ->
-        socket
-        # coveralls-ignore-stop
+      [
+        tools: tools,
+        tool_servers: tool_servers,
+        auto_confirm: auto_confirm,
+        user_id: user_id
+      ]
     end
   end
 
@@ -2651,139 +2304,16 @@ defmodule LiteskillWeb.ChatLive do
     end
   end
 
-  defp build_llm_messages(messages) do
-    messages
-    |> Repo.preload(:tool_calls)
-    |> Enum.filter(&(&1.status == "complete"))
-    |> Enum.reduce([], fn msg, acc ->
-      case msg.role do
-        "user" ->
-          if msg.content && msg.content != "" do
-            acc ++ [%{"role" => "user", "content" => [%{"text" => msg.content}]}]
-          else
-            acc
-          end
-
-        "assistant" ->
-          if msg.stop_reason == "tool_use" do
-            # Build assistant message with text + toolUse blocks
-            text_blocks =
-              if msg.content && msg.content != "" do
-                [%{"text" => msg.content}]
-              else
-                []
-              end
-
-            completed_tcs = Enum.filter(msg.tool_calls, &(&1.status == "completed"))
-
-            tool_use_blocks =
-              Enum.map(msg.tool_calls, fn tc ->
-                %{
-                  "toolUse" => %{
-                    "toolUseId" => tc.tool_use_id,
-                    "name" => tc.tool_name,
-                    "input" => tc.input || %{}
-                  }
-                }
-              end)
-
-            content = text_blocks ++ tool_use_blocks
-            assistant_msg = %{"role" => "assistant", "content" => content}
-
-            # Build tool result user message from completed tool calls
-            if completed_tcs != [] do
-              tool_results =
-                Enum.map(completed_tcs, fn tc ->
-                  %{
-                    "toolResult" => %{
-                      "toolUseId" => tc.tool_use_id,
-                      "content" => [%{"text" => format_tool_output_for_msg(tc.output)}],
-                      "status" => "success"
-                    }
-                  }
-                end)
-
-              acc ++ [assistant_msg, %{"role" => "user", "content" => tool_results}]
-            else
-              acc ++ [assistant_msg]
-            end
-          else
-            if msg.content && msg.content != "" do
-              acc ++ [%{"role" => "assistant", "content" => [%{"text" => msg.content}]}]
-            else
-              acc
-            end
-          end
-      end
-    end)
-    |> merge_consecutive_roles()
-  end
-
-  # Merge consecutive same-role messages (can happen when failed assistant
-  # messages are filtered out, leaving adjacent user messages).
-  defp merge_consecutive_roles(messages) do
-    messages
-    |> Enum.chunk_while(
-      nil,
-      fn msg, acc ->
-        case acc do
-          nil ->
-            {:cont, msg}
-
-          %{"role" => role} ->
-            if role == msg["role"] do
-              merged = %{acc | "content" => acc["content"] ++ msg["content"]}
-              {:cont, merged}
-            else
-              {:cont, acc, msg}
-            end
-        end
-      end,
-      fn
-        nil -> {:cont, []}
-        acc -> {:cont, acc, nil}
-      end
-    )
-  end
-
-  defp format_tool_output_for_msg(nil), do: ""
-
-  defp format_tool_output_for_msg(%{"content" => content}) when is_list(content) do
-    content
-    |> Enum.map(fn
-      %{"text" => text} -> text
-      other -> Jason.encode!(other)
-    end)
-    |> Enum.join("\n")
-  end
-
-  defp format_tool_output_for_msg(output) when is_map(output), do: Jason.encode!(output)
-  defp format_tool_output_for_msg(output), do: inspect(output)
-
-  defp tool_calls_for_message(msg) do
-    case msg.tool_calls do
-      %Ecto.Association.NotLoaded{} ->
-        Repo.all(
-          from tc in ToolCall, where: tc.message_id == ^msg.id, order_by: [asc: tc.inserted_at]
-        )
-
-      tool_calls ->
-        tool_calls
-    end
-  end
-
   defp load_pending_tool_calls(messages) do
     case List.last(messages) do
       %{role: "assistant", stop_reason: "tool_use"} = msg ->
-        tool_calls_for_message(msg)
+        MessageBuilder.tool_calls_for_message(msg)
         |> Enum.filter(&(&1.status == "started"))
 
       _ ->
         []
     end
   end
-
-  defp get_wiki_source, do: Liteskill.BuiltinSources.find("builtin:wiki")
 
   defp source_id_from_url("builtin-" <> rest), do: "builtin:" <> rest
   defp source_id_from_url(id), do: id
@@ -2830,36 +2360,8 @@ defmodule LiteskillWeb.ChatLive do
     if conversation do
       user_id = socket.assigns.current_user.id
 
-      # Find the streaming message to get its ID for fail_stream
-      streaming_msg =
-        Repo.one(
-          from m in Liteskill.Chat.Message,
-            where: m.conversation_id == ^conversation.id and m.status == "streaming",
-            order_by: [desc: m.inserted_at],
-            limit: 1
-        )
-
-      if streaming_msg do
-        alias Liteskill.Aggregate.Loader
-        alias Liteskill.Chat.{ConversationAggregate, Projector}
-
-        command =
-          {:fail_stream,
-           %{
-             message_id: streaming_msg.id,
-             error_type: "task_crashed",
-             error_message: "Stream handler process terminated unexpectedly"
-           }}
-
-        case Loader.execute(ConversationAggregate, conversation.stream_id, command) do
-          {:ok, _state, events} ->
-            Projector.project_events(conversation.stream_id, events)
-            Process.sleep(100)
-
-          {:error, _reason} ->
-            :ok
-        end
-      end
+      Chat.recover_stream(conversation.id, user_id)
+      _ = :sys.get_state(Liteskill.Chat.Projector)
 
       {:ok, messages} = Chat.list_messages(conversation.id, user_id)
       {:ok, fresh_conv} = Chat.get_conversation(conversation.id, user_id)
@@ -2913,15 +2415,6 @@ defmodule LiteskillWeb.ChatLive do
     else
       _ -> nil
     end
-  end
-
-  defp enqueue_wiki_sync(wiki_document_id, user_id, action) do
-    Liteskill.Rag.WikiSyncWorker.new(%{
-      "wiki_document_id" => wiki_document_id,
-      "user_id" => user_id,
-      "action" => action
-    })
-    |> Oban.insert()
   end
 
   defp format_tool_error(%{status: status, body: body}) when is_binary(body),

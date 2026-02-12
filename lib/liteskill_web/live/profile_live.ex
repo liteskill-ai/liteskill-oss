@@ -511,7 +511,7 @@ defmodule LiteskillWeb.ProfileLive do
   defp accent_swatch_bg("cyan"), do: "bg-cyan-500"
   defp accent_swatch_bg("blue"), do: "bg-blue-500"
   defp accent_swatch_bg("royal-blue"), do: "bg-blue-700"
-  defp accent_swatch_bg("purple"), do: "bg-purple-500"
+  defp accent_swatch_bg("purple"), do: "bg-violet-500"
   defp accent_swatch_bg("brown"), do: "bg-amber-800"
   defp accent_swatch_bg("black"), do: "bg-neutral-900"
 
@@ -570,13 +570,21 @@ defmodule LiteskillWeb.ProfileLive do
   end
 
   def handle_event("promote_user", %{"id" => id}, socket) do
-    Accounts.update_user_role(id, "admin")
-    {:noreply, Phoenix.Component.assign(socket, profile_users: Accounts.list_users())}
+    if User.admin?(socket.assigns.current_user) do
+      Accounts.update_user_role(id, "admin")
+      {:noreply, Phoenix.Component.assign(socket, profile_users: Accounts.list_users())}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("demote_user", %{"id" => id}, socket) do
-    Accounts.update_user_role(id, "user")
-    {:noreply, Phoenix.Component.assign(socket, profile_users: Accounts.list_users())}
+    if User.admin?(socket.assigns.current_user) do
+      Accounts.update_user_role(id, "user")
+      {:noreply, Phoenix.Component.assign(socket, profile_users: Accounts.list_users())}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("create_group", %{"name" => name}, socket) do
@@ -586,16 +594,20 @@ defmodule LiteskillWeb.ProfileLive do
   end
 
   def handle_event("admin_delete_group", %{"id" => id}, socket) do
-    Groups.admin_delete_group(id)
+    if User.admin?(socket.assigns.current_user) do
+      Groups.admin_delete_group(id)
 
-    socket =
-      if socket.assigns.group_detail && socket.assigns.group_detail.id == id do
-        Phoenix.Component.assign(socket, group_detail: nil, group_members: [])
-      else
-        socket
-      end
+      socket =
+        if socket.assigns.group_detail && socket.assigns.group_detail.id == id do
+          Phoenix.Component.assign(socket, group_detail: nil, group_members: [])
+        else
+          socket
+        end
 
-    {:noreply, Phoenix.Component.assign(socket, profile_groups: Groups.list_all_groups())}
+      {:noreply, Phoenix.Component.assign(socket, profile_groups: Groups.list_all_groups())}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("view_group", %{"id" => id}, socket) do
@@ -610,32 +622,40 @@ defmodule LiteskillWeb.ProfileLive do
   end
 
   def handle_event("admin_add_member", %{"email" => email}, socket) do
-    group = socket.assigns.group_detail
+    if User.admin?(socket.assigns.current_user) do
+      group = socket.assigns.group_detail
 
-    case Accounts.get_user_by_email(email) do
-      nil ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "User not found")}
+      case Accounts.get_user_by_email(email) do
+        nil ->
+          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "User not found")}
 
-      user ->
-        case Groups.admin_add_member(group.id, user.id, "member") do
-          {:ok, _} ->
-            {:noreply,
-             Phoenix.Component.assign(socket,
-               group_members: Groups.admin_list_members(group.id)
-             )}
+        user ->
+          case Groups.admin_add_member(group.id, user.id, "member") do
+            {:ok, _} ->
+              {:noreply,
+               Phoenix.Component.assign(socket,
+                 group_members: Groups.admin_list_members(group.id)
+               )}
 
-          {:error, _} ->
-            {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to add member")}
-        end
+            {:error, _} ->
+              {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to add member")}
+          end
+      end
+    else
+      {:noreply, socket}
     end
   end
 
   def handle_event("admin_remove_member", %{"user-id" => user_id}, socket) do
-    group = socket.assigns.group_detail
-    Groups.admin_remove_member(group.id, user_id)
+    if User.admin?(socket.assigns.current_user) do
+      group = socket.assigns.group_detail
+      Groups.admin_remove_member(group.id, user_id)
 
-    {:noreply,
-     Phoenix.Component.assign(socket, group_members: Groups.admin_list_members(group.id))}
+      {:noreply,
+       Phoenix.Component.assign(socket, group_members: Groups.admin_list_members(group.id))}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("set_accent_color", %{"color" => color}, socket) do

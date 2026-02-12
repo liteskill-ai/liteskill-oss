@@ -83,7 +83,7 @@ defmodule Liteskill.Accounts.User do
   def admin_email, do: @admin_email
 
   def accent_color(%__MODULE__{preferences: %{"accent_color" => color}}), do: color
-  def accent_color(_), do: "orange"
+  def accent_color(_), do: "purple"
 
   def accent_colors, do: @accent_colors
 

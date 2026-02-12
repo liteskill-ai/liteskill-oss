@@ -283,9 +283,9 @@ defmodule Liteskill.AccountsTest do
       assert User.accent_color(user) == "blue"
     end
 
-    test "defaults to orange when no preference set" do
-      assert User.accent_color(%User{preferences: %{}}) == "orange"
-      assert User.accent_color(%User{}) == "orange"
+    test "defaults to purple when no preference set" do
+      assert User.accent_color(%User{preferences: %{}}) == "purple"
+      assert User.accent_color(%User{}) == "purple"
     end
   end
 

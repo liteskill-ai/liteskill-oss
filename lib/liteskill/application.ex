@@ -24,16 +24,21 @@ defmodule Liteskill.Application do
           do: {Task, fn -> Liteskill.Accounts.ensure_admin_user() end}
         ),
         # coveralls-ignore-stop
-        # Chat projector - subscribes to event store PubSub and updates projections
+        # Task supervisor for LLM streaming and other async work
+        {Task.Supervisor, name: Liteskill.TaskSupervisor},
+        # Chat projector - projects events to read-model tables
         Liteskill.Chat.Projector,
+        # Periodic sweep for conversations stuck in streaming status
+        Liteskill.Chat.StreamRecovery,
         # Start to serve requests, typically the last entry
         LiteskillWeb.Endpoint
       ]
       |> Enum.reject(&is_nil/1)
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Liteskill.Supervisor]
+    # rest_for_one: if an infrastructure child (Repo, PubSub) crashes,
+    # all children started after it (Projector, Endpoint) restart too,
+    # re-establishing PubSub subscriptions and DB connections.
+    opts = [strategy: :rest_for_one, name: Liteskill.Supervisor]
     Supervisor.start_link(children, opts)
   end
 

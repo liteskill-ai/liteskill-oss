@@ -94,6 +94,29 @@ defmodule Liteskill.ChatTest do
       {:ok, message} = Chat.send_message(conv.id, other.id, "Hello from shared!")
       assert message.content == "Hello from shared!"
     end
+
+    test "persists tool_config when provided", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+
+      tool_config = %{
+        "servers" => [%{"id" => "srv-1", "name" => "Context7"}],
+        "tools" => [%{"toolSpec" => %{"name" => "resolve-library-id"}}],
+        "tool_name_to_server_id" => %{"resolve-library-id" => "srv-1"},
+        "auto_confirm" => true
+      }
+
+      {:ok, message} =
+        Chat.send_message(conv.id, user.id, "Hello!", tool_config: tool_config)
+
+      assert message.tool_config == tool_config
+    end
+
+    test "tool_config defaults to nil when not provided", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, message} = Chat.send_message(conv.id, user.id, "Hello!")
+
+      assert message.tool_config == nil
+    end
   end
 
   describe "list_conversations/2" do
@@ -479,7 +502,6 @@ defmodule Liteskill.ChatTest do
         )
 
       Liteskill.Chat.Projector.project_events(stream_id, events)
-      Process.sleep(50)
 
       # Now start a tool call with input
       tool_cmd =
@@ -499,7 +521,6 @@ defmodule Liteskill.ChatTest do
         )
 
       Liteskill.Chat.Projector.project_events(stream_id, tool_events)
-      Process.sleep(50)
 
       # Verify the event has input
       all_events = Liteskill.EventStore.Postgres.read_stream_forward(stream_id)
@@ -535,7 +556,6 @@ defmodule Liteskill.ChatTest do
         )
 
       Liteskill.Chat.Projector.project_events(stream_id, events)
-      Process.sleep(50)
 
       tool_cmd =
         {:start_tool_call,
@@ -554,7 +574,6 @@ defmodule Liteskill.ChatTest do
         )
 
       Liteskill.Chat.Projector.project_events(stream_id, tool_events)
-      Process.sleep(50)
 
       # Complete the tool call while still in :streaming state
       complete_tool_cmd =
@@ -627,11 +646,10 @@ defmodule Liteskill.ChatTest do
     end
   end
 
-  describe "update_message_rag_sources/2" do
+  describe "update_message_rag_sources/3" do
     test "persists rag_sources on a message", %{user: user} do
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
-      Process.sleep(100)
 
       {:ok, messages} = Chat.list_messages(conv.id, user.id)
       message = hd(messages)
@@ -649,13 +667,140 @@ defmodule Liteskill.ChatTest do
         }
       ]
 
-      assert {:ok, updated} = Chat.update_message_rag_sources(message.id, rag_sources)
+      assert {:ok, updated} = Chat.update_message_rag_sources(message.id, user.id, rag_sources)
       assert updated.rag_sources == rag_sources
     end
 
-    test "returns error for non-existent message" do
+    test "returns error for non-existent message", %{user: user} do
       assert {:error, :not_found} =
-               Chat.update_message_rag_sources(Ecto.UUID.generate(), [])
+               Chat.update_message_rag_sources(Ecto.UUID.generate(), user.id, [])
+    end
+
+    test "returns not_found for unauthorized user", %{user: user, other_user: other} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
+
+      {:ok, messages} = Chat.list_messages(conv.id, user.id)
+      message = hd(messages)
+
+      assert {:error, :not_found} =
+               Chat.update_message_rag_sources(message.id, other.id, [])
+    end
+  end
+
+  describe "recover_stream/2" do
+    test "recovers a conversation stuck in streaming state", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Stuck Stream"})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
+
+      # Simulate a stuck streaming message via the aggregate
+      alias Liteskill.Aggregate.Loader
+      alias Liteskill.Chat.{ConversationAggregate, Projector}
+
+      message_id = Ecto.UUID.generate()
+
+      command =
+        {:start_assistant_stream, %{message_id: message_id, model_id: "test-model"}}
+
+      {:ok, _state, events} = Loader.execute(ConversationAggregate, conv.stream_id, command)
+      Projector.project_events(conv.stream_id, events)
+
+      # Now recover
+      assert {:ok, recovered_conv} = Chat.recover_stream(conv.id, user.id)
+      assert recovered_conv.status == "active"
+    end
+
+    test "returns ok when no streaming message exists", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Normal Conv"})
+      assert {:ok, _conv} = Chat.recover_stream(conv.id, user.id)
+    end
+
+    test "returns error for unauthorized user", %{user: user, other_user: other} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Private"})
+      assert {:error, :not_found} = Chat.recover_stream(conv.id, other.id)
+    end
+  end
+
+  describe "list_stuck_streaming/1" do
+    test "returns conversations stuck in streaming for longer than threshold", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Stuck"})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
+
+      alias Liteskill.Aggregate.Loader
+      alias Liteskill.Chat.{Conversation, ConversationAggregate, Projector}
+
+      message_id = Ecto.UUID.generate()
+      command = {:start_assistant_stream, %{message_id: message_id, model_id: "test-model"}}
+      {:ok, _state, events} = Loader.execute(ConversationAggregate, conv.stream_id, command)
+      Projector.project_events(conv.stream_id, events)
+
+      # Backdate updated_at to 10 minutes ago so it exceeds the threshold
+      ten_min_ago = DateTime.utc_now() |> DateTime.add(-600, :second)
+
+      from(c in Conversation, where: c.id == ^conv.id)
+      |> Repo.update_all(set: [updated_at: ten_min_ago])
+
+      # With threshold=5, it should appear (stuck for 10 min > 5 min)
+      stuck = Chat.list_stuck_streaming(5)
+      assert Enum.any?(stuck, &(&1.id == conv.id))
+
+      # With threshold=15, it should NOT appear (stuck for 10 min < 15 min)
+      stuck = Chat.list_stuck_streaming(15)
+      refute Enum.any?(stuck, &(&1.id == conv.id))
+    end
+
+    test "does not return active conversations", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Active"})
+
+      stuck = Chat.list_stuck_streaming(0)
+      refute Enum.any?(stuck, &(&1.id == conv.id))
+    end
+  end
+
+  describe "recover_stream_by_id/1" do
+    test "recovers a stuck streaming conversation without user context", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Orphaned"})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
+
+      alias Liteskill.Aggregate.Loader
+      alias Liteskill.Chat.{ConversationAggregate, Projector}
+
+      message_id = Ecto.UUID.generate()
+      command = {:start_assistant_stream, %{message_id: message_id, model_id: "test-model"}}
+      {:ok, _state, events} = Loader.execute(ConversationAggregate, conv.stream_id, command)
+      Projector.project_events(conv.stream_id, events)
+
+      assert :ok = Chat.recover_stream_by_id(conv.id)
+
+      recovered = Liteskill.Repo.get!(Liteskill.Chat.Conversation, conv.id)
+      assert recovered.status == "active"
+    end
+
+    test "returns ok when no streaming message exists", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Normal"})
+      assert :ok = Chat.recover_stream_by_id(conv.id)
+    end
+  end
+
+  describe "broadcast_tool_decision/3" do
+    test "broadcasts approved decision via PubSub" do
+      stream_id = "conversation-#{Ecto.UUID.generate()}"
+      topic = "tool_approval:#{stream_id}"
+      Phoenix.PubSub.subscribe(Liteskill.PubSub, topic)
+
+      :ok = Chat.broadcast_tool_decision(stream_id, "tool-123", :approved)
+
+      assert_receive {:tool_decision, "tool-123", :approved}
+    end
+
+    test "broadcasts rejected decision via PubSub" do
+      stream_id = "conversation-#{Ecto.UUID.generate()}"
+      topic = "tool_approval:#{stream_id}"
+      Phoenix.PubSub.subscribe(Liteskill.PubSub, topic)
+
+      :ok = Chat.broadcast_tool_decision(stream_id, "tool-456", :rejected)
+
+      assert_receive {:tool_decision, "tool-456", :rejected}
     end
   end
 end

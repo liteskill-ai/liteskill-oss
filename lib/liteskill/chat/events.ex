@@ -33,15 +33,13 @@ defmodule Liteskill.Chat.Events do
     "ConversationArchived" => ConversationArchived
   }
 
+  @event_types_reverse Map.new(@event_types, fn {k, v} -> {v, k} end)
+
   @doc """
   Converts an event struct to the event store format (map with :event_type, :data).
   """
   def serialize(%module{} = event) do
-    event_type =
-      @event_types
-      |> Enum.find(fn {_k, v} -> v == module end)
-      |> elem(0)
-
+    event_type = Map.fetch!(@event_types_reverse, module)
     %{event_type: event_type, data: stringify_keys(Map.from_struct(event))}
   end
 

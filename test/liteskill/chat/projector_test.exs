@@ -35,7 +35,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     conversation = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
     assert conversation.title == "Test Chat"
@@ -62,7 +61,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     assert message.role == "user"
@@ -73,6 +71,36 @@ defmodule Liteskill.Chat.ProjectorTest do
     conversation = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
     assert conversation.message_count == 1
     assert conversation.last_message_at != nil
+  end
+
+  test "projects UserMessageAdded event with tool_config", %{user: user} do
+    {stream_id, _} = create_conversation(user)
+
+    message_id = Ecto.UUID.generate()
+
+    tool_config = %{
+      "servers" => [%{"id" => "srv-1", "name" => "Context7"}],
+      "tools" => [%{"toolSpec" => %{"name" => "resolve-library-id"}}],
+      "auto_confirm" => true
+    }
+
+    {:ok, events} =
+      Store.append_events(stream_id, 1, [
+        %{
+          event_type: "UserMessageAdded",
+          data: %{
+            "message_id" => message_id,
+            "content" => "Hello!",
+            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+            "tool_config" => tool_config
+          }
+        }
+      ])
+
+    Projector.project_events(stream_id, events)
+
+    message = Repo.get!(Message, message_id)
+    assert message.tool_config == tool_config
   end
 
   test "projects assistant stream lifecycle with chunks", %{user: user} do
@@ -94,7 +122,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     assert message.status == "streaming"
@@ -120,7 +147,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     chunks = Repo.all(from mc in MessageChunk, where: mc.message_id == ^message_id)
     assert length(chunks) == 1
@@ -144,7 +170,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     assert message.status == "complete"
@@ -176,7 +201,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     {:ok, events} =
       Store.append_events(stream_id, 2, [
@@ -193,7 +217,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     conv = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
     assert conv.status == "active"
@@ -217,7 +240,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     tool_use_id = "tool-#{System.unique_integer([:positive])}"
 
@@ -235,7 +257,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     tc = Repo.one!(from t in ToolCall, where: t.tool_use_id == ^tool_use_id)
     assert tc.status == "started"
@@ -258,7 +279,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     tc = Repo.one!(from t in ToolCall, where: t.tool_use_id == ^tool_use_id)
     assert tc.status == "completed"
@@ -282,7 +302,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     conv = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
     assert conv.title == "Updated Title"
@@ -300,7 +319,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     conv = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
     assert conv.status == "archived"
@@ -337,7 +355,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(new_stream_id, events)
-    Process.sleep(100)
 
     conv = Repo.one!(from c in Conversation, where: c.stream_id == ^new_stream_id)
     assert conv.parent_conversation_id != nil
@@ -354,7 +371,6 @@ defmodule Liteskill.Chat.ProjectorTest do
 
     # Should not crash
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
   end
 
   test "projects AssistantStreamFailed when message does not exist", %{user: user} do
@@ -375,7 +391,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     conv = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
     assert conv.status == "active"
@@ -400,7 +415,6 @@ defmodule Liteskill.Chat.ProjectorTest do
 
     # Should not raise — the projector should skip gracefully
     Projector.project_events(fake_stream_id, events)
-    Process.sleep(100)
 
     # Projector should still be alive
     assert Process.alive?(Process.whereis(Liteskill.Chat.Projector))
@@ -426,7 +440,6 @@ defmodule Liteskill.Chat.ProjectorTest do
 
     # Should not raise
     Projector.project_events(fake_stream_id, events)
-    Process.sleep(100)
 
     assert Process.alive?(Process.whereis(Liteskill.Chat.Projector))
   end
@@ -434,7 +447,7 @@ defmodule Liteskill.Chat.ProjectorTest do
   test "handles info messages that are not events" do
     # The projector GenServer should handle unexpected messages
     send(Liteskill.Chat.Projector, :unexpected_message)
-    Process.sleep(50)
+    _ = :sys.get_state(Liteskill.Chat.Projector)
     # Should still be alive
     assert Process.alive?(Process.whereis(Liteskill.Chat.Projector))
   end
@@ -464,7 +477,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     {:ok, events} =
       Store.append_events(stream_id, 2, [
@@ -483,7 +495,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     assert message.total_tokens == nil
@@ -516,7 +527,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     # Set rag_sources on the message
     message = Repo.get!(Message, message_id)
@@ -540,7 +550,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     assert length(message.rag_sources) == 1
@@ -569,7 +578,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     message |> Message.changeset(%{rag_sources: rag_sources}) |> Repo.update!()
@@ -591,7 +599,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     assert message.rag_sources == nil
@@ -615,7 +622,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     message |> Message.changeset(%{rag_sources: []}) |> Repo.update!()
@@ -637,7 +643,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     assert message.rag_sources == []
@@ -665,7 +670,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     message |> Message.changeset(%{rag_sources: rag_sources}) |> Repo.update!()
@@ -687,7 +691,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     message = Repo.get!(Message, message_id)
     assert message.rag_sources == nil
@@ -712,7 +715,6 @@ defmodule Liteskill.Chat.ProjectorTest do
       ])
 
     Projector.project_events(stream_id, events)
-    Process.sleep(100)
 
     {stream_id, conversation_id}
   end

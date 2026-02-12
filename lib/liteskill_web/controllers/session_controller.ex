@@ -14,6 +14,7 @@ defmodule LiteskillWeb.SessionController do
     case Phoenix.Token.verify(LiteskillWeb.Endpoint, "user_session", token, max_age: @max_age) do
       {:ok, user_id} ->
         conn
+        |> configure_session(renew: true)
         |> put_session(:user_id, user_id)
         |> redirect(to: "/")
 
