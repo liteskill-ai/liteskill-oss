@@ -150,8 +150,10 @@ defmodule Liteskill.LLM.StreamHandler do
         Process.sleep(backoff)
         do_stream_with_retry(stream_id, message_id, model_id, messages, opts, retry_count + 1)
 
-      {:error, _reason} ->
-        fail_stream(stream_id, message_id, "request_error", "LLM request failed", retry_count)
+      {:error, reason} ->
+        error_message = extract_error_message(reason)
+        Logger.warning("StreamHandler: LLM request failed for #{stream_id}: #{error_message}")
+        fail_stream(stream_id, message_id, "request_error", error_message, retry_count)
     end
   end
 
@@ -327,6 +329,46 @@ defmodule Liteskill.LLM.StreamHandler do
     )
   end
 
+  @doc false
+  def extract_error_message(%{status: status, response_body: rb})
+      when is_integer(status) and is_map(rb) do
+    body_text = Map.get(rb, "message", Map.get(rb, "Message", Jason.encode!(rb)))
+    body_text = truncate_error(body_text, 500)
+    if body_text != "", do: "HTTP #{status}: #{body_text}", else: "HTTP #{status}"
+  end
+
+  def extract_error_message(%{status: status, body: body}) when is_integer(status) do
+    body_text =
+      case body do
+        b when is_binary(b) -> b
+        b when is_map(b) -> Map.get(b, "message", Map.get(b, "Message", Jason.encode!(b)))
+        b when is_list(b) -> Jason.encode!(b)
+        _ -> ""
+      end
+
+    body_text = truncate_error(body_text, 500)
+    if body_text != "", do: "HTTP #{status}: #{body_text}", else: "HTTP #{status}"
+  end
+
+  def extract_error_message(%{status: status}) when is_integer(status), do: "HTTP #{status}"
+
+  def extract_error_message(%Mint.TransportError{reason: reason}),
+    do: "connection error: #{reason}"
+
+  def extract_error_message(%{reason: reason}) when is_binary(reason), do: reason
+
+  def extract_error_message(reason) when is_binary(reason), do: reason
+
+  def extract_error_message(reason) when is_atom(reason), do: Atom.to_string(reason)
+
+  def extract_error_message(_reason), do: "LLM request failed"
+
+  defp truncate_error(text, max) when byte_size(text) > max do
+    String.slice(text, 0, max) <> "..."
+  end
+
+  defp truncate_error(text, _max), do: text
+
   # coveralls-ignore-start
   # normalize_error is only called from default_stream
   defp normalize_error(%{status: _} = error) when not is_struct(error), do: error
@@ -334,7 +376,23 @@ defmodule Liteskill.LLM.StreamHandler do
   defp normalize_error(error) when is_struct(error) do
     cond do
       Map.has_key?(error, :status) and is_integer(Map.get(error, :status)) ->
-        %{status: Map.get(error, :status), body: "LLM request failed"}
+        body =
+          cond do
+            # ReqLLM.Error.API.Request has response_body with the actual error
+            Map.has_key?(error, :response_body) and is_map(Map.get(error, :response_body)) ->
+              Map.get(error, :response_body)
+
+            Map.has_key?(error, :body) ->
+              Map.get(error, :body)
+
+            Map.has_key?(error, :reason) ->
+              Map.get(error, :reason)
+
+            true ->
+              inspect(error)
+          end
+
+        %{status: Map.get(error, :status), body: body}
 
       true ->
         error

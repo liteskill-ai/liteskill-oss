@@ -59,6 +59,22 @@ defmodule LiteskillWeb.PasswordAuthControllerTest do
 
       assert json_response(conn, 422)["error"] == "validation failed"
     end
+
+    test "returns 403 when registration is closed", %{conn: conn} do
+      Liteskill.Settings.get()
+      Liteskill.Settings.update(%{registration_open: false})
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_req_header("accept", "application/json")
+        |> post(~p"/auth/register", @valid_attrs)
+
+      assert json_response(conn, 403)["error"] == "Registration is currently closed"
+
+      # Restore default
+      Liteskill.Settings.update(%{registration_open: true})
+    end
   end
 
   describe "login" do

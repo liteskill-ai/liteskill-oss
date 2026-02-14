@@ -88,19 +88,26 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     assert "AssistantStreamCompleted" in event_types
   end
 
-  test "stream request error records AssistantStreamFailed", %{conversation: conv} do
+  test "stream request error records AssistantStreamFailed with actual error message", %{
+    conversation: conv
+  } do
     stream_id = conv.stream_id
 
-    assert {:error, {"request_error", _}} =
+    assert {:error, {"request_error", msg}} =
              StreamHandler.handle_stream(stream_id, [%{role: :user, content: "test"}],
                model_id: "test-model",
-               stream_fn: error_stream_fn(%{body: "connection failed"})
+               stream_fn: error_stream_fn(%{status: 403, body: "Access denied"})
              )
+
+    assert msg == "HTTP 403: Access denied"
 
     events = Store.read_stream_forward(stream_id)
     event_types = Enum.map(events, & &1.event_type)
     assert "AssistantStreamStarted" in event_types
     assert "AssistantStreamFailed" in event_types
+
+    failed = Enum.find(events, &(&1.event_type == "AssistantStreamFailed"))
+    assert failed.data["error_message"] == "HTTP 403: Access denied"
   end
 
   test "handle_stream fails when conversation is archived", %{user: user} do
@@ -668,6 +675,90 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     test "formats error tuple with sanitized message" do
       result = StreamHandler.format_tool_output({:error, "timeout"})
       assert result == "Error: tool execution failed"
+    end
+  end
+
+  describe "extract_error_message/1" do
+    test "extracts message from response_body map (ReqLLM struct pattern)" do
+      error = %{status: 400, response_body: %{"message" => "Tool use not supported in streaming"}}
+
+      assert StreamHandler.extract_error_message(error) ==
+               "HTTP 400: Tool use not supported in streaming"
+    end
+
+    test "extracts Message key from response_body (AWS capitalization)" do
+      error = %{status: 400, response_body: %{"Message" => "Invalid model"}}
+      assert StreamHandler.extract_error_message(error) == "HTTP 400: Invalid model"
+    end
+
+    test "JSON-encodes response_body when no message key" do
+      error = %{status: 400, response_body: %{"code" => "ValidationException"}}
+      result = StreamHandler.extract_error_message(error)
+      assert result =~ "HTTP 400:"
+      assert result =~ "ValidationException"
+    end
+
+    test "extracts HTTP status and body string" do
+      assert StreamHandler.extract_error_message(%{status: 403, body: "Access denied"}) ==
+               "HTTP 403: Access denied"
+    end
+
+    test "extracts HTTP status and body map with message key" do
+      assert StreamHandler.extract_error_message(%{status: 500, body: %{"message" => "Internal"}}) ==
+               "HTTP 500: Internal"
+    end
+
+    test "extracts HTTP status and body map without message key" do
+      result =
+        StreamHandler.extract_error_message(%{status: 422, body: %{"error" => "bad input"}})
+
+      assert result =~ "HTTP 422:"
+      assert result =~ "bad input"
+    end
+
+    test "extracts HTTP status without body" do
+      assert StreamHandler.extract_error_message(%{status: 502}) == "HTTP 502"
+    end
+
+    test "extracts reason from map" do
+      assert StreamHandler.extract_error_message(%{reason: "some error"}) == "some error"
+    end
+
+    test "passes through binary reason" do
+      assert StreamHandler.extract_error_message("connection timeout") == "connection timeout"
+    end
+
+    test "converts atom reason" do
+      assert StreamHandler.extract_error_message(:timeout) == "timeout"
+    end
+
+    test "falls back for unknown types" do
+      assert StreamHandler.extract_error_message({:weird, :tuple}) == "LLM request failed"
+    end
+
+    test "extracts HTTP status and body list" do
+      result = StreamHandler.extract_error_message(%{status: 400, body: ["err1", "err2"]})
+      assert result =~ "HTTP 400:"
+      assert result =~ "err1"
+    end
+
+    test "extracts HTTP status with non-standard body type" do
+      assert StreamHandler.extract_error_message(%{status: 500, body: 12345}) == "HTTP 500"
+    end
+
+    test "handles Mint.TransportError" do
+      error = %Mint.TransportError{reason: :timeout}
+      assert StreamHandler.extract_error_message(error) == "connection error: timeout"
+    end
+
+    test "truncates long error messages" do
+      long_message = String.duplicate("a", 600)
+      error = %{status: 400, body: long_message}
+      result = StreamHandler.extract_error_message(error)
+      assert result =~ "HTTP 400:"
+      assert String.ends_with?(result, "...")
+      # 500 chars + "..." suffix, plus the "HTTP 400: " prefix
+      assert byte_size(result) < byte_size(long_message)
     end
   end
 

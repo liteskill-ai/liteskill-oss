@@ -451,6 +451,178 @@ defmodule Liteskill.AccountsTest do
     end
   end
 
+  describe "create_invitation/2" do
+    test "creates an invitation for the given email" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      assert {:ok, invitation} = Accounts.create_invitation("invitee@example.com", admin.id)
+      assert invitation.email == "invitee@example.com"
+      assert invitation.token != nil
+      assert invitation.expires_at != nil
+      assert invitation.created_by_id == admin.id
+    end
+
+    test "downcases email" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      assert {:ok, invitation} = Accounts.create_invitation("UPPER@CASE.com", admin.id)
+      assert invitation.email == "upper@case.com"
+    end
+  end
+
+  describe "get_invitation_by_token/1" do
+    test "returns invitation by token with preloaded creator" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      {:ok, invitation} = Accounts.create_invitation("test@inv.com", admin.id)
+
+      found = Accounts.get_invitation_by_token(invitation.token)
+      assert found.id == invitation.id
+      assert found.created_by.id == admin.id
+    end
+
+    test "returns nil for unknown token" do
+      assert Accounts.get_invitation_by_token("nonexistent-token") == nil
+    end
+  end
+
+  describe "list_invitations/0" do
+    test "returns all invitations ordered by most recent first" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      {:ok, inv1} = Accounts.create_invitation("first@inv.com", admin.id)
+      {:ok, inv2} = Accounts.create_invitation("second@inv.com", admin.id)
+
+      invitations = Accounts.list_invitations()
+      ids = Enum.map(invitations, & &1.id)
+
+      assert inv1.id in ids
+      assert inv2.id in ids
+    end
+  end
+
+  describe "accept_invitation/2" do
+    test "creates user and marks invitation as used" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      email = unique_email()
+      {:ok, invitation} = Accounts.create_invitation(email, admin.id)
+
+      assert {:ok, user} =
+               Accounts.accept_invitation(invitation.token, %{
+                 name: "New User",
+                 password: "supersecretpass123"
+               })
+
+      assert user.email == String.downcase(email)
+      assert user.name == "New User"
+
+      # Invitation should be marked as used
+      updated = Accounts.get_invitation_by_token(invitation.token)
+      assert updated.used_at != nil
+    end
+
+    test "returns error for unknown token" do
+      assert {:error, :not_found} =
+               Accounts.accept_invitation("bad-token", %{
+                 name: "X",
+                 password: "supersecretpass123"
+               })
+    end
+
+    test "returns error for expired invitation" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      {:ok, invitation} = Accounts.create_invitation(unique_email(), admin.id)
+
+      # Manually expire it
+      invitation
+      |> Ecto.Changeset.change(%{
+        expires_at: DateTime.utc_now() |> DateTime.add(-3600) |> DateTime.truncate(:second)
+      })
+      |> Repo.update!()
+
+      assert {:error, :expired} =
+               Accounts.accept_invitation(invitation.token, %{
+                 name: "X",
+                 password: "supersecretpass123"
+               })
+    end
+
+    test "returns error for already-used invitation" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      {:ok, invitation} = Accounts.create_invitation(unique_email(), admin.id)
+
+      # Use it first
+      {:ok, _} =
+        Accounts.accept_invitation(invitation.token, %{
+          name: "First",
+          password: "supersecretpass123"
+        })
+
+      # Try again
+      assert {:error, :already_used} =
+               Accounts.accept_invitation(invitation.token, %{
+                 name: "Second",
+                 password: "supersecretpass123"
+               })
+    end
+
+    test "rolls back on user validation error" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      {:ok, invitation} = Accounts.create_invitation(unique_email(), admin.id)
+
+      # Short password should fail
+      assert {:error, %Ecto.Changeset{}} =
+               Accounts.accept_invitation(invitation.token, %{name: "X", password: "short"})
+
+      # Invitation should NOT be marked as used
+      inv = Accounts.get_invitation_by_token(invitation.token)
+      assert inv.used_at == nil
+    end
+  end
+
+  describe "revoke_invitation/1" do
+    test "deletes a pending invitation" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      {:ok, invitation} = Accounts.create_invitation(unique_email(), admin.id)
+
+      assert {:ok, _} = Accounts.revoke_invitation(invitation.id)
+      assert Accounts.get_invitation_by_token(invitation.token) == nil
+    end
+
+    test "returns error for already-used invitation" do
+      {:ok, admin} =
+        Accounts.register_user(%{email: unique_email(), password: "supersecretpass123"})
+
+      {:ok, invitation} = Accounts.create_invitation(unique_email(), admin.id)
+
+      {:ok, _} =
+        Accounts.accept_invitation(invitation.token, %{
+          name: "User",
+          password: "supersecretpass123"
+        })
+
+      assert {:error, :already_used} = Accounts.revoke_invitation(invitation.id)
+    end
+
+    test "returns error for not found" do
+      assert {:error, :not_found} = Accounts.revoke_invitation(Ecto.UUID.generate())
+    end
+  end
+
   defp unique_oidc_attrs(overrides \\ %{}) do
     unique = System.unique_integer([:positive])
 

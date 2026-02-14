@@ -24,7 +24,12 @@ defmodule Liteskill.Application do
         # Ensure root admin account exists on boot (skip in test — sandbox not available)
         # coveralls-ignore-start
         if(@env != :test,
-          do: {Task, fn -> Liteskill.Accounts.ensure_admin_user() end}
+          do:
+            {Task,
+             fn ->
+               Liteskill.Accounts.ensure_admin_user()
+               Liteskill.Settings.get()
+             end}
         ),
         # coveralls-ignore-stop
         # Periodic sweep of stale rate limiter ETS buckets

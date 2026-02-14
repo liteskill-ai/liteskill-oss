@@ -1448,6 +1448,9 @@ defmodule LiteskillWeb.ChatLive do
             llm_providers={@llm_providers}
             editing_llm_provider={@editing_llm_provider}
             llm_provider_form={@llm_provider_form}
+            server_settings={@server_settings}
+            invitations={@invitations}
+            new_invitation_url={@new_invitation_url}
           />
         <% end %>
         <%= if @live_action == :conversations do %>
@@ -2894,6 +2897,7 @@ defmodule LiteskillWeb.ChatLive do
   @profile_events ~w(change_password promote_user demote_user create_group
     admin_delete_group view_group admin_add_member admin_remove_member set_accent_color
     show_temp_password_form cancel_temp_password set_temp_password
+    toggle_registration create_invitation revoke_invitation
     new_llm_model cancel_llm_model create_llm_model edit_llm_model update_llm_model delete_llm_model
     new_llm_provider cancel_llm_provider create_llm_provider edit_llm_provider update_llm_provider delete_llm_provider)
 
@@ -3419,6 +3423,18 @@ defmodule LiteskillWeb.ChatLive do
           end
       end
 
+    # Strip tools if model doesn't support them (e.g. Llama models on Bedrock)
+    # Admins set {"supports_tools": false} in model config.
+    {opts, llm_messages} =
+      case Keyword.get(opts, :llm_model) do
+        %{model_config: %{"supports_tools" => false}} ->
+          stripped_opts = Keyword.drop(opts, [:tools, :tool_servers, :auto_confirm])
+          {stripped_opts, MessageBuilder.strip_tool_blocks(llm_messages)}
+
+        _ ->
+          {opts, llm_messages}
+      end
+
     {:ok, pid} =
       Task.Supervisor.start_child(Liteskill.TaskSupervisor, fn ->
         StreamHandler.handle_stream(conversation.stream_id, llm_messages, opts)
@@ -3832,26 +3848,18 @@ defmodule LiteskillWeb.ChatLive do
     }
   end
 
-  defp friendly_stream_error("request_error", msg) when is_binary(msg) do
-    cond do
-      msg =~ "timeout" or msg =~ "Timeout" ->
-        %{
-          title: "Request timed out",
-          detail: "The AI service took too long to respond. Please try again."
-        }
+  defp friendly_stream_error("request_error", msg) when is_binary(msg) and msg != "" do
+    %{
+      title: "LLM request failed",
+      detail: clean_error_detail(msg)
+    }
+  end
 
-      msg =~ "closed" or msg =~ "connection" ->
-        %{
-          title: "Connection lost",
-          detail: "Lost connection to the AI service. Please try again."
-        }
-
-      true ->
-        %{
-          title: "Something went wrong",
-          detail: "An unexpected error occurred. Please try again."
-        }
-    end
+  defp friendly_stream_error(_type, msg) when is_binary(msg) and msg != "" do
+    %{
+      title: "Something went wrong",
+      detail: clean_error_detail(msg)
+    }
   end
 
   defp friendly_stream_error(_type, _msg) do
@@ -3859,6 +3867,20 @@ defmodule LiteskillWeb.ChatLive do
       title: "Something went wrong",
       detail: "An unexpected error occurred. Please try again."
     }
+  end
+
+  # Extract meaningful message from raw struct text that may have leaked into stored errors
+  defp clean_error_detail(msg) do
+    case Regex.run(~r/"message" => "([^"]+)"/, msg) do
+      [_, extracted] ->
+        case Regex.run(~r/^HTTP (\d+):/, msg) do
+          [_, status] -> "HTTP #{status}: #{extracted}"
+          nil -> extracted
+        end
+
+      nil ->
+        msg
+    end
   end
 
   defp humanize_sharing_error(:no_access), do: "You don't have permission to share this"

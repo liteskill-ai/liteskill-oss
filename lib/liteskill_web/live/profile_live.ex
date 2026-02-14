@@ -11,6 +11,7 @@ defmodule LiteskillWeb.ProfileLive do
   alias Liteskill.LlmModels
   alias Liteskill.LlmProviders
   alias Liteskill.LlmProviders.LlmProvider
+  alias Liteskill.Settings
 
   @profile_actions [
     :info,
@@ -40,7 +41,10 @@ defmodule LiteskillWeb.ProfileLive do
       llm_model_form: to_form(%{}, as: :llm_model),
       llm_providers: [],
       editing_llm_provider: nil,
-      llm_provider_form: to_form(%{}, as: :llm_provider)
+      llm_provider_form: to_form(%{}, as: :llm_provider),
+      server_settings: nil,
+      invitations: [],
+      new_invitation_url: nil
     ]
   end
 
@@ -55,6 +59,8 @@ defmodule LiteskillWeb.ProfileLive do
   defp load_tab_data(socket, :admin_users) do
     Phoenix.Component.assign(socket,
       profile_users: Accounts.list_users(),
+      invitations: Accounts.list_invitations(),
+      new_invitation_url: nil,
       page_title: "User Management"
     )
   end
@@ -67,7 +73,10 @@ defmodule LiteskillWeb.ProfileLive do
   end
 
   defp load_tab_data(socket, :admin_servers) do
-    Phoenix.Component.assign(socket, page_title: "Server Management")
+    Phoenix.Component.assign(socket,
+      page_title: "Server Management",
+      server_settings: Settings.get()
+    )
   end
 
   defp load_tab_data(socket, :admin_providers) do
@@ -124,6 +133,9 @@ defmodule LiteskillWeb.ProfileLive do
   attr :llm_providers, :list, default: []
   attr :editing_llm_provider, :any, default: nil
   attr :llm_provider_form, :any
+  attr :server_settings, :any, default: nil
+  attr :invitations, :list, default: []
+  attr :new_invitation_url, :string, default: nil
 
   def profile(assigns) do
     ~H"""
@@ -326,6 +338,28 @@ defmodule LiteskillWeb.ProfileLive do
     <div class="space-y-6">
       <div class="card bg-base-100 shadow">
         <div class="card-body">
+          <h2 class="card-title mb-4">Registration</h2>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="font-medium">Public Registration</p>
+              <p class="text-sm text-base-content/60">
+                {if @server_settings && @server_settings.registration_open,
+                  do: "Anyone can create an account",
+                  else: "Only invited users can create accounts"}
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              class="toggle toggle-primary"
+              checked={@server_settings && @server_settings.registration_open}
+              phx-click="toggle_registration"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
           <h2 class="card-title mb-4">Database</h2>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <.info_row label="Host" value={to_string(@repo_config[:hostname] || "—")} />
@@ -364,102 +398,183 @@ defmodule LiteskillWeb.ProfileLive do
 
   defp render_tab(%{live_action: :admin_users} = assigns) do
     ~H"""
-    <div class="card bg-base-100 shadow">
-      <div class="card-body">
-        <h2 class="card-title mb-4">User Management</h2>
-        <div class="overflow-x-auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Source</th>
-                <th>Role</th>
-                <th>Created</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <%= for user <- @profile_users do %>
+    <div class="space-y-6">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title mb-4">Invite User</h2>
+          <form phx-submit="create_invitation" class="flex gap-2 items-end">
+            <div class="form-control flex-1">
+              <input
+                type="email"
+                name="email"
+                placeholder="user@example.com"
+                class="input input-bordered input-sm w-full"
+                required
+              />
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Send Invite</button>
+          </form>
+          <div
+            :if={@new_invitation_url}
+            class="alert alert-success mt-3"
+          >
+            <div class="flex-1">
+              <p class="font-medium text-sm">Invitation created! Share this link:</p>
+              <div class="flex items-center gap-2 mt-1">
+                <code class="text-xs break-all flex-1" id="invite-url">{@new_invitation_url}</code>
+                <button
+                  phx-click={Phoenix.LiveView.JS.dispatch("phx:copy", to: "#invite-url")}
+                  class="btn btn-ghost btn-xs"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div :if={@invitations != []} class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title mb-4">Pending Invitations</h2>
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
                 <tr>
-                  <td>{user.name || "—"}</td>
-                  <td class="font-mono text-sm">{user.email}</td>
-                  <td>{sign_on_source(user)}</td>
-                  <td>
-                    <span class={[
-                      "badge badge-sm",
-                      User.admin?(user) && "badge-primary",
-                      !User.admin?(user) && "badge-neutral"
-                    ]}>
-                      {String.capitalize(user.role)}
-                    </span>
-                  </td>
-                  <td class="text-sm text-base-content/60">
-                    {Calendar.strftime(user.inserted_at, "%Y-%m-%d")}
-                  </td>
-                  <td class="flex gap-1">
-                    <%= if user.email != User.admin_email() do %>
-                      <%= if User.admin?(user) do %>
+                  <th>Email</th>
+                  <th>Invited By</th>
+                  <th>Expires</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <%= for inv <- @invitations do %>
+                  <tr>
+                    <td class="font-mono text-sm">{inv.email}</td>
+                    <td class="text-sm text-base-content/60">
+                      {inv.created_by && inv.created_by.email}
+                    </td>
+                    <td class="text-sm text-base-content/60">
+                      {Calendar.strftime(inv.expires_at, "%Y-%m-%d %H:%M")}
+                    </td>
+                    <td>{invitation_status_badge(inv)}</td>
+                    <td>
+                      <button
+                        :if={!Liteskill.Accounts.Invitation.used?(inv)}
+                        phx-click="revoke_invitation"
+                        phx-value-id={inv.id}
+                        data-confirm="Revoke this invitation?"
+                        class="btn btn-ghost btn-xs text-error"
+                      >
+                        Revoke
+                      </button>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title mb-4">User Management</h2>
+          <div class="overflow-x-auto">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Source</th>
+                  <th>Role</th>
+                  <th>Created</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <%= for user <- @profile_users do %>
+                  <tr>
+                    <td>{user.name || "—"}</td>
+                    <td class="font-mono text-sm">{user.email}</td>
+                    <td>{sign_on_source(user)}</td>
+                    <td>
+                      <span class={[
+                        "badge badge-sm",
+                        User.admin?(user) && "badge-primary",
+                        !User.admin?(user) && "badge-neutral"
+                      ]}>
+                        {String.capitalize(user.role)}
+                      </span>
+                    </td>
+                    <td class="text-sm text-base-content/60">
+                      {Calendar.strftime(user.inserted_at, "%Y-%m-%d")}
+                    </td>
+                    <td class="flex gap-1">
+                      <%= if user.email != User.admin_email() do %>
+                        <%= if User.admin?(user) do %>
+                          <button
+                            phx-click="demote_user"
+                            phx-value-id={user.id}
+                            class="btn btn-ghost btn-xs"
+                          >
+                            Demote
+                          </button>
+                        <% else %>
+                          <button
+                            phx-click="promote_user"
+                            phx-value-id={user.id}
+                            class="btn btn-ghost btn-xs"
+                          >
+                            Promote
+                          </button>
+                        <% end %>
                         <button
-                          phx-click="demote_user"
+                          phx-click="show_temp_password_form"
                           phx-value-id={user.id}
                           class="btn btn-ghost btn-xs"
                         >
-                          Demote
+                          Set Password
                         </button>
                       <% else %>
-                        <button
-                          phx-click="promote_user"
-                          phx-value-id={user.id}
-                          class="btn btn-ghost btn-xs"
-                        >
-                          Promote
-                        </button>
+                        <span class="text-xs text-base-content/40">Root</span>
                       <% end %>
-                      <button
-                        phx-click="show_temp_password_form"
-                        phx-value-id={user.id}
-                        class="btn btn-ghost btn-xs"
+                    </td>
+                  </tr>
+                  <tr :if={@temp_password_user_id == user.id}>
+                    <td colspan="6">
+                      <form
+                        phx-submit="set_temp_password"
+                        class="flex items-center gap-2 py-2"
                       >
-                        Set Password
-                      </button>
-                    <% else %>
-                      <span class="text-xs text-base-content/40">Root</span>
-                    <% end %>
-                  </td>
-                </tr>
-                <tr :if={@temp_password_user_id == user.id}>
-                  <td colspan="6">
-                    <form
-                      phx-submit="set_temp_password"
-                      class="flex items-center gap-2 py-2"
-                    >
-                      <input type="hidden" name="user_id" value={user.id} />
-                      <span class="text-sm">
-                        Set temporary password for <strong>{user.email}</strong>:
-                      </span>
-                      <input
-                        type="password"
-                        name="password"
-                        placeholder="Min 12 characters"
-                        class="input input-bordered input-sm w-48"
-                        required
-                        minlength="12"
-                      />
-                      <button type="submit" class="btn btn-primary btn-sm">Set</button>
-                      <button
-                        type="button"
-                        phx-click="cancel_temp_password"
-                        class="btn btn-ghost btn-sm"
-                      >
-                        Cancel
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              <% end %>
-            </tbody>
-          </table>
+                        <input type="hidden" name="user_id" value={user.id} />
+                        <span class="text-sm">
+                          Set temporary password for <strong>{user.email}</strong>:
+                        </span>
+                        <input
+                          type="password"
+                          name="password"
+                          placeholder="Min 12 characters"
+                          class="input input-bordered input-sm w-48"
+                          required
+                          minlength="12"
+                        />
+                        <button type="submit" class="btn btn-primary btn-sm">Set</button>
+                        <button
+                          type="button"
+                          phx-click="cancel_temp_password"
+                          class="btn btn-ghost btn-sm"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -749,6 +864,14 @@ defmodule LiteskillWeb.ProfileLive do
                   </td>
                   <td class="flex gap-1">
                     <button
+                      phx-click="open_sharing"
+                      phx-value-entity-type="llm_provider"
+                      phx-value-entity-id={provider.id}
+                      class="btn btn-ghost btn-xs"
+                    >
+                      Share
+                    </button>
+                    <button
                       phx-click="edit_llm_provider"
                       phx-value-id={provider.id}
                       class="btn btn-ghost btn-xs"
@@ -958,6 +1081,14 @@ defmodule LiteskillWeb.ProfileLive do
                   </td>
                   <td class="flex gap-1">
                     <button
+                      phx-click="open_sharing"
+                      phx-value-entity-type="llm_model"
+                      phx-value-entity-id={model.id}
+                      class="btn btn-ghost btn-xs"
+                    >
+                      Share
+                    </button>
+                    <button
                       phx-click="edit_llm_model"
                       phx-value-id={model.id}
                       class="btn btn-ghost btn-xs"
@@ -1015,6 +1146,21 @@ defmodule LiteskillWeb.ProfileLive do
   defp accent_swatch_bg("black"), do: "bg-neutral-900"
 
   defp color_label(color), do: color |> String.replace("-", " ") |> String.capitalize()
+
+  defp invitation_status_badge(inv) do
+    alias Liteskill.Accounts.Invitation
+
+    cond do
+      Invitation.used?(inv) ->
+        Phoenix.HTML.raw(~s(<span class="badge badge-sm badge-success">Used</span>))
+
+      Invitation.expired?(inv) ->
+        Phoenix.HTML.raw(~s(<span class="badge badge-sm badge-warning">Expired</span>))
+
+      true ->
+        Phoenix.HTML.raw(~s(<span class="badge badge-sm badge-info">Pending</span>))
+    end
+  end
 
   # --- Event Handlers (called from ChatLive) ---
 
@@ -1214,6 +1360,65 @@ defmodule LiteskillWeb.ProfileLive do
              :error,
              "Failed to set password. Ensure it is at least 12 characters."
            )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  # --- Registration & Invitation event handlers ---
+
+  def handle_event("toggle_registration", _params, socket) do
+    if User.admin?(socket.assigns.current_user) do
+      case Settings.toggle_registration() do
+        {:ok, settings} ->
+          {:noreply, Phoenix.Component.assign(socket, server_settings: settings)}
+
+        {:error, _} ->
+          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to toggle registration")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("create_invitation", %{"email" => email}, socket) do
+    if User.admin?(socket.assigns.current_user) do
+      case Accounts.create_invitation(email, socket.assigns.current_user.id) do
+        {:ok, invitation} ->
+          url = LiteskillWeb.Endpoint.url() <> "/invite/#{invitation.token}"
+
+          {:noreply,
+           socket
+           |> Phoenix.Component.assign(
+             invitations: Accounts.list_invitations(),
+             new_invitation_url: url
+           )
+           |> Phoenix.LiveView.put_flash(:info, "Invitation created")}
+
+        {:error, _} ->
+          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to create invitation")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("revoke_invitation", %{"id" => id}, socket) do
+    if User.admin?(socket.assigns.current_user) do
+      case Accounts.revoke_invitation(id) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> Phoenix.Component.assign(invitations: Accounts.list_invitations())
+           |> Phoenix.LiveView.put_flash(:info, "Invitation revoked")}
+
+        {:error, :already_used} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, "Cannot revoke a used invitation")}
+
+        {:error, _} ->
+          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to revoke invitation")}
       end
     else
       {:noreply, socket}

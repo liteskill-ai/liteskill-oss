@@ -1,9 +1,10 @@
 # Liteskill
 
-A self-hosted AI chat application built with Elixir and Phoenix. Liteskill connects to AWS Bedrock LLMs (Claude by default) and supports real-time streaming, conversation branching, and external tool execution via the Model Context Protocol (MCP).
+A self-hosted AI chat application built with Elixir and Phoenix. Liteskill supports 56+ LLM providers (OpenAI, Anthropic, AWS Bedrock, Google, Groq, Azure, and many more) via [ReqLLM](https://hexdocs.pm/req_llm), with real-time streaming, conversation branching, and external tool execution via the Model Context Protocol (MCP).
 
 ## Features
 
+- **56+ LLM providers** -- Configure any provider supported by ReqLLM (OpenAI, Anthropic, AWS Bedrock, Google, Groq, Azure, Cerebras, xAI, DeepSeek, vLLM, OpenRouter, and more) through the admin UI. Custom base URL override for proxies like LiteLLM
 - **Streaming chat** -- Real-time token-by-token responses via Phoenix LiveView
 - **MCP tool support** -- Connect external tool servers so the AI can call APIs, query databases, and more
 - **Conversation forking** -- Branch any conversation at any message to explore alternate paths
@@ -12,7 +13,7 @@ A self-hosted AI chat application built with Elixir and Phoenix. Liteskill conne
 - **Structured reports** -- Create documents with infinitely-nested sections, collaborative comments with replies, ACL sharing, and markdown rendering
 - **Dual authentication** -- OpenID Connect (SSO) and password-based registration
 - **Access control** -- Share conversations, reports, and groups with specific users or groups via ACLs
-- **Encrypted secrets** -- MCP API keys are encrypted at rest using AES-256-GCM
+- **Encrypted secrets** -- API keys and MCP credentials are encrypted at rest using AES-256-GCM
 
 ## Prerequisites
 
@@ -57,8 +58,6 @@ All runtime configuration is loaded from environment variables. Set them before 
 | `DATABASE_URL`             | PostgreSQL connection string         |
 | `SECRET_KEY_BASE`          | Phoenix signing/encryption key       |
 | `ENCRYPTION_KEY`           | Encryption key for secrets at rest   |
-| `AWS_BEARER_TOKEN_BEDROCK` | AWS Bedrock bearer token for LLM access |
-| `AWS_REGION`               | AWS region for Bedrock (e.g. `us-east-1`) |
 
 ### Optional
 
@@ -70,6 +69,10 @@ All runtime configuration is loaded from environment variables. Set them before 
 | `OIDC_ISSUER`             | OpenID Connect issuer URL                | --                                                      |
 | `OIDC_CLIENT_ID`          | OIDC client ID                           | --                                                      |
 | `OIDC_CLIENT_SECRET`      | OIDC client secret                       | --                                                      |
+| `AWS_BEARER_TOKEN_BEDROCK`| AWS Bedrock bearer token (legacy RAG embeddings only) | --                                     |
+| `AWS_REGION`              | AWS region for Bedrock (legacy RAG embeddings only)   | `us-east-1`                            |
+
+> **Note:** LLM provider credentials (API keys, regions, endpoints) are now configured through the admin UI at **Settings > Providers**. The `AWS_*` variables are only needed if you use Cohere embedding on Bedrock for RAG.
 
 ## Development
 
@@ -95,17 +98,21 @@ lib/
     aggregate/          # Event sourcing: aggregate behaviour and loader
     chat/               # Chat context: conversations, messages, projector, events
     event_store/        # Append-only event store with optimistic concurrency
-    llm/                # AWS Bedrock client, streaming handler, event-stream parser
+    llm/                # LLM facade and streaming handler (uses ReqLLM)
+    llm_providers/      # Provider configuration schema (56+ providers)
+    llm_models/         # Model configuration schema with provider association
     mcp_servers/        # MCP server registry and JSON-RPC 2.0 client
     rag/                # RAG: collections, sources, documents, chunking, embedding, search
     reports/            # Structured reports with nested sections and comments
     accounts/           # User management (OIDC + password auth)
+    authorization/      # ACL and role management
     groups/             # Group memberships for ACL
     crypto/             # AES-256-GCM encryption for sensitive fields
+    data_sources/       # External data sync (Google Drive, wiki, etc.)
   liteskill_web/
-    live/               # LiveView: chat UI, auth
+    live/               # LiveView: chat UI, admin, wiki, reports
     controllers/        # REST API for conversations, groups, auth
-    plugs/              # Authentication plugs
+    plugs/              # Authentication and rate limiting plugs
 ```
 
 ### Architecture
@@ -118,6 +125,24 @@ Command -> Aggregate -> EventStore (append) -> PubSub -> Projector -> Projection
 ```
 
 The `ConversationAggregate` enforces a state machine: **created -> active <-> streaming -> archived**. Tool calls are handled during streaming, with support for both automatic execution and manual approval via the UI.
+
+### LLM Providers
+
+Liteskill uses [ReqLLM](https://hexdocs.pm/req_llm) to support 56+ LLM providers. Providers and models are configured through the admin UI:
+
+1. **Settings > Providers** -- Add a provider (e.g. OpenAI, Anthropic, AWS Bedrock), set the API key and provider-specific config
+2. **Settings > Models** -- Add model configurations that reference a provider (e.g. `gpt-4o` on your OpenAI provider)
+
+Provider configuration is stored as encrypted JSON. Common config fields:
+
+| Provider | Config example |
+|----------|---------------|
+| AWS Bedrock | `{"region": "us-east-1"}` |
+| Azure OpenAI | `{"resource_name": "myres", "deployment_id": "gpt4", "api_version": "2024-02-01"}` |
+| Custom endpoint | `{"base_url": "http://litellm:4000/v1"}` |
+| Google Vertex | `{"project_id": "my-project", "location": "us-central1"}` |
+
+The `base_url` field works with any provider to point at a custom endpoint (useful for LiteLLM proxies, local vLLM instances, etc.). API keys are encrypted at rest with AES-256-GCM.
 
 ### RAG (Retrieval-Augmented Generation)
 
@@ -168,18 +193,16 @@ The quickest way to run Liteskill locally. You need [Docker](https://docs.docker
 
 **1. Create a `.env` file**
 
-Liteskill requires secret keys and AWS Bedrock credentials. Generate the secrets and add your AWS config:
+Liteskill requires secret keys for session signing and field encryption. Generate them:
 
 ```bash
 cat <<EOF > .env
 SECRET_KEY_BASE=$(openssl rand -base64 64 | tr -d '\n')
 ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')
-AWS_BEARER_TOKEN_BEDROCK=<your-bedrock-token>
-AWS_REGION=us-east-1
 EOF
 ```
 
-Replace `<your-bedrock-token>` with your actual AWS Bedrock bearer token. Compose reads `.env` automatically.
+Compose reads `.env` automatically. LLM provider credentials are configured in the admin UI after first login.
 
 **2. Start the application**
 
@@ -187,7 +210,7 @@ Replace `<your-bedrock-token>` with your actual AWS Bedrock bearer token. Compos
 docker compose up
 ```
 
-This starts PostgreSQL, waits for it to be healthy, runs database migrations, and starts the server. Visit [localhost:4000](http://localhost:4000) once the logs show the server is running. Register an account to get started — the first user is automatically made an admin.
+This starts PostgreSQL, waits for it to be healthy, runs database migrations, and starts the server. Visit [localhost:4000](http://localhost:4000) once the logs show the server is running. Register an account to get started — the first user is automatically made an admin. Then go to **Settings > Providers** to add your LLM provider and **Settings > Models** to configure models.
 
 **3. Stop everything**
 
@@ -212,8 +235,6 @@ docker run -d \
   -e DATABASE_URL="ecto://user:pass@host/liteskill" \
   -e SECRET_KEY_BASE="$(openssl rand -base64 64 | tr -d '\n')" \
   -e ENCRYPTION_KEY="$(openssl rand -base64 32 | tr -d '\n')" \
-  -e AWS_BEARER_TOKEN_BEDROCK="<your-bedrock-token>" \
-  -e AWS_REGION="us-east-1" \
   -e PHX_HOST="localhost" \
   liteskill
 ```
@@ -251,8 +272,6 @@ Run it:
 DATABASE_URL="ecto://..." \
 SECRET_KEY_BASE="$(mix phx.gen.secret)" \
 ENCRYPTION_KEY="$(mix phx.gen.secret)" \
-AWS_BEARER_TOKEN_BEDROCK="<your-bedrock-token>" \
-AWS_REGION="us-east-1" \
 PHX_HOST="your-domain.com" \
 PHX_SERVER=true \
 _build/prod/rel/liteskill/bin/liteskill start

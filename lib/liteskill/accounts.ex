@@ -3,6 +3,7 @@ defmodule Liteskill.Accounts do
   The Accounts context. Manages user records created from OIDC or password authentication.
   """
 
+  alias Liteskill.Accounts.Invitation
   alias Liteskill.Accounts.User
   alias Liteskill.Repo
 
@@ -183,5 +184,90 @@ defmodule Liteskill.Accounts do
     user
     |> User.preferences_changeset(%{preferences: merged})
     |> Repo.update()
+  end
+
+  # --- Invitations ---
+
+  @doc """
+  Creates an invitation for the given email, issued by the admin user.
+  """
+  def create_invitation(email, admin_user_id) do
+    %Invitation{}
+    |> Invitation.changeset(%{email: email, created_by_id: admin_user_id})
+    |> Repo.insert()
+  end
+
+  @doc """
+  Gets an invitation by its token, preloading the creator.
+  """
+  def get_invitation_by_token(token) when is_binary(token) do
+    Repo.one(from i in Invitation, where: i.token == ^token, preload: [:created_by])
+  end
+
+  @doc """
+  Lists all invitations ordered by most recent first.
+  """
+  def list_invitations do
+    Repo.all(from i in Invitation, order_by: [desc: i.inserted_at], preload: [:created_by])
+  end
+
+  @doc """
+  Accepts an invitation: validates token, creates user in a transaction,
+  and marks the invitation as used.
+  """
+  def accept_invitation(token, attrs) do
+    case get_invitation_by_token(token) do
+      nil ->
+        {:error, :not_found}
+
+      invitation ->
+        cond do
+          Invitation.used?(invitation) ->
+            {:error, :already_used}
+
+          Invitation.expired?(invitation) ->
+            {:error, :expired}
+
+          true ->
+            user_attrs = %{
+              email: invitation.email,
+              name: attrs[:name] || attrs["name"],
+              password: attrs[:password] || attrs["password"]
+            }
+
+            Repo.transaction(fn ->
+              case register_user(user_attrs) do
+                {:ok, user} ->
+                  invitation
+                  |> Ecto.Changeset.change(%{
+                    used_at: DateTime.utc_now() |> DateTime.truncate(:second)
+                  })
+                  |> Repo.update!()
+
+                  user
+
+                {:error, changeset} ->
+                  Repo.rollback(changeset)
+              end
+            end)
+        end
+    end
+  end
+
+  @doc """
+  Revokes (deletes) a pending invitation. Rejects if already used.
+  """
+  def revoke_invitation(id) do
+    case Repo.get(Invitation, id) do
+      nil ->
+        {:error, :not_found}
+
+      invitation ->
+        if Invitation.used?(invitation) do
+          {:error, :already_used}
+        else
+          Repo.delete(invitation)
+        end
+    end
   end
 end

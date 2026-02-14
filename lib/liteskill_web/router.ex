@@ -37,6 +37,7 @@ defmodule LiteskillWeb.Router do
       on_mount: [{LiteskillWeb.Plugs.LiveAuth, :redirect_if_authenticated}] do
       live "/login", AuthLive, :login
       live "/register", AuthLive, :register
+      live "/invite/:token", AuthLive, :invite
     end
   end
 

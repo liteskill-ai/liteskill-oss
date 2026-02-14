@@ -4,30 +4,36 @@ defmodule LiteskillWeb.PasswordAuthController do
   alias Liteskill.Accounts
 
   def register(conn, params) do
-    attrs = %{
-      email: params["email"],
-      name: params["name"],
-      password: params["password"]
-    }
+    if not Liteskill.Settings.registration_open?() do
+      conn
+      |> put_status(:forbidden)
+      |> json(%{error: "Registration is currently closed"})
+    else
+      attrs = %{
+        email: params["email"],
+        name: params["name"],
+        password: params["password"]
+      }
 
-    case Accounts.register_user(attrs) do
-      {:ok, user} ->
-        conn
-        |> put_session(:user_id, user.id)
-        |> put_status(:created)
-        |> json(%{data: %{id: user.id, email: user.email, name: user.name}})
+      case Accounts.register_user(attrs) do
+        {:ok, user} ->
+          conn
+          |> put_session(:user_id, user.id)
+          |> put_status(:created)
+          |> json(%{data: %{id: user.id, email: user.email, name: user.name}})
 
-      {:error, changeset} ->
-        errors =
-          Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-            Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-              opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+        {:error, changeset} ->
+          errors =
+            Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+              Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
+                opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+              end)
             end)
-          end)
 
-        conn
-        |> put_status(:unprocessable_entity)
-        |> json(%{error: "validation failed", details: errors})
+          conn
+          |> put_status(:unprocessable_entity)
+          |> json(%{error: "validation failed", details: errors})
+      end
     end
   end
 
