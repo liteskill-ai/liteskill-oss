@@ -250,12 +250,16 @@ defmodule Liteskill.Authorization do
   # --- Ownership Verification ---
 
   @schema_map %{
+    "agent_definition" => Liteskill.Agents.AgentDefinition,
     "conversation" => Liteskill.Chat.Conversation,
-    "mcp_server" => Liteskill.McpServers.McpServer,
     "data_source" => Liteskill.DataSources.Source,
-    "wiki_space" => Liteskill.DataSources.Document,
+    "instance" => Liteskill.Instances.Instance,
     "llm_model" => Liteskill.LlmModels.LlmModel,
-    "llm_provider" => Liteskill.LlmProviders.LlmProvider
+    "llm_provider" => Liteskill.LlmProviders.LlmProvider,
+    "mcp_server" => Liteskill.McpServers.McpServer,
+    "schedule" => Liteskill.Schedules.Schedule,
+    "team_definition" => Liteskill.Teams.TeamDefinition,
+    "wiki_space" => Liteskill.DataSources.Document
   }
 
   @doc """

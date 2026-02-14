@@ -24,13 +24,17 @@ defmodule Liteskill.Authorization.EntityAcl do
   end
 
   @valid_entity_types [
+    "agent_definition",
     "conversation",
-    "report",
-    "source",
-    "mcp_server",
-    "wiki_space",
+    "instance",
     "llm_model",
-    "llm_provider"
+    "llm_provider",
+    "mcp_server",
+    "report",
+    "schedule",
+    "source",
+    "team_definition",
+    "wiki_space"
   ]
   @valid_roles ["owner", "manager", "editor", "viewer"]
 

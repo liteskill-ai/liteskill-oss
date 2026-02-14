@@ -33,8 +33,8 @@ echo "$NEW_VERSION" > "$VERSION_FILE"
 # Update Helm chart versions
 CHART_FILE="helm/liteskill/Chart.yaml"
 if [[ -f "$CHART_FILE" ]]; then
-  sed -i "s/^version: .*/version: ${NEW_VERSION}/" "$CHART_FILE"
-  sed -i "s/^appVersion: .*/appVersion: \"${NEW_VERSION}\"/" "$CHART_FILE"
+  sed -i '' "s/^version: .*/version: ${NEW_VERSION}/" "$CHART_FILE"
+  sed -i '' "s/^appVersion: .*/appVersion: \"${NEW_VERSION}\"/" "$CHART_FILE"
   echo "Helm Chart.yaml updated"
 fi
 

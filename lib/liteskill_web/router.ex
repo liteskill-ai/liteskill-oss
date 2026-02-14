@@ -76,6 +76,20 @@ defmodule LiteskillWeb.Router do
       live "/mcp", ChatLive, :mcp_servers
       live "/reports", ChatLive, :reports
       live "/reports/:report_id", ChatLive, :report_show
+      live "/agents", ChatLive, :agents
+      live "/agents/new", ChatLive, :agent_new
+      live "/agents/:agent_id", ChatLive, :agent_show
+      live "/agents/:agent_id/edit", ChatLive, :agent_edit
+      live "/teams", ChatLive, :teams
+      live "/teams/new", ChatLive, :team_new
+      live "/teams/:team_id", ChatLive, :team_show
+      live "/teams/:team_id/edit", ChatLive, :team_edit
+      live "/instances", ChatLive, :instances
+      live "/instances/new", ChatLive, :instance_new
+      live "/instances/:instance_id", ChatLive, :instance_show
+      live "/schedules", ChatLive, :schedules
+      live "/schedules/new", ChatLive, :schedule_new
+      live "/schedules/:schedule_id", ChatLive, :schedule_show
     end
   end
 

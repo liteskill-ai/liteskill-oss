@@ -11,6 +11,7 @@ A self-hosted AI chat application built with Elixir and Phoenix. Liteskill suppo
 - **Event sourcing** -- Every state change is an immutable event, giving you a full audit trail and the ability to replay or rebuild state
 - **RAG (Retrieval-Augmented Generation)** -- Organize knowledge into collections, embed documents with Cohere embed-v4, and search with pgvector. Ingest URLs asynchronously via Oban background jobs
 - **Structured reports** -- Create documents with infinitely-nested sections, collaborative comments with replies, ACL sharing, and markdown rendering
+- **Agent Studio** -- Define AI agents with strategies/backstories/opinions, assemble multi-agent teams, and run pipeline instances that produce structured report deliverables
 - **Dual authentication** -- OpenID Connect (SSO) and password-based registration
 - **Access control** -- Share conversations, reports, and groups with specific users or groups via ACLs
 - **Encrypted secrets** -- API keys and MCP credentials are encrypted at rest using AES-256-GCM
@@ -104,6 +105,9 @@ lib/
     mcp_servers/        # MCP server registry and JSON-RPC 2.0 client
     rag/                # RAG: collections, sources, documents, chunking, embedding, search
     reports/            # Structured reports with nested sections and comments
+    agents/             # Agent definitions: strategies, backstories, opinions, tool assignments
+    teams/              # Team definitions with ordered agent members and roles
+    instances/          # Runtime instances: pipeline execution and task tracking
     accounts/           # User management (OIDC + password auth)
     authorization/      # ACL and role management
     groups/             # Group memberships for ACL
@@ -163,6 +167,31 @@ Structured documents with infinitely-nesting sections, rendered as markdown.
 - **Batch operations** via `modify_sections/3` and `manage_comments/3` for bulk edits in a single transaction
 - **ACL sharing** with owner/member roles, similar to conversation access control
 - **Markdown rendering** with `render_markdown/2`, including optional comment output as blockquotes
+
+### Agent Studio
+
+Agent Studio lets you define reusable AI agents, assemble them into teams, and execute multi-agent pipelines that produce structured report deliverables.
+
+**Agents** are "character sheets" for AI personas. Each agent has:
+
+- A **strategy** (`react`, `chain_of_thought`, `tree_of_thoughts`, or `direct`) that controls its reasoning approach
+- An optional **backstory** and **opinions** (key-value pairs) that shape its perspective
+- An optional **system prompt** and **LLM model** assignment
+- **Tool assignments** via MCP server connections
+
+**Teams** are ordered collections of agents with assigned roles (e.g. `lead`, `analyst`, `reviewer`, `editor`). Members have a `position` that determines their execution order in pipelines.
+
+**Instances** are runtime executions. Each instance has a prompt, an optional team, and a topology (`pipeline`). When run, the instance runner:
+
+1. Creates a report deliverable
+2. Executes each team member sequentially as a pipeline stage
+3. Each agent produces Configuration, Analysis, and Output sections in the report
+4. Context accumulates — later agents see the outputs of all prior stages
+5. A Pipeline Summary and Conclusion are appended at the end
+
+Agents, teams, and instances all use the same ACL system as conversations and reports for sharing and access control.
+
+**Schedules** (planned) will allow instances to run on a cron-like schedule.
 
 ## Running with Docker
 

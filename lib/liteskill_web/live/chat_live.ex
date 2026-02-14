@@ -12,6 +12,7 @@ defmodule LiteskillWeb.ChatLive do
   alias LiteskillWeb.ProfileLive
   alias LiteskillWeb.{PipelineComponents, PipelineLive}
   alias LiteskillWeb.{ReportComponents, ReportsLive}
+  alias LiteskillWeb.{AgentStudioComponents, AgentStudioLive}
   alias LiteskillWeb.{SharingComponents, SourcesComponents, WikiComponents, WikiLive}
 
   @impl true
@@ -132,6 +133,7 @@ defmodule LiteskillWeb.ChatLive do
      |> assign(WikiLive.wiki_assigns())
      |> assign(ReportsLive.reports_assigns())
      |> assign(PipelineLive.pipeline_assigns())
+     |> assign(AgentStudioLive.studio_assigns())
      |> assign(ProfileLive.profile_assigns()), layout: {LiteskillWeb.Layouts, :chat}}
   end
 
@@ -356,6 +358,27 @@ defmodule LiteskillWeb.ChatLive do
     ReportsLive.apply_reports_action(socket, action, params)
   end
 
+  defp apply_action(socket, action, params)
+       when action in [
+              :agents,
+              :agent_new,
+              :agent_show,
+              :agent_edit,
+              :teams,
+              :team_new,
+              :team_show,
+              :team_edit,
+              :instances,
+              :instance_new,
+              :instance_show,
+              :schedules,
+              :schedule_new,
+              :schedule_show
+            ] do
+    maybe_unsubscribe(socket)
+    AgentStudioLive.apply_studio_action(socket, action, params)
+  end
+
   defp apply_action(socket, :show, params) do
     conversation_id = params["conversation_id"]
     auto_stream = params["auto_stream"] == "1"
@@ -556,6 +579,59 @@ defmodule LiteskillWeb.ChatLive do
             ]}
           >
             <.icon name="hero-document-text-micro" class="size-4" /> Reports
+          </.link>
+        </div>
+        <div class="p-2 border-t border-base-300 min-w-64">
+          <p class="text-xs text-base-content/40 uppercase tracking-wider px-3 py-1">
+            Agent Studio
+          </p>
+          <.link
+            navigate={~p"/agents"}
+            class={[
+              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+              if(@live_action in [:agents, :agent_new, :agent_show, :agent_edit],
+                do: "bg-primary/10 text-primary font-medium",
+                else: "hover:bg-base-200 text-base-content/70"
+              )
+            ]}
+          >
+            <.icon name="hero-cpu-chip-micro" class="size-4" /> Agents
+          </.link>
+          <.link
+            navigate={~p"/teams"}
+            class={[
+              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+              if(@live_action in [:teams, :team_new, :team_show, :team_edit],
+                do: "bg-primary/10 text-primary font-medium",
+                else: "hover:bg-base-200 text-base-content/70"
+              )
+            ]}
+          >
+            <.icon name="hero-user-group-micro" class="size-4" /> Teams
+          </.link>
+          <.link
+            navigate={~p"/instances"}
+            class={[
+              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+              if(@live_action in [:instances, :instance_new, :instance_show],
+                do: "bg-primary/10 text-primary font-medium",
+                else: "hover:bg-base-200 text-base-content/70"
+              )
+            ]}
+          >
+            <.icon name="hero-play-circle-micro" class="size-4" /> Instances
+          </.link>
+          <.link
+            navigate={~p"/schedules"}
+            class={[
+              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+              if(@live_action in [:schedules, :schedule_new, :schedule_show],
+                do: "bg-primary/10 text-primary font-medium",
+                else: "hover:bg-base-200 text-base-content/70"
+              )
+            ]}
+          >
+            <.icon name="hero-clock-micro" class="size-4" /> Schedules
           </.link>
         </div>
 
@@ -1587,7 +1663,454 @@ defmodule LiteskillWeb.ChatLive do
             confirm_label="Archive"
           />
         <% end %>
-        <%= if @live_action not in [:sources, :source_show, :source_document_show, :wiki, :wiki_page_show, :mcp_servers, :reports, :report_show, :conversations, :pipeline] and not ProfileLive.profile_action?(@live_action) do %>
+        <%!-- Agent Studio: Agents --%>
+        <%= if @live_action == :agents do %>
+          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <button
+                  :if={!@sidebar_open}
+                  phx-click="toggle_sidebar"
+                  class="btn btn-circle btn-ghost btn-sm"
+                >
+                  <.icon name="hero-bars-3-micro" class="size-5" />
+                </button>
+                <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                  Agents
+                </h1>
+              </div>
+              <.link navigate={~p"/agents/new"} class="btn btn-primary btn-sm gap-1">
+                <.icon name="hero-plus-micro" class="size-4" /> New Agent
+              </.link>
+            </div>
+          </header>
+          <div class="flex-1 overflow-y-auto p-4">
+            <AgentStudioComponents.agents_list
+              agents={@studio_agents}
+              current_user={@current_user}
+            />
+          </div>
+          <ChatComponents.confirm_modal
+            :if={@confirm_delete_agent_id}
+            show={@confirm_delete_agent_id != nil}
+            title="Delete Agent"
+            message="Are you sure you want to delete this agent? This cannot be undone."
+            confirm_event={"delete_agent|#{@confirm_delete_agent_id}"}
+            cancel_event="cancel_delete_agent"
+          />
+        <% end %>
+        <%!-- Agent Studio: New/Edit Agent --%>
+        <%= if @live_action in [:agent_new, :agent_edit] do %>
+          <AgentStudioComponents.agent_form_page
+            form={@agent_form}
+            editing={@editing_agent}
+            available_models={@available_llm_models}
+            sidebar_open={@sidebar_open}
+          />
+        <% end %>
+        <%!-- Agent Studio: Agent Detail --%>
+        <%= if @live_action == :agent_show && @studio_agent do %>
+          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <button
+                :if={!@sidebar_open}
+                phx-click="toggle_sidebar"
+                class="btn btn-circle btn-ghost btn-sm"
+              >
+                <.icon name="hero-bars-3-micro" class="size-5" />
+              </button>
+              <.link navigate={~p"/agents"} class="btn btn-ghost btn-sm btn-circle">
+                <.icon name="hero-arrow-left-micro" class="size-4" />
+              </.link>
+              <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                {@studio_agent.name}
+              </h1>
+              <span class={[
+                "badge badge-sm",
+                if(@studio_agent.status == "active", do: "badge-success", else: "badge-ghost")
+              ]}>
+                {@studio_agent.status}
+              </span>
+            </div>
+          </header>
+          <div class="flex-1 overflow-y-auto p-6">
+            <div class="max-w-3xl space-y-6">
+              <div :if={@studio_agent.description} class="prose">
+                <p class="text-base-content/70">{@studio_agent.description}</p>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Strategy</h3>
+                  <p>{@studio_agent.strategy}</p>
+                </div>
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Model</h3>
+                  <p>{if @studio_agent.llm_model, do: @studio_agent.llm_model.name, else: "None"}</p>
+                </div>
+              </div>
+              <div :if={@studio_agent.backstory}>
+                <h3 class="text-sm font-semibold text-base-content/60 mb-2">Backstory</h3>
+                <div class="bg-base-200 rounded-lg p-4 text-sm whitespace-pre-wrap">
+                  {@studio_agent.backstory}
+                </div>
+              </div>
+              <div :if={@studio_agent.opinions != %{}}>
+                <h3 class="text-sm font-semibold text-base-content/60 mb-2">Opinions</h3>
+                <div class="bg-base-200 rounded-lg p-4">
+                  <div :for={{key, value} <- @studio_agent.opinions} class="flex gap-2 text-sm mb-1">
+                    <span class="font-medium">{key}:</span>
+                    <span class="text-base-content/70">{value}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+        <%!-- Agent Studio: Teams --%>
+        <%= if @live_action == :teams do %>
+          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <button
+                  :if={!@sidebar_open}
+                  phx-click="toggle_sidebar"
+                  class="btn btn-circle btn-ghost btn-sm"
+                >
+                  <.icon name="hero-bars-3-micro" class="size-5" />
+                </button>
+                <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                  Teams
+                </h1>
+              </div>
+              <.link navigate={~p"/teams/new"} class="btn btn-primary btn-sm gap-1">
+                <.icon name="hero-plus-micro" class="size-4" /> New Team
+              </.link>
+            </div>
+          </header>
+          <div class="flex-1 overflow-y-auto p-4">
+            <AgentStudioComponents.teams_list
+              teams={@studio_teams}
+              current_user={@current_user}
+            />
+          </div>
+          <ChatComponents.confirm_modal
+            :if={@confirm_delete_team_id}
+            show={@confirm_delete_team_id != nil}
+            title="Delete Team"
+            message="Are you sure you want to delete this team? This cannot be undone."
+            confirm_event={"delete_team|#{@confirm_delete_team_id}"}
+            cancel_event="cancel_delete_team"
+          />
+        <% end %>
+        <%!-- Agent Studio: New/Edit Team --%>
+        <%= if @live_action in [:team_new, :team_edit] do %>
+          <AgentStudioComponents.team_form_page
+            form={@team_form}
+            editing={@editing_team}
+            sidebar_open={@sidebar_open}
+          />
+        <% end %>
+        <%!-- Agent Studio: Team Detail --%>
+        <%= if @live_action == :team_show && @studio_team do %>
+          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <button
+                :if={!@sidebar_open}
+                phx-click="toggle_sidebar"
+                class="btn btn-circle btn-ghost btn-sm"
+              >
+                <.icon name="hero-bars-3-micro" class="size-5" />
+              </button>
+              <.link navigate={~p"/teams"} class="btn btn-ghost btn-sm btn-circle">
+                <.icon name="hero-arrow-left-micro" class="size-4" />
+              </.link>
+              <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                {@studio_team.name}
+              </h1>
+            </div>
+          </header>
+          <div class="flex-1 overflow-y-auto p-6">
+            <div class="max-w-3xl space-y-6">
+              <div :if={@studio_team.description} class="prose">
+                <p class="text-base-content/70">{@studio_team.description}</p>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Topology</h3>
+                  <p>{@studio_team.default_topology}</p>
+                </div>
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Aggregation</h3>
+                  <p>{@studio_team.aggregation_strategy}</p>
+                </div>
+              </div>
+              <div :if={@studio_team.shared_context}>
+                <h3 class="text-sm font-semibold text-base-content/60 mb-2">Shared Context</h3>
+                <div class="bg-base-200 rounded-lg p-4 text-sm whitespace-pre-wrap">
+                  {@studio_team.shared_context}
+                </div>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-base-content/60 mb-2">
+                  Agent Roster ({length(@studio_team.team_members)})
+                </h3>
+                <div :if={@studio_team.team_members != []} class="space-y-2">
+                  <div
+                    :for={member <- @studio_team.team_members}
+                    class="bg-base-200 rounded-lg p-3 flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-3">
+                      <span class="badge badge-ghost badge-sm w-6 text-center">
+                        {member.position + 1}
+                      </span>
+                      <.link
+                        navigate={~p"/agents/#{member.agent_definition.id}"}
+                        class="font-medium hover:text-primary"
+                      >
+                        {member.agent_definition.name}
+                      </.link>
+                      <span class="badge badge-outline badge-xs">{member.role}</span>
+                    </div>
+                  </div>
+                </div>
+                <p :if={@studio_team.team_members == []} class="text-sm text-base-content/50">
+                  No agents in this team yet.
+                </p>
+              </div>
+            </div>
+          </div>
+        <% end %>
+        <%!-- Agent Studio: Instances --%>
+        <%= if @live_action == :instances do %>
+          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <button
+                  :if={!@sidebar_open}
+                  phx-click="toggle_sidebar"
+                  class="btn btn-circle btn-ghost btn-sm"
+                >
+                  <.icon name="hero-bars-3-micro" class="size-5" />
+                </button>
+                <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                  Instances
+                </h1>
+              </div>
+              <.link navigate={~p"/instances/new"} class="btn btn-primary btn-sm gap-1">
+                <.icon name="hero-plus-micro" class="size-4" /> New Instance
+              </.link>
+            </div>
+          </header>
+          <div class="flex-1 overflow-y-auto p-4">
+            <AgentStudioComponents.instances_list
+              instances={@studio_instances}
+              current_user={@current_user}
+            />
+          </div>
+          <ChatComponents.confirm_modal
+            :if={@confirm_delete_instance_id}
+            show={@confirm_delete_instance_id != nil}
+            title="Delete Instance"
+            message="Are you sure you want to delete this instance?"
+            confirm_event={"delete_instance|#{@confirm_delete_instance_id}"}
+            cancel_event="cancel_delete_instance"
+          />
+        <% end %>
+        <%!-- Agent Studio: New Instance --%>
+        <%= if @live_action == :instance_new do %>
+          <AgentStudioComponents.instance_form_page
+            form={@instance_form}
+            teams={@studio_teams}
+            sidebar_open={@sidebar_open}
+          />
+        <% end %>
+        <%!-- Agent Studio: Instance Detail --%>
+        <%= if @live_action == :instance_show && @studio_instance do %>
+          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <button
+                :if={!@sidebar_open}
+                phx-click="toggle_sidebar"
+                class="btn btn-circle btn-ghost btn-sm"
+              >
+                <.icon name="hero-bars-3-micro" class="size-5" />
+              </button>
+              <.link navigate={~p"/instances"} class="btn btn-ghost btn-sm btn-circle">
+                <.icon name="hero-arrow-left-micro" class="size-4" />
+              </.link>
+              <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                {@studio_instance.name}
+              </h1>
+              <span class={["badge badge-sm", instance_status_badge(@studio_instance.status)]}>
+                {@studio_instance.status}
+              </span>
+              <button
+                :if={
+                  @studio_instance.status == "pending" && @studio_instance.user_id == @current_user.id
+                }
+                phx-click="run_instance"
+                phx-value-id={@studio_instance.id}
+                class="btn btn-primary btn-sm ml-auto"
+              >
+                <.icon name="hero-play-micro" class="size-4" /> Run
+              </button>
+            </div>
+          </header>
+          <div class="flex-1 overflow-y-auto p-6">
+            <div class="max-w-3xl space-y-6">
+              <div class="bg-base-200 rounded-lg p-4">
+                <h3 class="text-sm font-semibold text-base-content/60 mb-2">Prompt</h3>
+                <p class="text-sm whitespace-pre-wrap">{@studio_instance.prompt}</p>
+              </div>
+              <div class="grid grid-cols-3 gap-4">
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Topology</h3>
+                  <p>{@studio_instance.topology}</p>
+                </div>
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Team</h3>
+                  <p>
+                    {if @studio_instance.team_definition,
+                      do: @studio_instance.team_definition.name,
+                      else: "None"}
+                  </p>
+                </div>
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Status</h3>
+                  <p>{@studio_instance.status}</p>
+                </div>
+              </div>
+              <div :if={@studio_instance.instance_tasks != []}>
+                <h3 class="text-sm font-semibold text-base-content/60 mb-2">
+                  Tasks ({length(@studio_instance.instance_tasks)})
+                </h3>
+                <div class="space-y-2">
+                  <div
+                    :for={task <- @studio_instance.instance_tasks}
+                    class="bg-base-200 rounded-lg p-3 flex items-center justify-between"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span class="badge badge-ghost badge-xs">{task.status}</span>
+                      <span class="font-medium text-sm">{task.name}</span>
+                    </div>
+                    <span :if={task.duration_ms} class="text-xs text-base-content/50">
+                      {task.duration_ms}ms
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div :if={@studio_instance.deliverables["report_id"]}>
+                <h3 class="text-sm font-semibold text-base-content/60 mb-2">Deliverables</h3>
+                <div class="bg-base-200 rounded-lg p-4">
+                  <.link
+                    navigate={~p"/reports/#{@studio_instance.deliverables["report_id"]}"}
+                    class="btn btn-sm btn-primary gap-2"
+                  >
+                    <.icon name="hero-document-text-micro" class="size-4" /> View Report
+                  </.link>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+        <%!-- Agent Studio: Schedules --%>
+        <%= if @live_action == :schedules do %>
+          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <button
+                  :if={!@sidebar_open}
+                  phx-click="toggle_sidebar"
+                  class="btn btn-circle btn-ghost btn-sm"
+                >
+                  <.icon name="hero-bars-3-micro" class="size-5" />
+                </button>
+                <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                  Schedules
+                </h1>
+              </div>
+              <.link navigate={~p"/schedules/new"} class="btn btn-primary btn-sm gap-1">
+                <.icon name="hero-plus-micro" class="size-4" /> New Schedule
+              </.link>
+            </div>
+          </header>
+          <div class="flex-1 overflow-y-auto p-4">
+            <AgentStudioComponents.schedules_list
+              schedules={@studio_schedules}
+              current_user={@current_user}
+            />
+          </div>
+          <ChatComponents.confirm_modal
+            :if={@confirm_delete_schedule_id}
+            show={@confirm_delete_schedule_id != nil}
+            title="Delete Schedule"
+            message="Are you sure you want to delete this schedule?"
+            confirm_event={"delete_schedule|#{@confirm_delete_schedule_id}"}
+            cancel_event="cancel_delete_schedule"
+          />
+        <% end %>
+        <%!-- Agent Studio: New Schedule --%>
+        <%= if @live_action == :schedule_new do %>
+          <AgentStudioComponents.schedule_form_page
+            form={@schedule_form}
+            teams={@studio_teams}
+            sidebar_open={@sidebar_open}
+          />
+        <% end %>
+        <%!-- Agent Studio: Schedule Detail --%>
+        <%= if @live_action == :schedule_show && @studio_schedule do %>
+          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <button
+                :if={!@sidebar_open}
+                phx-click="toggle_sidebar"
+                class="btn btn-circle btn-ghost btn-sm"
+              >
+                <.icon name="hero-bars-3-micro" class="size-5" />
+              </button>
+              <.link navigate={~p"/schedules"} class="btn btn-ghost btn-sm btn-circle">
+                <.icon name="hero-arrow-left-micro" class="size-4" />
+              </.link>
+              <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+                {@studio_schedule.name}
+              </h1>
+              <span class={[
+                "badge badge-sm",
+                if(@studio_schedule.enabled, do: "badge-success", else: "badge-ghost")
+              ]}>
+                {if @studio_schedule.enabled, do: "Enabled", else: "Disabled"}
+              </span>
+            </div>
+          </header>
+          <div class="flex-1 overflow-y-auto p-6">
+            <div class="max-w-3xl space-y-6">
+              <div :if={@studio_schedule.description} class="prose">
+                <p class="text-base-content/70">{@studio_schedule.description}</p>
+              </div>
+              <div class="grid grid-cols-3 gap-4">
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Cron</h3>
+                  <code class="text-sm">{@studio_schedule.cron_expression}</code>
+                </div>
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Timezone</h3>
+                  <p>{@studio_schedule.timezone}</p>
+                </div>
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h3 class="text-sm font-semibold text-base-content/60 mb-1">Topology</h3>
+                  <p>{@studio_schedule.topology}</p>
+                </div>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-base-content/60 mb-2">Prompt</h3>
+                <div class="bg-base-200 rounded-lg p-4 text-sm whitespace-pre-wrap">
+                  {@studio_schedule.prompt}
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+        <%= if @live_action not in [:sources, :source_show, :source_document_show, :wiki, :wiki_page_show, :mcp_servers, :reports, :report_show, :conversations, :pipeline, :agents, :agent_new, :agent_show, :agent_edit, :teams, :team_new, :team_show, :team_edit, :instances, :instance_new, :instance_show, :schedules, :schedule_new, :schedule_show] and not ProfileLive.profile_action?(@live_action) do %>
           <%= if @conversation do %>
             <%!-- Active conversation --%>
             <div class="flex flex-1 min-w-0 overflow-hidden">
@@ -2187,6 +2710,38 @@ defmodule LiteskillWeb.ChatLive do
 
   def handle_event(event, params, socket) when event in @wiki_events do
     WikiLive.handle_event(event, params, socket)
+  end
+
+  # --- Agent Studio Event Delegation ---
+
+  @studio_events ~w(save_agent confirm_delete_agent cancel_delete_agent
+    save_team confirm_delete_team cancel_delete_team
+    save_instance run_instance confirm_delete_instance cancel_delete_instance
+    save_schedule toggle_schedule confirm_delete_schedule cancel_delete_schedule)
+
+  @impl true
+  def handle_event(event, params, socket) when event in @studio_events do
+    AgentStudioLive.handle_studio_event(event, params, socket)
+  end
+
+  @impl true
+  def handle_event("delete_agent|" <> id, _params, socket) do
+    AgentStudioLive.handle_studio_event("delete_agent", %{"id" => id}, socket)
+  end
+
+  @impl true
+  def handle_event("delete_team|" <> id, _params, socket) do
+    AgentStudioLive.handle_studio_event("delete_team", %{"id" => id}, socket)
+  end
+
+  @impl true
+  def handle_event("delete_instance|" <> id, _params, socket) do
+    AgentStudioLive.handle_studio_event("delete_instance", %{"id" => id}, socket)
+  end
+
+  @impl true
+  def handle_event("delete_schedule|" <> id, _params, socket) do
+    AgentStudioLive.handle_studio_event("delete_schedule", %{"id" => id}, socket)
   end
 
   @impl true
@@ -3717,6 +4272,13 @@ defmodule LiteskillWeb.ChatLive do
         :ok
     end
   end
+
+  defp instance_status_badge("pending"), do: "badge-ghost"
+  defp instance_status_badge("running"), do: "badge-info"
+  defp instance_status_badge("completed"), do: "badge-success"
+  defp instance_status_badge("failed"), do: "badge-error"
+  defp instance_status_badge("cancelled"), do: "badge-warning"
+  defp instance_status_badge(_), do: "badge-ghost"
 
   defp maybe_unsubscribe(socket) do
     case socket.assigns[:conversation] do
