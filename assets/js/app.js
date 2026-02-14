@@ -25,10 +25,12 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/liteskill"
 import topbar from "../vendor/topbar"
 import {SectionEditor, WikiEditor} from "./codemirror_hook"
+import {JsonRender} from "./json-render/hook"
 
 const Hooks = {
   SectionEditor,
   WikiEditor,
+  JsonRender,
 
   SidebarNav: {
     mounted() {

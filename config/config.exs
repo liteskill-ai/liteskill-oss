@@ -38,9 +38,15 @@ config :esbuild,
   version: "0.25.4",
   liteskill: [
     args:
-      ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=.),
+      ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/* --alias:@=. --loader:.jsx=jsx),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
+  ],
+  json_render_prompt: [
+    args:
+      ~w(js/json-render/generate_prompt.js --bundle --platform=node --format=esm --outfile=../priv/json_render_prompt_gen.mjs),
+    cd: Path.expand("../assets", __DIR__),
+    env: %{}
   ]
 
 # Configure tailwind (the version is required)
