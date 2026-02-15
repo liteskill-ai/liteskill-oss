@@ -85,6 +85,34 @@ defmodule Liteskill.ReportsTest do
     end
   end
 
+  describe "list_reports_paginated/2" do
+    test "returns paginated results", %{owner: owner} do
+      for i <- 1..3, do: {:ok, _} = Reports.create_report(owner.id, "Report #{i}")
+
+      result = Reports.list_reports_paginated(owner.id, 1)
+      assert result.page == 1
+      assert result.total == 3
+      assert result.total_pages == 1
+      assert length(result.reports) == 3
+    end
+
+    test "returns empty page when no reports", %{other: other} do
+      result = Reports.list_reports_paginated(other.id, 1)
+      assert result.reports == []
+      assert result.total == 0
+      assert result.total_pages == 1
+    end
+
+    test "includes shared reports", %{owner: owner, other: other} do
+      {:ok, report} = Reports.create_report(owner.id, "Shared")
+      {:ok, _} = Reports.grant_access(report.id, owner.id, other.email)
+
+      result = Reports.list_reports_paginated(other.id, 1)
+      assert result.total == 1
+      assert hd(result.reports).id == report.id
+    end
+  end
+
   describe "get_report/2" do
     test "returns report with sections for owner", %{owner: owner} do
       {:ok, report} = Reports.create_report(owner.id, "Test")

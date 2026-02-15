@@ -47,6 +47,28 @@ defmodule Liteskill.Reports do
     |> Repo.all()
   end
 
+  @reports_per_page 20
+
+  def list_reports_paginated(user_id, page) when is_integer(page) and page >= 1 do
+    accessible_ids = Authorization.accessible_entity_ids("report", user_id)
+
+    base_query =
+      Report
+      |> where([r], r.user_id == ^user_id or r.id in subquery(accessible_ids))
+
+    total = Repo.aggregate(base_query, :count)
+    total_pages = max(ceil(total / @reports_per_page), 1)
+
+    reports =
+      base_query
+      |> order_by([r], desc: r.updated_at)
+      |> limit(@reports_per_page)
+      |> offset(^(@reports_per_page * (page - 1)))
+      |> Repo.all()
+
+    %{reports: reports, page: page, total_pages: total_pages, total: total}
+  end
+
   def get_report(report_id, user_id) do
     case Repo.get(Report, report_id) do
       nil ->

@@ -521,23 +521,6 @@ defmodule LiteskillWeb.ChatLive do
           </p>
         </nav>
 
-        <%= if @wiki_sidebar_tree != [] && @live_action == :wiki_page_show && @wiki_space do %>
-          <div class="px-2 pb-2 border-t border-base-300 min-w-64 overflow-y-auto max-h-64">
-            <div class="py-2 px-1">
-              <.link
-                navigate={~p"/wiki/#{@wiki_space.id}"}
-                class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-2 hover:text-primary transition-colors block truncate"
-              >
-                {@wiki_space.title}
-              </.link>
-              <WikiComponents.wiki_tree_sidebar
-                tree={@wiki_sidebar_tree}
-                active_doc_id={if @wiki_document, do: @wiki_document.id, else: nil}
-              />
-            </div>
-          </div>
-        <% end %>
-
         <div class="p-2 border-t border-base-300 min-w-64">
           <.link
             navigate={~p"/wiki"}
@@ -589,56 +572,17 @@ defmodule LiteskillWeb.ChatLive do
           </.link>
         </div>
         <div class="p-2 border-t border-base-300 min-w-64">
-          <p class="text-xs text-base-content/40 uppercase tracking-wider px-3 py-1">
-            Agent Studio
-          </p>
           <.link
             navigate={~p"/agents"}
             class={[
               "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(@live_action in [:agents, :agent_new, :agent_show, :agent_edit],
+              if(AgentStudioLive.studio_action?(@live_action),
                 do: "bg-primary/10 text-primary font-medium",
                 else: "hover:bg-base-200 text-base-content/70"
               )
             ]}
           >
-            <.icon name="hero-cpu-chip-micro" class="size-4" /> Agents
-          </.link>
-          <.link
-            navigate={~p"/teams"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(@live_action in [:teams, :team_new, :team_show, :team_edit],
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-user-group-micro" class="size-4" /> Teams
-          </.link>
-          <.link
-            navigate={~p"/runs"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(@live_action in [:runs, :run_new, :run_show],
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-play-circle-micro" class="size-4" /> Runs
-          </.link>
-          <.link
-            navigate={~p"/schedules"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(@live_action in [:schedules, :schedule_new, :schedule_show],
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-clock-micro" class="size-4" /> Schedules
+            <.icon name="hero-cpu-chip-micro" class="size-4" /> Agent Studio
           </.link>
         </div>
 
@@ -1109,69 +1053,90 @@ defmodule LiteskillWeb.ChatLive do
             </div>
           </header>
 
-          <%= if @wiki_editing do %>
-            <div class="flex-1 overflow-y-auto px-6 py-6 max-w-3xl mx-auto w-full">
-              <.form for={@wiki_form} phx-submit="update_wiki_page" class="space-y-4">
-                <div class="form-control">
-                  <input
-                    type="text"
-                    name="wiki_page[title]"
-                    value={Phoenix.HTML.Form.input_value(@wiki_form, :title)}
-                    class="input input-bordered w-full text-lg font-semibold"
-                    required
+          <div class="flex flex-1 min-h-0 overflow-hidden">
+            <aside
+              :if={@wiki_sidebar_tree != [] && @wiki_space}
+              class="w-56 flex-shrink-0 border-r border-base-300 overflow-y-auto bg-base-200/50"
+            >
+              <div class="p-3">
+                <.link
+                  navigate={~p"/wiki/#{@wiki_space.id}"}
+                  class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-2 hover:text-primary transition-colors block truncate"
+                >
+                  {@wiki_space.title}
+                </.link>
+                <WikiComponents.wiki_tree_sidebar
+                  tree={@wiki_sidebar_tree}
+                  active_doc_id={if @wiki_document, do: @wiki_document.id, else: nil}
+                />
+              </div>
+            </aside>
+            <div class="flex-1 min-w-0 flex flex-col">
+              <%= if @wiki_editing do %>
+                <div class="flex-1 overflow-y-auto px-6 py-6 max-w-3xl mx-auto w-full">
+                  <.form for={@wiki_form} phx-submit="update_wiki_page" class="space-y-4">
+                    <div class="form-control">
+                      <input
+                        type="text"
+                        name="wiki_page[title]"
+                        value={Phoenix.HTML.Form.input_value(@wiki_form, :title)}
+                        class="input input-bordered w-full text-lg font-semibold"
+                        required
+                      />
+                    </div>
+                    <input
+                      type="hidden"
+                      name="wiki_page[content]"
+                      data-editor-content
+                      value={Phoenix.HTML.Form.input_value(@wiki_form, :content)}
+                    />
+                    <div
+                      id="wiki-editor"
+                      phx-hook="WikiEditor"
+                      phx-update="ignore"
+                      data-content={Phoenix.HTML.Form.input_value(@wiki_form, :content)}
+                      class="border border-base-300 rounded-lg overflow-hidden"
+                    >
+                      <div data-editor-target class="min-h-[300px]"></div>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        phx-click="cancel_wiki_edit"
+                        class="btn btn-ghost btn-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    </div>
+                  </.form>
+                </div>
+              <% else %>
+                <div class="flex-1 overflow-y-auto px-6 py-6 max-w-3xl mx-auto w-full space-y-6">
+                  <div
+                    :if={@wiki_document.content && @wiki_document.content != ""}
+                    id="wiki-content"
+                    phx-hook="CopyCode"
+                    class="prose prose-sm max-w-none"
+                  >
+                    {LiteskillWeb.Markdown.render(@wiki_document.content)}
+                  </div>
+                  <p
+                    :if={!@wiki_document.content || @wiki_document.content == ""}
+                    class="text-base-content/50 text-center py-8"
+                  >
+                    This page has no content yet. Click "Edit" to add some.
+                  </p>
+
+                  <WikiComponents.wiki_children
+                    source={@current_source}
+                    document={@wiki_document}
+                    tree={@wiki_tree}
                   />
                 </div>
-                <input
-                  type="hidden"
-                  name="wiki_page[content]"
-                  data-editor-content
-                  value={Phoenix.HTML.Form.input_value(@wiki_form, :content)}
-                />
-                <div
-                  id="wiki-editor"
-                  phx-hook="WikiEditor"
-                  phx-update="ignore"
-                  data-content={Phoenix.HTML.Form.input_value(@wiki_form, :content)}
-                  class="border border-base-300 rounded-lg overflow-hidden"
-                >
-                  <div data-editor-target class="min-h-[300px]"></div>
-                </div>
-                <div class="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    phx-click="cancel_wiki_edit"
-                    class="btn btn-ghost btn-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                </div>
-              </.form>
+              <% end %>
             </div>
-          <% else %>
-            <div class="flex-1 overflow-y-auto px-6 py-6 max-w-3xl mx-auto w-full space-y-6">
-              <div
-                :if={@wiki_document.content && @wiki_document.content != ""}
-                id="wiki-content"
-                phx-hook="CopyCode"
-                class="prose prose-sm max-w-none"
-              >
-                {LiteskillWeb.Markdown.render(@wiki_document.content)}
-              </div>
-              <p
-                :if={!@wiki_document.content || @wiki_document.content == ""}
-                class="text-base-content/50 text-center py-8"
-              >
-                This page has no content yet. Click "Edit" to add some.
-              </p>
-
-              <WikiComponents.wiki_children
-                source={@current_source}
-                document={@wiki_document}
-                tree={@wiki_tree}
-              />
-            </div>
-          <% end %>
+          </div>
 
           <ChatComponents.modal
             id="wiki-page-modal"
@@ -1361,17 +1326,18 @@ defmodule LiteskillWeb.ChatLive do
             </div>
           </header>
 
-          <div class="flex-1 overflow-y-auto p-4">
-            <div
-              :if={@reports != []}
-              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-            >
-              <ReportComponents.report_card
+          <div class="flex-1 overflow-y-auto">
+            <div :if={@reports != []} class="divide-y divide-base-200">
+              <ReportComponents.report_row
                 :for={report <- @reports}
                 report={report}
                 owned={report.user_id == @current_user.id}
               />
             </div>
+            <ReportComponents.reports_pagination
+              page={@reports_page}
+              total_pages={@reports_total_pages}
+            />
             <p
               :if={@reports == []}
               class="text-base-content/50 text-center py-12"
@@ -1697,6 +1663,10 @@ defmodule LiteskillWeb.ChatLive do
             confirm_label="Archive"
           />
         <% end %>
+        <%!-- Agent Studio: Landing --%>
+        <%= if @live_action == :agent_studio do %>
+          <AgentStudioComponents.agent_studio_landing sidebar_open={@sidebar_open} />
+        <% end %>
         <%!-- Agent Studio: Agents --%>
         <%= if @live_action == :agents do %>
           <AgentStudioComponents.agents_page
@@ -1807,7 +1777,7 @@ defmodule LiteskillWeb.ChatLive do
             sidebar_open={@sidebar_open}
           />
         <% end %>
-        <%= if @live_action not in [:sources, :source_show, :source_document_show, :wiki, :wiki_page_show, :mcp_servers, :reports, :report_show, :conversations, :pipeline, :agents, :agent_new, :agent_show, :agent_edit, :teams, :team_new, :team_show, :team_edit, :runs, :run_new, :run_show, :run_log_show, :schedules, :schedule_new, :schedule_show] and not ProfileLive.profile_action?(@live_action) and not AdminLive.admin_action?(@live_action) do %>
+        <%= if @live_action not in [:sources, :source_show, :source_document_show, :wiki, :wiki_page_show, :mcp_servers, :reports, :report_show, :conversations, :pipeline, :agent_studio, :agents, :agent_new, :agent_show, :agent_edit, :teams, :team_new, :team_show, :team_edit, :runs, :run_new, :run_show, :run_log_show, :schedules, :schedule_new, :schedule_show] and not ProfileLive.profile_action?(@live_action) and not AdminLive.admin_action?(@live_action) do %>
           <%= if @conversation do %>
             <%!-- Active conversation --%>
             <div class="flex flex-1 min-w-0 overflow-hidden">

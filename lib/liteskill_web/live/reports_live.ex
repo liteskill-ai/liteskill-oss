@@ -12,6 +12,9 @@ defmodule LiteskillWeb.ReportsLive do
   def reports_assigns do
     [
       reports: [],
+      reports_page: 1,
+      reports_total_pages: 1,
+      reports_total: 0,
       report: nil,
       report_markdown: "",
       section_tree: [],
@@ -21,9 +24,12 @@ defmodule LiteskillWeb.ReportsLive do
     ]
   end
 
-  def apply_reports_action(socket, :reports, _params) do
+  def apply_reports_action(socket, :reports, params) do
     user_id = socket.assigns.current_user.id
-    reports = Liteskill.Reports.list_reports(user_id)
+    page = parse_page(params["page"])
+
+    %{reports: reports, page: page, total_pages: total_pages, total: total} =
+      Liteskill.Reports.list_reports_paginated(user_id, page)
 
     Phoenix.Component.assign(socket,
       conversation: nil,
@@ -32,6 +38,9 @@ defmodule LiteskillWeb.ReportsLive do
       stream_content: "",
       pending_tool_calls: [],
       reports: reports,
+      reports_page: page,
+      reports_total_pages: total_pages,
+      reports_total: total,
       wiki_sidebar_tree: [],
       page_title: "Reports"
     )
@@ -74,6 +83,15 @@ defmodule LiteskillWeb.ReportsLive do
     end
   end
 
+  defp parse_page(nil), do: 1
+
+  defp parse_page(val) when is_binary(val) do
+    case Integer.parse(val) do
+      {n, _} when n >= 1 -> n
+      _ -> 1
+    end
+  end
+
   # --- Event Handlers (called from ChatLive) ---
 
   def handle_event("delete_report", %{"id" => id}, socket) do
@@ -81,8 +99,7 @@ defmodule LiteskillWeb.ReportsLive do
 
     case Liteskill.Reports.delete_report(id, user_id) do
       {:ok, _} ->
-        reports = Liteskill.Reports.list_reports(user_id)
-        {:noreply, Phoenix.Component.assign(socket, reports: reports)}
+        {:noreply, reload_reports_list(socket)}
 
       {:error, _} ->
         {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to delete report")}
@@ -94,8 +111,7 @@ defmodule LiteskillWeb.ReportsLive do
 
     case Liteskill.Reports.leave_report(id, user_id) do
       {:ok, _} ->
-        reports = Liteskill.Reports.list_reports(user_id)
-        {:noreply, Phoenix.Component.assign(socket, reports: reports)}
+        {:noreply, reload_reports_list(socket)}
 
       {:error, _} ->
         {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to leave report")}
@@ -206,6 +222,21 @@ defmodule LiteskillWeb.ReportsLive do
   end
 
   # --- Helpers ---
+
+  defp reload_reports_list(socket) do
+    user_id = socket.assigns.current_user.id
+    page = socket.assigns.reports_page
+
+    %{reports: reports, page: page, total_pages: total_pages, total: total} =
+      Liteskill.Reports.list_reports_paginated(user_id, page)
+
+    Phoenix.Component.assign(socket,
+      reports: reports,
+      reports_page: page,
+      reports_total_pages: total_pages,
+      reports_total: total
+    )
+  end
 
   def reload_report(socket) do
     report = socket.assigns.report

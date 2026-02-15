@@ -14,6 +14,7 @@ defmodule LiteskillWeb.AgentStudioLive do
   alias Liteskill.Teams
 
   @studio_actions [
+    :agent_studio,
     :agents,
     :agent_new,
     :agent_show,
@@ -140,6 +141,14 @@ defmodule LiteskillWeb.AgentStudioLive do
       pending_tool_calls: [],
       wiki_sidebar_tree: []
     )
+  end
+
+  # Agent Studio Landing
+
+  def apply_studio_action(socket, :agent_studio, _params) do
+    socket
+    |> reset_common()
+    |> Phoenix.Component.assign(page_title: "Agent Studio")
   end
 
   # Agents

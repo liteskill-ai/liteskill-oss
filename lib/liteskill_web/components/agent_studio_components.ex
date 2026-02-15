@@ -31,7 +31,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
         >
           <.icon name="hero-bars-3-micro" class="size-5" />
         </button>
-        <.link navigate={~p"/agents"} class="btn btn-ghost btn-sm btn-circle">
+        <.link navigate={~p"/agents/list"} class="btn btn-ghost btn-sm btn-circle">
           <.icon name="hero-arrow-left-micro" class="size-4" />
         </.link>
         <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
@@ -47,7 +47,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
             <button type="submit" class="btn btn-primary">
               {if @editing, do: "Update Agent", else: "Create Agent"}
             </button>
-            <.link navigate={~p"/agents"} class="btn btn-ghost">Cancel</.link>
+            <.link navigate={~p"/agents/list"} class="btn btn-ghost">Cancel</.link>
           </div>
         </.form>
         <.agent_tools_section
@@ -1000,6 +1000,100 @@ defmodule LiteskillWeb.AgentStudioComponents do
     """
   end
 
+  # ---- Agent Studio Landing Page ----
+
+  attr :sidebar_open, :boolean, default: true
+
+  def agent_studio_landing(assigns) do
+    ~H"""
+    <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <button
+          :if={!@sidebar_open}
+          phx-click="toggle_sidebar"
+          class="btn btn-circle btn-ghost btn-sm"
+        >
+          <.icon name="hero-bars-3-micro" class="size-5" />
+        </button>
+        <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+          Agent Studio
+        </h1>
+      </div>
+    </header>
+    <div class="flex-1 overflow-y-auto p-6">
+      <div class="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <.link
+          navigate={~p"/agents/list"}
+          class="card bg-base-200 shadow-sm hover:shadow-md hover:bg-base-300 transition-all cursor-pointer"
+        >
+          <div class="card-body">
+            <div class="flex items-center gap-3 mb-2">
+              <.icon name="hero-cpu-chip" class="size-8 text-primary" />
+              <h2 class="card-title text-lg">Agents</h2>
+            </div>
+            <p class="text-sm text-base-content/70">
+              Create and configure individual AI agents with custom backstories,
+              reasoning strategies, system prompts, and MCP tool integrations.
+              Each agent can be tailored for specific tasks and workflows.
+            </p>
+          </div>
+        </.link>
+
+        <.link
+          navigate={~p"/teams"}
+          class="card bg-base-200 shadow-sm hover:shadow-md hover:bg-base-300 transition-all cursor-pointer"
+        >
+          <div class="card-body">
+            <div class="flex items-center gap-3 mb-2">
+              <.icon name="hero-user-group" class="size-8 text-primary" />
+              <h2 class="card-title text-lg">Teams</h2>
+            </div>
+            <p class="text-sm text-base-content/70">
+              Assemble agents into teams with different collaboration topologies
+              like pipeline, parallel, debate, or hierarchical execution. Define
+              how agents work together and aggregate their outputs.
+            </p>
+          </div>
+        </.link>
+
+        <.link
+          navigate={~p"/runs"}
+          class="card bg-base-200 shadow-sm hover:shadow-md hover:bg-base-300 transition-all cursor-pointer"
+        >
+          <div class="card-body">
+            <div class="flex items-center gap-3 mb-2">
+              <.icon name="hero-play-circle" class="size-8 text-primary" />
+              <h2 class="card-title text-lg">Runs</h2>
+            </div>
+            <p class="text-sm text-base-content/70">
+              Execute team workflows by providing a prompt and watching agents
+              collaborate in real time. Track execution logs, token usage, costs,
+              and view the final deliverables produced by each run.
+            </p>
+          </div>
+        </.link>
+
+        <.link
+          navigate={~p"/schedules"}
+          class="card bg-base-200 shadow-sm hover:shadow-md hover:bg-base-300 transition-all cursor-pointer"
+        >
+          <div class="card-body">
+            <div class="flex items-center gap-3 mb-2">
+              <.icon name="hero-clock" class="size-8 text-primary" />
+              <h2 class="card-title text-lg">Schedules</h2>
+            </div>
+            <p class="text-sm text-base-content/70">
+              Automate team runs on a recurring basis using cron expressions.
+              Set up scheduled workflows with custom prompts and timezones,
+              and toggle them on or off as needed.
+            </p>
+          </div>
+        </.link>
+      </div>
+    </div>
+    """
+  end
+
   # ---- Full-Page Views (extracted from ChatLive) ----
 
   attr :agents, :list, required: true
@@ -1056,7 +1150,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
         >
           <.icon name="hero-bars-3-micro" class="size-5" />
         </button>
-        <.link navigate={~p"/agents"} class="btn btn-ghost btn-sm btn-circle">
+        <.link navigate={~p"/agents/list"} class="btn btn-ghost btn-sm btn-circle">
           <.icon name="hero-arrow-left-micro" class="size-4" />
         </.link>
         <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
