@@ -148,22 +148,85 @@ defmodule LiteskillWeb.SourcesComponents do
         assigns.message.content not in [nil, ""] &&
         assigns.message.rag_sources not in [nil, []]
 
+    has_raw_output =
+      assigns.message.role == "assistant" &&
+        assigns.message.content not in [nil, ""]
+
     assigns = assign(assigns, :has_sources, has_sources)
+    assigns = assign(assigns, :has_raw_output, has_raw_output)
     count = if has_sources, do: length(assigns.message.rag_sources), else: 0
     assigns = assign(assigns, :count, count)
 
     ~H"""
     <div
-      :if={@has_sources}
+      :if={@has_sources || @has_raw_output}
       class="flex justify-start mb-4"
     >
-      <button
-        phx-click="toggle_sources_sidebar"
-        phx-value-message-id={@message.id}
-        class="btn btn-ghost btn-xs gap-1 text-base-content/50 hover:text-primary"
-      >
-        <.icon name="hero-document-text-micro" class="size-3.5" /> Sources ({@count})
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          :if={@has_sources}
+          phx-click="toggle_sources_sidebar"
+          phx-value-message-id={@message.id}
+          class="btn btn-ghost btn-xs gap-1 text-base-content/50 hover:text-primary"
+        >
+          <.icon name="hero-document-text-micro" class="size-3.5" /> Sources ({@count})
+        </button>
+        <button
+          :if={@has_raw_output}
+          phx-click="show_raw_output_modal"
+          phx-value-message-id={@message.id}
+          class="btn btn-ghost btn-xs gap-1 text-base-content/50 hover:text-primary"
+        >
+          <.icon name="hero-code-bracket-square-micro" class="size-3.5" /> Raw
+        </button>
+      </div>
+    </div>
+    """
+  end
+
+  attr :show, :boolean, required: true
+  attr :raw_output, :string, default: ""
+  attr :message_id, :string, default: nil
+
+  def raw_output_modal(assigns) do
+    ~H"""
+    <div
+      :if={@show}
+      id="raw-output-modal"
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      phx-window-keydown="close_raw_output_modal"
+      phx-key="Escape"
+    >
+      <div class="fixed inset-0 bg-black/50" />
+      <div class="relative bg-base-100 rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col z-10 mx-4">
+        <div class="flex items-center justify-between p-4 border-b border-base-300 gap-3">
+          <h3 class="font-semibold text-sm">Raw Model Output</h3>
+          <div class="flex items-center gap-2">
+            <button
+              phx-click={
+                Phoenix.LiveView.JS.dispatch(
+                  "phx:copy",
+                  to: "#raw-output-text-#{@message_id || "current"}"
+                )
+                |> Phoenix.LiveView.JS.push("raw_output_copied")
+              }
+              class="btn btn-ghost btn-xs gap-1"
+            >
+              <.icon name="hero-clipboard-document-micro" class="size-3.5" /> Copy
+            </button>
+            <button phx-click="close_raw_output_modal" class="btn btn-ghost btn-sm btn-square">
+              <.icon name="hero-x-mark-micro" class="size-5" />
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <div class="prose prose-sm max-w-none">
+            <pre
+              class="max-h-[65vh] overflow-auto"
+            ><code id={"raw-output-text-#{@message_id || "current"}"}>{@raw_output}</code></pre>
+          </div>
+        </div>
+      </div>
     </div>
     """
   end
