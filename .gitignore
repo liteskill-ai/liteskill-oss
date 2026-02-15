@@ -38,3 +38,6 @@ npm-debug.log
 # Environment variables / secrets.
 .env
 
+# mdBook build output
+/docs/book/
+

@@ -62,3 +62,11 @@ jobs:
 
       - name: Run tests
         run: mix test
+
+      - name: Install mdBook
+        uses: jontze/action-mdbook@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build docs
+        run: mdbook build docs/
