@@ -36,7 +36,9 @@ defmodule Liteskill.Runs do
           |> Repo.update()
           |> case do
             {:ok, updated} ->
-              {:ok, Repo.preload(updated, [:team_definition, :run_tasks, :run_logs])}
+              updated = Repo.preload(updated, [:team_definition, :run_tasks, :run_logs])
+              broadcast_run_update(updated)
+              {:ok, updated}
 
             error ->
               error
@@ -64,9 +66,22 @@ defmodule Liteskill.Runs do
 
       %Run{status: "running"} = run ->
         with {:ok, run} <- authorize_owner(run, user_id) do
-          run
-          |> Run.changeset(%{status: "cancelled", completed_at: DateTime.utc_now()})
-          |> Repo.update()
+          result =
+            run
+            |> Run.changeset(%{status: "cancelled", completed_at: DateTime.utc_now()})
+            |> Repo.update()
+
+          case result do
+            {:ok, updated} ->
+              broadcast_run_update(updated)
+
+            # coveralls-ignore-start
+            _ ->
+              :ok
+              # coveralls-ignore-stop
+          end
+
+          result
         end
 
       %Run{} ->
@@ -143,15 +158,45 @@ defmodule Liteskill.Runs do
   end
 
   def add_log(run_id, level, step, message, metadata \\ %{}) do
-    %RunLog{}
-    |> RunLog.changeset(%{
-      run_id: run_id,
-      level: level,
-      step: step,
-      message: message,
-      metadata: metadata
-    })
-    |> Repo.insert()
+    result =
+      %RunLog{}
+      |> RunLog.changeset(%{
+        run_id: run_id,
+        level: level,
+        step: step,
+        message: message,
+        metadata: metadata
+      })
+      |> Repo.insert()
+
+    case result do
+      {:ok, log} ->
+        broadcast_run_log(run_id, log)
+        {:ok, log}
+
+      error ->
+        error
+    end
+  end
+
+  # --- PubSub ---
+
+  @pubsub Liteskill.PubSub
+
+  def subscribe(run_id) do
+    Phoenix.PubSub.subscribe(@pubsub, "runs:#{run_id}")
+  end
+
+  def unsubscribe(run_id) do
+    Phoenix.PubSub.unsubscribe(@pubsub, "runs:#{run_id}")
+  end
+
+  defp broadcast_run_update(run) do
+    Phoenix.PubSub.broadcast(@pubsub, "runs:#{run.id}", {:run_updated, run})
+  end
+
+  defp broadcast_run_log(run_id, log) do
+    Phoenix.PubSub.broadcast(@pubsub, "runs:#{run_id}", {:run_log_added, log})
   end
 
   # --- Private ---

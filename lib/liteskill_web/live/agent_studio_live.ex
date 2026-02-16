@@ -328,8 +328,11 @@ defmodule LiteskillWeb.AgentStudioLive do
   def apply_studio_action(socket, :run_show, %{"run_id" => run_id}) do
     user_id = socket.assigns.current_user.id
 
+    maybe_unsubscribe_run(socket)
+
     case Runs.get_run(run_id, user_id) do
       {:ok, run} ->
+        Runs.subscribe(run.id)
         run_usage = Liteskill.Usage.usage_by_run(run.id)
         run_usage_by_model = Liteskill.Usage.usage_by_run_and_model(run.id)
 
@@ -687,7 +690,7 @@ defmodule LiteskillWeb.AgentStudioLive do
 
       {:noreply,
        socket
-       |> Phoenix.LiveView.put_flash(:info, "Run started. Refresh to see results.")
+       |> Phoenix.LiveView.put_flash(:info, "Run started.")
        |> Phoenix.Component.assign(studio_run: %{run | status: "running"})}
     end
   end
@@ -868,5 +871,44 @@ defmodule LiteskillWeb.AgentStudioLive do
         MapSet.member?(assigned_db_ids, server.id)
       end
     end)
+  end
+
+  # --- Run PubSub ---
+
+  def handle_run_info({:run_updated, run}, socket) do
+    run_usage = Liteskill.Usage.usage_by_run(run.id)
+    run_usage_by_model = Liteskill.Usage.usage_by_run_and_model(run.id)
+
+    {:noreply,
+     Phoenix.Component.assign(socket,
+       studio_run: run,
+       run_usage: run_usage,
+       run_usage_by_model: run_usage_by_model
+     )}
+  end
+
+  def handle_run_info({:run_log_added, _log}, socket) do
+    case socket.assigns.studio_run do
+      nil ->
+        {:noreply, socket}
+
+      run ->
+        user_id = socket.assigns.current_user.id
+
+        case Runs.get_run(run.id, user_id) do
+          {:ok, refreshed} ->
+            {:noreply, Phoenix.Component.assign(socket, studio_run: refreshed)}
+
+          _ ->
+            {:noreply, socket}
+        end
+    end
+  end
+
+  def maybe_unsubscribe_run(socket) do
+    case socket.assigns[:studio_run] do
+      %{id: id} when not is_nil(id) -> Runs.unsubscribe(id)
+      _ -> :ok
+    end
   end
 end

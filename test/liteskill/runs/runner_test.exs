@@ -254,9 +254,10 @@ defmodule Liteskill.Runs.RunnerTest do
       model = create_provider_and_model(owner)
       {team, _agent} = create_team_with_agent(owner, llm_model_id: model.id)
 
-      # Stub that sleeps longer than the timeout
+      # Stub that sleeps much longer than the timeout so the task is
+      # blocked here (not mid-DB-op) when killed, preventing sandbox corruption
       Req.Test.stub(Liteskill.Runs.RunnerTest, fn conn ->
-        Process.sleep(500)
+        Process.sleep(30_000)
 
         response = %{
           "id" => "msg_test",
@@ -288,7 +289,7 @@ defmodule Liteskill.Runs.RunnerTest do
     end
 
     test "fails with timeout error for very short timeout", %{owner: owner, team: team} do
-      run = create_run(owner, %{team_definition_id: team.id, timeout_ms: 50})
+      run = create_run(owner, %{team_definition_id: team.id, timeout_ms: 1_000})
 
       Runner.run(run.id, owner.id)
 

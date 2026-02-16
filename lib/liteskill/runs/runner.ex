@@ -37,25 +37,11 @@ defmodule Liteskill.Runs.Runner do
 
         {:exit, reason} ->
           Logger.error("Run runner crashed: #{inspect(reason)}")
-
-          log(run.id, "error", "crash", inspect(reason))
-
-          Runs.update_run(run.id, user_id, %{
-            status: "failed",
-            error: inspect(reason),
-            completed_at: DateTime.utc_now()
-          })
+          safe_fail_run(run.id, user_id, "crash", inspect(reason))
 
         nil ->
           Logger.warning("Run #{run.id} timed out after #{run.timeout_ms}ms")
-
-          log(run.id, "error", "timeout", "Run timed out after #{run.timeout_ms}ms")
-
-          Runs.update_run(run.id, user_id, %{
-            status: "failed",
-            error: "Timed out after #{run.timeout_ms}ms",
-            completed_at: DateTime.utc_now()
-          })
+          safe_fail_run(run.id, user_id, "timeout", "Timed out after #{run.timeout_ms}ms")
       end
     end
   end
@@ -405,6 +391,21 @@ defmodule Liteskill.Runs.Runner do
         )
 
     Enum.join(lines, "\n")
+  end
+
+  defp safe_fail_run(run_id, user_id, step, error_message) do
+    log(run_id, "error", step, error_message)
+
+    Runs.update_run(run_id, user_id, %{
+      status: "failed",
+      error: error_message,
+      completed_at: DateTime.utc_now()
+    })
+  rescue
+    # coveralls-ignore-start
+    e ->
+      Logger.error("Failed to update run #{run_id} after #{step}: #{Exception.message(e)}")
+      # coveralls-ignore-stop
   end
 
   defp log(run_id, level, step, message, metadata \\ %{}) do

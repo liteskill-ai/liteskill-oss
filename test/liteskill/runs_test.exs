@@ -384,6 +384,24 @@ defmodule Liteskill.RunsTest do
     end
   end
 
+  describe "subscribe/1 and unsubscribe/1" do
+    test "subscribe and unsubscribe complete without error", %{owner: owner} do
+      {:ok, run} = Runs.create_run(run_attrs(owner))
+
+      assert :ok = Runs.subscribe(run.id)
+      assert :ok = Runs.unsubscribe(run.id)
+    end
+  end
+
+  describe "add_log/5 error path" do
+    test "returns error for invalid level", %{owner: owner} do
+      {:ok, run} = Runs.create_run(run_attrs(owner))
+
+      assert {:error, changeset} = Runs.add_log(run.id, "bogus", "init", "Started")
+      assert "is invalid" in errors_on(changeset).level
+    end
+  end
+
   describe "RunLog.changeset/2" do
     test "validates required fields" do
       changeset = RunLog.changeset(%RunLog{}, %{})

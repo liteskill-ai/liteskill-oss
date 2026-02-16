@@ -3491,6 +3491,14 @@ defmodule LiteskillWeb.ChatLive do
   # --- PubSub Handlers ---
 
   @impl true
+  def handle_info({:run_updated, _run} = msg, socket) do
+    AgentStudioLive.handle_run_info(msg, socket)
+  end
+
+  def handle_info({:run_log_added, _log} = msg, socket) do
+    AgentStudioLive.handle_run_info(msg, socket)
+  end
+
   def handle_info({:events, _stream_id, events}, socket) do
     socket = Enum.reduce(events, socket, &handle_event_store_event/2)
     {:noreply, socket}
@@ -4154,6 +4162,8 @@ defmodule LiteskillWeb.ChatLive do
       _ ->
         :ok
     end
+
+    AgentStudioLive.maybe_unsubscribe_run(socket)
   end
 
   defp refresh_managed_conversations(socket) do
