@@ -82,6 +82,56 @@ defmodule Liteskill.Runs.RunnerTest do
     model
   end
 
+  describe "extract_handoff_summary/1" do
+    test "extracts ## Handoff Summary section" do
+      output = """
+      Some analysis output here.
+
+      ## Handoff Summary
+      - Found 5 key issues
+      - Recommended 3 actions
+      - Next agent should focus on implementation
+      """
+
+      result = Runner.extract_handoff_summary(output)
+      assert result =~ "Found 5 key issues"
+      assert result =~ "Recommended 3 actions"
+      assert result =~ "Next agent should focus on implementation"
+    end
+
+    test "extracts ### Handoff Summary section" do
+      output = "Analysis.\n\n### Handoff Summary\n- bullet one\n- bullet two"
+      result = Runner.extract_handoff_summary(output)
+      assert result =~ "bullet one"
+    end
+
+    test "falls back to first 500 chars when no section present" do
+      output = String.duplicate("a", 1000)
+      result = Runner.extract_handoff_summary(output)
+      assert String.length(result) == 500
+      assert result == String.duplicate("a", 500)
+    end
+
+    test "truncates long handoff summaries to 500 chars" do
+      long_summary = String.duplicate("x", 1000)
+      output = "## Handoff Summary\n#{long_summary}"
+      result = Runner.extract_handoff_summary(output)
+      assert String.length(result) == 500
+    end
+
+    test "returns empty string for nil" do
+      assert Runner.extract_handoff_summary(nil) == ""
+    end
+
+    test "returns empty string for non-binary" do
+      assert Runner.extract_handoff_summary(42) == ""
+    end
+
+    test "handles empty string" do
+      assert Runner.extract_handoff_summary("") == ""
+    end
+  end
+
   describe "run/2 — no team" do
     test "fails with 'No agents assigned' when run has no team", %{owner: owner} do
       run = create_run(owner)
@@ -246,6 +296,26 @@ defmodule Liteskill.Runs.RunnerTest do
       assert "llm_call" in log_steps
       assert "agent_complete" in log_steps
       assert "complete" in log_steps
+    end
+
+    test "agent_complete log includes per-stage usage metadata", %{owner: owner, team: team} do
+      run = create_run(owner, %{team_definition_id: team.id})
+
+      Runner.run(run.id, owner.id)
+
+      {:ok, updated} = Runs.get_run(run.id, owner.id)
+
+      agent_complete_log =
+        Enum.find(updated.run_logs, &(&1.step == "agent_complete"))
+
+      assert agent_complete_log != nil
+      usage = agent_complete_log.metadata["usage"]
+      assert is_map(usage)
+      assert Map.has_key?(usage, "input_tokens")
+      assert Map.has_key?(usage, "output_tokens")
+      assert Map.has_key?(usage, "cached_tokens")
+      assert Map.has_key?(usage, "total_cost")
+      assert Map.has_key?(usage, "call_count")
     end
   end
 

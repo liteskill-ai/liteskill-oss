@@ -724,6 +724,33 @@ defmodule LiteskillWeb.AgentStudioLive do
     end
   end
 
+  def handle_studio_event("retry_run", %{"id" => id}, socket) do
+    user_id = socket.assigns.current_user.id
+
+    case Runs.get_run(id, user_id) do
+      {:ok, %{status: status} = run} when status in ["failed", "cancelled"] ->
+        Task.Supervisor.start_child(Liteskill.TaskSupervisor, fn ->
+          Runner.run(run.id, user_id)
+        end)
+
+        {:noreply,
+         socket
+         |> Phoenix.LiveView.put_flash(:info, "Retrying run...")
+         |> Phoenix.Component.assign(studio_run: %{run | status: "running"})}
+
+      {:ok, _} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(
+           socket,
+           :error,
+           "Only failed or cancelled runs can be retried"
+         )}
+
+      {:error, _} ->
+        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not retry run")}
+    end
+  end
+
   def handle_studio_event("cancel_run", %{"id" => id}, socket) do
     user_id = socket.assigns.current_user.id
 
@@ -897,7 +924,15 @@ defmodule LiteskillWeb.AgentStudioLive do
 
         case Runs.get_run(run.id, user_id) do
           {:ok, refreshed} ->
-            {:noreply, Phoenix.Component.assign(socket, studio_run: refreshed)}
+            run_usage = Liteskill.Usage.usage_by_run(run.id)
+            run_usage_by_model = Liteskill.Usage.usage_by_run_and_model(run.id)
+
+            {:noreply,
+             Phoenix.Component.assign(socket,
+               studio_run: refreshed,
+               run_usage: run_usage,
+               run_usage_by_model: run_usage_by_model
+             )}
 
           _ ->
             {:noreply, socket}

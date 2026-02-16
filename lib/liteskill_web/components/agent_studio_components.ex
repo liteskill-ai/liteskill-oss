@@ -1397,10 +1397,31 @@ defmodule LiteskillWeb.AgentStudioComponents do
         >
           <.icon name="hero-stop-micro" class="size-4" /> Cancel
         </button>
+        <div
+          :if={
+            @run.status in ["failed", "cancelled"] &&
+              @run.user_id == @current_user.id
+          }
+          class="flex gap-2 ml-auto"
+        >
+          <button
+            phx-click="retry_run"
+            phx-value-id={@run.id}
+            class="btn btn-primary btn-sm"
+          >
+            <.icon name="hero-arrow-path-micro" class="size-4" /> Retry
+          </button>
+          <button
+            phx-click="rerun"
+            phx-value-id={@run.id}
+            class="btn btn-outline btn-sm"
+          >
+            <.icon name="hero-document-duplicate-micro" class="size-4" /> New Run
+          </button>
+        </div>
         <button
           :if={
-            @run.status != "pending" &&
-              @run.status != "running" &&
+            @run.status == "completed" &&
               @run.user_id == @current_user.id
           }
           phx-click="rerun"
@@ -1417,7 +1438,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
           <h3 class="text-sm font-semibold text-base-content/60 mb-2">Prompt</h3>
           <p class="text-sm whitespace-pre-wrap">{@run.prompt}</p>
         </div>
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-4 gap-4">
           <div class="bg-base-200 rounded-lg p-4">
             <h3 class="text-sm font-semibold text-base-content/60 mb-1">Topology</h3>
             <p>{@run.topology}</p>
@@ -1433,6 +1454,22 @@ defmodule LiteskillWeb.AgentStudioComponents do
           <div class="bg-base-200 rounded-lg p-4">
             <h3 class="text-sm font-semibold text-base-content/60 mb-1">Status</h3>
             <p>{@run.status}</p>
+          </div>
+          <div class="bg-base-200 rounded-lg p-4">
+            <h3 class="text-sm font-semibold text-base-content/60 mb-1">Duration</h3>
+            <p
+              id={"run-timer-#{@run.id}"}
+              phx-hook="RunTimer"
+              data-status={@run.status}
+              data-started-at={
+                @run.started_at && Calendar.strftime(@run.started_at, "%Y-%m-%dT%H:%M:%S")
+              }
+              data-completed-at={
+                @run.completed_at && Calendar.strftime(@run.completed_at, "%Y-%m-%dT%H:%M:%S")
+              }
+            >
+              {format_duration(@run.started_at, @run.completed_at)}
+            </p>
           </div>
         </div>
         <div
@@ -1833,6 +1870,25 @@ defmodule LiteskillWeb.AgentStudioComponents do
   defp log_level_badge("info"), do: "badge-info"
   defp log_level_badge("debug"), do: "badge-ghost"
   defp log_level_badge(_), do: "badge-ghost"
+
+  defp format_duration(nil, _), do: "-"
+
+  defp format_duration(started_at, nil) do
+    diff = DateTime.diff(DateTime.utc_now(), started_at, :second)
+    humanize_seconds(diff)
+  end
+
+  defp format_duration(started_at, completed_at) do
+    diff = DateTime.diff(completed_at, started_at, :second)
+    humanize_seconds(diff)
+  end
+
+  defp humanize_seconds(s) when s < 0, do: "0s"
+  defp humanize_seconds(s) when s < 60, do: "#{s}s"
+  defp humanize_seconds(s) when s < 3600, do: "#{div(s, 60)}m #{rem(s, 60)}s"
+
+  defp humanize_seconds(s),
+    do: "#{div(s, 3600)}h #{div(rem(s, 3600), 60)}m #{rem(s, 60)}s"
 
   defp log_chat_role_class("system"), do: "bg-warning/10 border border-warning/20"
   defp log_chat_role_class("user"), do: "bg-primary/10 border border-primary/20"

@@ -24,7 +24,8 @@ defmodule LiteskillWeb.WikiLive do
       show_wiki_export_modal: false,
       wiki_export_title: "",
       wiki_export_parent_id: nil,
-      wiki_export_tree: []
+      wiki_export_tree: [],
+      wiki_view_mode: "card"
     ]
   end
 
@@ -114,6 +115,11 @@ defmodule LiteskillWeb.WikiLive do
   end
 
   # --- Event Handlers (called from ChatLive) ---
+
+  def handle_event("toggle_wiki_view_mode", %{"mode" => mode}, socket)
+      when mode in ["card", "list"] do
+    {:noreply, Phoenix.Component.assign(socket, wiki_view_mode: mode)}
+  end
 
   def handle_event("show_wiki_form", params, socket) do
     parent_id = params["parent-id"]

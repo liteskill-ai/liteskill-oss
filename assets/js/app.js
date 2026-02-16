@@ -172,6 +172,48 @@ const Hooks = {
     destroyed() { if (this.chart) this.chart.destroy() }
   },
 
+  RunTimer: {
+    mounted() {
+      this.tick()
+      const status = this.el.dataset.status
+      if (status === "running") {
+        this.interval = setInterval(() => this.tick(), 1000)
+      }
+    },
+    updated() {
+      const status = this.el.dataset.status
+      if (status !== "running" && this.interval) {
+        clearInterval(this.interval)
+        this.interval = null
+      }
+      this.tick()
+    },
+    destroyed() {
+      if (this.interval) clearInterval(this.interval)
+    },
+    tick() {
+      const startedAt = this.el.dataset.startedAt
+      if (!startedAt) {
+        this.el.innerText = "-"
+        return
+      }
+      const start = new Date(startedAt + "Z")
+      const completedAt = this.el.dataset.completedAt
+      const end = completedAt ? new Date(completedAt + "Z") : new Date()
+      const diffMs = Math.max(0, end - start)
+      this.el.innerText = this.formatDuration(diffMs)
+    },
+    formatDuration(ms) {
+      const totalSec = Math.floor(ms / 1000)
+      const h = Math.floor(totalSec / 3600)
+      const m = Math.floor((totalSec % 3600) / 60)
+      const s = totalSec % 60
+      if (h > 0) return `${h}h ${m}m ${s}s`
+      if (m > 0) return `${m}m ${s}s`
+      return `${s}s`
+    }
+  },
+
   TextareaAutoResize: {
     mounted() {
       this.el.addEventListener("input", () => this.resize())

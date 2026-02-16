@@ -13,7 +13,11 @@ defmodule Liteskill.BuiltinTools do
   @callback call_tool(tool_name :: String.t(), input :: map(), context :: keyword()) ::
               {:ok, map()} | {:error, term()}
 
-  @registry [Liteskill.BuiltinTools.Reports, Liteskill.BuiltinTools.Wiki]
+  @registry [
+    Liteskill.BuiltinTools.Reports,
+    Liteskill.BuiltinTools.Wiki,
+    Liteskill.BuiltinTools.AgentStudio
+  ]
 
   def all, do: @registry
 

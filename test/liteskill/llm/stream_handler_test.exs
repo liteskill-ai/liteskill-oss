@@ -290,6 +290,143 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     assert failed.data["error_type"] == "max_retries_exceeded"
   end
 
+  test "retries on transport error then succeeds", %{conversation: conv} do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    retry_fn = fn _model, _msgs, on_chunk, _opts ->
+      count = Agent.get_and_update(counter, &{&1, &1 + 1})
+
+      if count < 1 do
+        {:error, %Mint.TransportError{reason: :timeout}}
+      else
+        on_chunk.("ok")
+        {:ok, "ok", []}
+      end
+    end
+
+    stream_id = conv.stream_id
+
+    assert :ok =
+             StreamHandler.handle_stream(stream_id, [%{role: :user, content: "test"}],
+               model_id: "test-model",
+               stream_fn: retry_fn,
+               backoff_ms: 1
+             )
+
+    Agent.stop(counter)
+
+    events = Store.read_stream_forward(stream_id)
+    event_types = Enum.map(events, & &1.event_type)
+    assert "AssistantStreamCompleted" in event_types
+  end
+
+  test "retries on HTTP 408 timeout then succeeds", %{conversation: conv} do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    retry_fn = fn _model, _msgs, on_chunk, _opts ->
+      count = Agent.get_and_update(counter, &{&1, &1 + 1})
+
+      if count < 1 do
+        {:error, %{status: 408, body: "Request Timeout"}}
+      else
+        on_chunk.("ok")
+        {:ok, "ok", []}
+      end
+    end
+
+    stream_id = conv.stream_id
+
+    assert :ok =
+             StreamHandler.handle_stream(stream_id, [%{role: :user, content: "test"}],
+               model_id: "test-model",
+               stream_fn: retry_fn,
+               backoff_ms: 1
+             )
+
+    Agent.stop(counter)
+
+    events = Store.read_stream_forward(stream_id)
+    event_types = Enum.map(events, & &1.event_type)
+    assert "AssistantStreamCompleted" in event_types
+  end
+
+  test "retries on :timeout atom error then succeeds", %{conversation: conv} do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    retry_fn = fn _model, _msgs, on_chunk, _opts ->
+      count = Agent.get_and_update(counter, &{&1, &1 + 1})
+
+      if count < 1 do
+        {:error, :timeout}
+      else
+        on_chunk.("ok")
+        {:ok, "ok", []}
+      end
+    end
+
+    stream_id = conv.stream_id
+
+    assert :ok =
+             StreamHandler.handle_stream(stream_id, [%{role: :user, content: "test"}],
+               model_id: "test-model",
+               stream_fn: retry_fn,
+               backoff_ms: 1
+             )
+
+    Agent.stop(counter)
+
+    events = Store.read_stream_forward(stream_id)
+    event_types = Enum.map(events, & &1.event_type)
+    assert "AssistantStreamCompleted" in event_types
+  end
+
+  test "max retries exceeded on transport error", %{conversation: conv} do
+    stream_id = conv.stream_id
+
+    assert {:error, {"max_retries_exceeded", _}} =
+             StreamHandler.handle_stream(stream_id, [%{role: :user, content: "test"}],
+               model_id: "test-model",
+               stream_fn: error_stream_fn(%Mint.TransportError{reason: :closed}),
+               backoff_ms: 1
+             )
+
+    events = Store.read_stream_forward(stream_id)
+    failed = Enum.find(events, &(&1.event_type == "AssistantStreamFailed"))
+    assert failed.data["error_type"] == "max_retries_exceeded"
+  end
+
+  test "retries on ReqLLM timeout error (reason: timeout, status: nil) then succeeds", %{
+    conversation: conv
+  } do
+    {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+    retry_fn = fn _model, _msgs, on_chunk, _opts ->
+      count = Agent.get_and_update(counter, &{&1, &1 + 1})
+
+      if count < 1 do
+        {:error, %ReqLLM.Error.API.Request{reason: "timeout", status: nil}}
+      else
+        on_chunk.("ok")
+        {:ok, "ok", []}
+      end
+    end
+
+    stream_id = conv.stream_id
+
+    assert :ok =
+             StreamHandler.handle_stream(stream_id, [%{role: :user, content: "test"}],
+               model_id: "test-model",
+               stream_fn: retry_fn,
+               backoff_ms: 1
+             )
+
+    Agent.stop(counter)
+
+    events = Store.read_stream_forward(stream_id)
+    event_types = Enum.map(events, & &1.event_type)
+    assert "AssistantStreamCompleted" in event_types
+  end
+
   test "passes tools as ReqLLM.Tool structs in call_opts", %{conversation: conv} do
     stream_id = conv.stream_id
 
@@ -314,29 +451,6 @@ defmodule Liteskill.LLM.StreamHandlerTest do
                  assert hd(req_tools).name == "get_weather"
                  {:ok, "", []}
                end
-             )
-  end
-
-  test "returns error when max tool rounds exceeded", %{conversation: conv} do
-    stream_id = conv.stream_id
-
-    assert {:error, :max_tool_rounds_exceeded} =
-             StreamHandler.handle_stream(stream_id, [%{role: :user, content: "test"}],
-               model_id: "test-model",
-               tool_round: 10,
-               max_tool_rounds: 10
-             )
-  end
-
-  test "allows stream when under max tool rounds", %{conversation: conv} do
-    stream_id = conv.stream_id
-
-    assert :ok =
-             StreamHandler.handle_stream(stream_id, [%{role: :user, content: "test"}],
-               model_id: "test-model",
-               tool_round: 5,
-               max_tool_rounds: 10,
-               stream_fn: text_stream_fn("")
              )
   end
 
@@ -771,6 +885,51 @@ defmodule Liteskill.LLM.StreamHandlerTest do
       assert String.ends_with?(result, "...")
       # 500 chars + "..." suffix, plus the "HTTP 400: " prefix
       assert byte_size(result) < byte_size(long_message)
+    end
+  end
+
+  describe "retryable_error?/1" do
+    test "returns true for HTTP 429" do
+      assert StreamHandler.retryable_error?(%{status: 429})
+    end
+
+    test "returns true for HTTP 503" do
+      assert StreamHandler.retryable_error?(%{status: 503})
+    end
+
+    test "returns true for HTTP 408" do
+      assert StreamHandler.retryable_error?(%{status: 408})
+    end
+
+    test "returns true for Mint.TransportError" do
+      assert StreamHandler.retryable_error?(%Mint.TransportError{reason: :timeout})
+      assert StreamHandler.retryable_error?(%Mint.TransportError{reason: :closed})
+    end
+
+    test "returns true for structs/maps with reason: timeout" do
+      # ReqLLM.Error.API.Request with status: nil but reason: "timeout"
+      assert StreamHandler.retryable_error?(%ReqLLM.Error.API.Request{
+               reason: "timeout",
+               status: nil
+             })
+
+      assert StreamHandler.retryable_error?(%{reason: "timeout"})
+      assert StreamHandler.retryable_error?(%{reason: :timeout})
+      assert StreamHandler.retryable_error?(%{reason: "closed"})
+      assert StreamHandler.retryable_error?(%{reason: :closed})
+    end
+
+    test "returns true for timeout/closed atoms" do
+      assert StreamHandler.retryable_error?(:timeout)
+      assert StreamHandler.retryable_error?(:closed)
+      assert StreamHandler.retryable_error?(:econnrefused)
+    end
+
+    test "returns false for non-retryable errors" do
+      refute StreamHandler.retryable_error?(%{status: 400})
+      refute StreamHandler.retryable_error?(%{status: 500})
+      refute StreamHandler.retryable_error?("some error")
+      refute StreamHandler.retryable_error?({:weird, :tuple})
     end
   end
 

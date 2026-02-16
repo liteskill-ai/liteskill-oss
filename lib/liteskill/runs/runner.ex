@@ -15,6 +15,18 @@ defmodule Liteskill.Runs.Runner do
 
   require Logger
 
+  @handoff_summary_max_chars 500
+
+  @doc false
+  def extract_handoff_summary(output) when is_binary(output) do
+    case Regex.run(~r/##?\s*Handoff Summary\s*\n(.*)/si, output) do
+      [_, summary] -> summary |> String.trim() |> String.slice(0, @handoff_summary_max_chars)
+      nil -> String.slice(output, 0, @handoff_summary_max_chars)
+    end
+  end
+
+  def extract_handoff_summary(_), do: ""
+
   @doc """
   Runs a run asynchronously. Call from Task.Supervisor.
 
@@ -49,7 +61,9 @@ defmodule Liteskill.Runs.Runner do
   defp mark_running(run, user_id) do
     Runs.update_run(run.id, user_id, %{
       status: "running",
-      started_at: DateTime.utc_now()
+      started_at: DateTime.utc_now(),
+      error: nil,
+      completed_at: nil
     })
   end
 
@@ -61,27 +75,56 @@ defmodule Liteskill.Runs.Runner do
     })
 
     context = [user_id: user_id, run_id: run.id]
-    title = build_report_title(run, agents)
 
-    with {:ok, %{"content" => [%{"text" => create_json}]}} <-
-           ReportsTools.call_tool("reports__create", %{"title" => title}, context),
-         %{"id" => report_id} <- Jason.decode!(create_json) do
-      log(run.id, "info", "create_report", "Created report", %{"report_id" => report_id})
+    case get_or_create_report(run, agents, context) do
+      {:ok, report_id} ->
+        case run_pipeline(run, agents, report_id, context) do
+          :ok ->
+            log(run.id, "info", "complete", "Run completed successfully")
+            {:ok, report_id}
 
-      case run_pipeline(run, agents, report_id, context) do
-        :ok ->
-          log(run.id, "info", "complete", "Run completed successfully")
-          {:ok, report_id}
+          error ->
+            log(run.id, "error", "pipeline", "Pipeline failed: #{inspect(error)}")
+            {:error, error}
+        end
 
-        error ->
-          log(run.id, "error", "pipeline", "Pipeline failed: #{inspect(error)}")
-          {:error, error}
-      end
-    else
-      error ->
-        log(run.id, "error", "create_report", "Failed to create report: #{inspect(error)}")
-        {:error, error}
+      {:error, reason} ->
+        log(run.id, "error", "create_report", "Failed to create report: #{inspect(reason)}")
+        {:error, reason}
     end
+  end
+
+  defp get_or_create_report(run, agents, context) do
+    case find_existing_report(run) do
+      nil ->
+        title = build_report_title(run, agents)
+
+        with {:ok, %{"content" => [%{"text" => json}]}} <-
+               ReportsTools.call_tool("reports__create", %{"title" => title}, context),
+             %{"id" => report_id} <- Jason.decode!(json) do
+          log(run.id, "info", "create_report", "Created report", %{"report_id" => report_id})
+          {:ok, report_id}
+        else
+          error -> {:error, error}
+        end
+
+      report_id ->
+        log(run.id, "info", "resume", "Resuming with existing report", %{
+          "report_id" => report_id
+        })
+
+        {:ok, report_id}
+    end
+  end
+
+  defp find_existing_report(run) do
+    run.deliverables["report_id"] ||
+      run.run_logs
+      |> Enum.find(&(&1.step == "create_report"))
+      |> case do
+        nil -> nil
+        log_entry -> log_entry.metadata["report_id"]
+      end
   end
 
   defp run_pipeline(_run, [], _report_id, _context) do
@@ -89,20 +132,61 @@ defmodule Liteskill.Runs.Runner do
   end
 
   defp run_pipeline(run, agents, report_id, context) do
-    overview = section("Overview", overview_content(run, agents))
-    :ok = write_sections(report_id, [overview], context)
+    # Determine which stages already completed (for resume)
+    completed_tasks =
+      run.run_tasks
+      |> Enum.filter(&(&1.status == "completed"))
+      |> Map.new(&{&1.position, &1})
+
+    # Find first position that needs to run
+    resume_from =
+      Enum.find_value(0..(length(agents) - 1), length(agents), fn idx ->
+        unless Map.has_key?(completed_tasks, idx), do: idx
+      end)
+
+    is_resume = resume_from > 0
+
+    unless is_resume do
+      overview = section("Overview", overview_content(run, agents))
+      :ok = write_sections(report_id, [overview], context)
+    end
+
+    # Build handoff from previously completed stages
+    prior_outputs =
+      agents
+      |> Enum.with_index()
+      |> Enum.take(resume_from)
+      |> Enum.map(fn {{agent, member}, _idx} ->
+        summary = find_handoff_summary(run.run_logs, agent.name) || ""
+        %{agent: agent.name, role: member.role || "worker", output: summary}
+      end)
 
     handoff_context = %{
       prompt: run.prompt,
-      prior_outputs: [],
+      prior_outputs: prior_outputs,
+      report_id: report_id,
       run: run
     }
+
+    if is_resume do
+      log(
+        run.id,
+        "info",
+        "resume",
+        "Resuming from Stage #{resume_from + 1}, " <>
+          "skipping #{resume_from} completed stage(s)"
+      )
+    end
 
     final_context =
       agents
       |> Enum.with_index()
       |> Enum.reduce(handoff_context, fn {{agent, member}, idx}, acc ->
-        run_agent_stage(run, agent, member, idx, acc, report_id, context)
+        if idx < resume_from do
+          acc
+        else
+          run_agent_stage(run, agent, member, idx, acc, report_id, context)
+        end
       end)
 
     closing_sections =
@@ -112,6 +196,38 @@ defmodule Liteskill.Runs.Runner do
       ]
 
     write_sections(report_id, closing_sections, context)
+  end
+
+  defp find_handoff_summary(logs, agent_name) do
+    logs
+    |> Enum.filter(fn log ->
+      log.step == "agent_complete" && log.metadata["agent"] == agent_name
+    end)
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+    |> List.first()
+    |> case do
+      nil ->
+        nil
+
+      log_entry ->
+        # Prefer stored handoff_summary; fall back to extracting from full output
+        # (backward compat with pre-migration logs)
+        log_entry.metadata["handoff_summary"] ||
+          extract_handoff_summary(log_entry.metadata["output"])
+    end
+  end
+
+  defp find_crash_messages(logs, agent_name) do
+    logs
+    |> Enum.filter(fn log ->
+      log.step == "agent_crash" && log.metadata["agent"] == agent_name
+    end)
+    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
+    |> List.first()
+    |> case do
+      nil -> nil
+      log_entry -> log_entry.metadata["messages"]
+    end
   end
 
   defp run_agent_stage(run, agent, member, position, handoff, report_id, context) do
@@ -137,54 +253,81 @@ defmodule Liteskill.Runs.Runner do
       })
 
     start_time = System.monotonic_time(:millisecond)
+    stage_started_at = DateTime.utc_now()
 
-    try do
-      agent_output = execute_agent(agent, member, handoff, context, run.id)
+    # Check for crash messages from a previous failed attempt
+    resume_messages = find_crash_messages(run.run_logs, agent.name)
 
-      agent_sections = [
-        section("#{stage_name}/Configuration", agent_config_content(agent)),
-        section("#{stage_name}/Analysis", agent_output.analysis),
-        section("#{stage_name}/Output", agent_output.output)
-      ]
-
-      result = write_sections(report_id, agent_sections, context)
-      duration_ms = System.monotonic_time(:millisecond) - start_time
-      complete_task(task, result, duration_ms, "#{agent.name} (#{role}) completed")
-
-      log(run.id, "info", "agent_complete", "Completed #{stage_name} in #{duration_ms}ms", %{
+    if resume_messages do
+      log(run.id, "info", "agent_resume", "Resuming #{stage_name} from saved context", %{
         "agent" => agent.name,
-        "duration_ms" => duration_ms,
-        "output_length" => String.length(agent_output.output),
-        "messages" => agent_output[:messages] || []
+        "message_count" => length(resume_messages)
       })
+    end
 
-      %{
-        handoff
-        | prior_outputs:
-            handoff.prior_outputs ++
-              [%{agent: agent.name, role: role, output: agent_output.output}]
-      }
-    rescue
-      e ->
+    # Wrap execute_agent so raises (e.g. no LLM model) become error tuples
+    agent_result =
+      try do
+        execute_agent(agent, member, handoff, context, run.id, resume_messages)
+      rescue
+        e -> {:error, Exception.message(e), []}
+      end
+
+    case agent_result do
+      {:ok, agent_output} ->
+        agent_sections = [
+          section("#{stage_name}/Configuration", agent_config_content(agent)),
+          section("#{stage_name}/Analysis", agent_output.analysis),
+          section("#{stage_name}/Output", agent_output.output)
+        ]
+
+        result = write_sections(report_id, agent_sections, context)
+        duration_ms = System.monotonic_time(:millisecond) - start_time
+        complete_task(task, result, duration_ms, "#{agent.name} (#{role}) completed")
+
+        handoff_summary = extract_handoff_summary(agent_output.output)
+
+        # Aggregate per-stage usage for observability
+        stage_usage = Liteskill.Usage.usage_by_run_since(run.id, stage_started_at)
+
+        log(run.id, "info", "agent_complete", "Completed #{stage_name} in #{duration_ms}ms", %{
+          "agent" => agent.name,
+          "duration_ms" => duration_ms,
+          "output_length" => String.length(agent_output.output),
+          "output" => agent_output.output,
+          "handoff_summary" => handoff_summary,
+          "messages" => agent_output.messages,
+          "usage" => format_stage_usage(stage_usage)
+        })
+
+        %{
+          handoff
+          | prior_outputs:
+              handoff.prior_outputs ++
+                [%{agent: agent.name, role: role, output: handoff_summary}]
+        }
+
+      {:error, reason, messages} ->
         duration_ms = System.monotonic_time(:millisecond) - start_time
 
         Runs.update_task(task.id, %{
           status: "failed",
-          error: Exception.message(e),
+          error: reason,
           duration_ms: duration_ms,
           completed_at: DateTime.utc_now()
         })
 
-        log(run.id, "error", "agent_crash", "#{stage_name} crashed: #{Exception.message(e)}", %{
+        log(run.id, "error", "agent_crash", "#{stage_name} crashed: #{reason}", %{
           "agent" => agent.name,
-          "duration_ms" => duration_ms
+          "duration_ms" => duration_ms,
+          "messages" => messages
         })
 
-        reraise e, __STACKTRACE__
+        raise reason
     end
   end
 
-  defp execute_agent(agent, member, handoff, context, run_id) do
+  defp execute_agent(agent, member, handoff, context, run_id, resume_messages) do
     user_id = Keyword.fetch!(context, :user_id)
     role = member.role || "worker"
 
@@ -206,24 +349,32 @@ defmodule Liteskill.Runs.Runner do
       }
     )
 
-    jido_agent =
-      JidoAgent.new(
-        state: %{
-          agent_name: agent.name,
-          system_prompt: agent.system_prompt || "",
-          backstory: agent.backstory || "",
-          opinions: agent.opinions || %{},
-          role: role,
-          strategy: agent.strategy,
-          llm_model: agent.llm_model,
-          tools: tools,
-          tool_servers: tool_servers,
-          user_id: user_id,
-          run_id: run_id,
-          prompt: handoff.prompt,
-          prior_context: format_prior_context(handoff.prior_outputs)
-        }
-      )
+    state = %{
+      agent_name: agent.name,
+      system_prompt: agent.system_prompt || "",
+      backstory: agent.backstory || "",
+      opinions: agent.opinions || %{},
+      role: role,
+      strategy: agent.strategy,
+      llm_model: agent.llm_model,
+      tools: tools,
+      tool_servers: tool_servers,
+      user_id: user_id,
+      run_id: run_id,
+      config: agent.config || %{},
+      prompt: handoff.prompt,
+      prior_context: format_prior_context(handoff.prior_outputs),
+      report_id: handoff[:report_id]
+    }
+
+    state =
+      if resume_messages do
+        Map.put(state, :resume_messages, resume_messages)
+      else
+        state
+      end
+
+    jido_agent = JidoAgent.new(state: state)
 
     log(run_id, "info", "llm_call", "Calling LLM for #{agent.name}", %{
       "agent" => agent.name,
@@ -232,22 +383,22 @@ defmodule Liteskill.Runs.Runner do
 
     case LlmGenerate.run(%{}, %{state: jido_agent.state}) do
       {:ok, result} ->
-        %{analysis: result.analysis, output: result.output, messages: result[:messages] || []}
+        {:ok,
+         %{analysis: result.analysis, output: result.output, messages: result[:messages] || []}}
+
+      {:error, %{reason: reason, messages: messages}} ->
+        {:error, "Agent '#{agent.name}' LLM call failed: #{reason}", messages}
 
       {:error, reason} ->
-        raise "Agent '#{agent.name}' LLM call failed: #{inspect(reason)}"
+        {:error, "Agent '#{agent.name}' LLM call failed: #{inspect(reason)}", []}
     end
   end
-
-  @max_prior_context_chars 8_000
 
   defp format_prior_context([]), do: ""
 
   defp format_prior_context(outputs) do
-    Enum.map_join(outputs, "\n\n", fn %{agent: name, role: role, output: output} ->
-      truncated = String.slice(output || "", 0, @max_prior_context_chars)
-
-      "--- #{name} (#{role}) ---\n#{truncated}"
+    Enum.map_join(outputs, "\n\n", fn %{agent: name, role: role, output: summary} ->
+      "--- #{name} (#{role}) ---\n#{summary}"
     end)
   end
 
@@ -406,6 +557,18 @@ defmodule Liteskill.Runs.Runner do
     e ->
       Logger.error("Failed to update run #{run_id} after #{step}: #{Exception.message(e)}")
       # coveralls-ignore-stop
+  end
+
+  defp format_stage_usage(nil), do: %{}
+
+  defp format_stage_usage(usage) do
+    %{
+      "input_tokens" => usage.input_tokens,
+      "output_tokens" => usage.output_tokens,
+      "cached_tokens" => usage.cached_tokens,
+      "total_cost" => if(usage.total_cost, do: Decimal.to_string(usage.total_cost), else: "0"),
+      "call_count" => usage.call_count
+    }
   end
 
   defp log(run_id, level, step, message, metadata \\ %{}) do

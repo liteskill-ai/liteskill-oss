@@ -4,7 +4,8 @@ defmodule Liteskill.LLM.StreamHandler do
 
   Uses ReqLLM for LLM transport. Appends AssistantStreamStarted, fires
   AssistantChunkReceived per text chunk, then AssistantStreamCompleted or
-  AssistantStreamFailed. Includes retry with exponential backoff for 429/503.
+  AssistantStreamFailed. Includes retry with exponential backoff for transient
+  errors (429/503/408, timeouts, transport errors).
 
   Supports tool calling: when the LLM returns tool_use, records ToolCallStarted
   events. In auto-confirm mode, executes tools via MCP client and continues the
@@ -20,7 +21,6 @@ defmodule Liteskill.LLM.StreamHandler do
   require Logger
 
   @max_retries 3
-  @max_tool_rounds 10
   @default_backoff_ms 1000
   @tool_approval_timeout_ms 300_000
 
@@ -38,19 +38,10 @@ defmodule Liteskill.LLM.StreamHandler do
     * `:auto_confirm` - Boolean, auto-execute tool calls (default false)
     * `:backoff_ms` - Base backoff for retries
     * `:tool_approval_timeout_ms` - Timeout for manual tool approval (default 300_000)
-    * `:max_tool_rounds` - Max consecutive tool-calling rounds (default 10)
     * `:stream_fn` - Override the LLM streaming function (for testing)
   """
   def handle_stream(stream_id, messages, opts \\ []) do
-    tool_round = Keyword.get(opts, :tool_round, 0)
-    max_rounds = Keyword.get(opts, :max_tool_rounds, @max_tool_rounds)
-
-    if tool_round >= max_rounds do
-      Logger.warning("StreamHandler: max tool rounds (#{max_rounds}) exceeded for #{stream_id}")
-      {:error, :max_tool_rounds_exceeded}
-    else
-      do_handle_stream(stream_id, messages, opts)
-    end
+    do_handle_stream(stream_id, messages, opts)
   end
 
   defp do_handle_stream(stream_id, messages, opts) do
@@ -163,20 +154,24 @@ defmodule Liteskill.LLM.StreamHandler do
           complete_stream(stream_id, message_id, full_content, latency_ms, nil, opts)
         end
 
-      {:error, %{status: status}} when status in [429, 503] ->
-        base_backoff = Keyword.get(opts, :backoff_ms, @default_backoff_ms)
-        jitter = :rand.uniform()
-        backoff = trunc(base_backoff * Integer.pow(2, retry_count) * (1 + jitter))
-
-        Logger.warning("Bedrock #{status}, retrying in #{backoff}ms (attempt #{retry_count + 1})")
-
-        Process.sleep(backoff)
-        do_stream_with_retry(stream_id, message_id, model_id, messages, opts, retry_count + 1)
-
       {:error, reason} ->
-        error_message = extract_error_message(reason)
-        Logger.warning("StreamHandler: LLM request failed for #{stream_id}: #{error_message}")
-        fail_stream(stream_id, message_id, "request_error", error_message, retry_count)
+        if retryable_error?(reason) do
+          base_backoff = Keyword.get(opts, :backoff_ms, @default_backoff_ms)
+          jitter = :rand.uniform()
+          backoff = trunc(base_backoff * Integer.pow(2, retry_count) * (1 + jitter))
+          label = retryable_error_label(reason)
+
+          Logger.warning(
+            "StreamHandler #{label}, retrying in #{backoff}ms (attempt #{retry_count + 1})"
+          )
+
+          Process.sleep(backoff)
+          do_stream_with_retry(stream_id, message_id, model_id, messages, opts, retry_count + 1)
+        else
+          error_message = extract_error_message(reason)
+          Logger.warning("StreamHandler: LLM request failed for #{stream_id}: #{error_message}")
+          fail_stream(stream_id, message_id, "request_error", error_message, retry_count)
+        end
     end
   end
 
@@ -333,6 +328,34 @@ defmodule Liteskill.LLM.StreamHandler do
   end
 
   defp convert_tool(tool_spec), do: ToolUtils.convert_tool(tool_spec)
+
+  @doc """
+  Returns true if the error is transient and the request should be retried.
+
+  Retryable errors include:
+    * HTTP 429 (rate limited)
+    * HTTP 503 (service unavailable)
+    * HTTP 408 (request timeout)
+    * `%Mint.TransportError{}` (connection reset, timeout, closed)
+    * Structs/maps with `reason: "timeout"` or `reason: :timeout` (e.g. `ReqLLM.Error.API.Request`)
+    * Atom errors: `:timeout`, `:closed`, `:econnrefused`
+  """
+  def retryable_error?(%{status: status}) when status in [429, 503, 408], do: true
+  def retryable_error?(%Mint.TransportError{}), do: true
+
+  def retryable_error?(%{reason: reason})
+      when reason in ["timeout", :timeout, "closed", :closed],
+      do: true
+
+  def retryable_error?(reason) when reason in [:timeout, :closed, :econnrefused], do: true
+  def retryable_error?(_), do: false
+
+  defp retryable_error_label(%{status: status}) when is_integer(status), do: "HTTP #{status}"
+  defp retryable_error_label(%Mint.TransportError{reason: r}), do: "transport error (#{r})"
+  defp retryable_error_label(%{reason: reason}), do: "#{reason}"
+  defp retryable_error_label(reason) when is_atom(reason), do: "#{reason}"
+  # coveralls-ignore-next-line
+  defp retryable_error_label(_), do: "transient error"
 
   @doc false
   def extract_error_message(%{status: status, response_body: rb})

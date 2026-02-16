@@ -21,8 +21,11 @@ defmodule Liteskill.Agents.JidoAgent do
       tools: [type: {:list, :any}, default: []],
       tool_servers: [type: :any, default: %{}],
       user_id: [type: :any, default: nil],
+      run_id: [type: :any, default: nil],
+      config: [type: :any, default: %{}],
       prompt: [type: :string, default: ""],
       prior_context: [type: :string, default: ""],
+      report_id: [type: :string, default: nil],
       analysis: [type: :string, default: ""],
       output: [type: :string, default: ""]
     ]

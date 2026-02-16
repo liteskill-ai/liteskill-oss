@@ -134,8 +134,16 @@ defmodule Liteskill.LlmModels do
   Returns `{model_spec, req_opts}` where:
   - `model_spec` is `%{id: model_id, provider: provider_atom}`
   - `req_opts` is a keyword list including `provider_options`
+
+  ## Options
+
+  - `:enable_caching` — when `true`, enables Anthropic prompt caching for
+    Bedrock Anthropic models. Switches to native API (`use_converse: false`)
+    for full message caching support with tools.
   """
-  def build_provider_options(%LlmModel{provider: %LlmProvider{} = provider} = m) do
+  def build_provider_options(model, opts \\ [])
+
+  def build_provider_options(%LlmModel{provider: %LlmProvider{} = provider} = m, opts) do
     provider_atom = String.to_existing_atom(provider.provider_type)
     model_spec = %{id: m.model_id, provider: provider_atom}
 
@@ -166,11 +174,35 @@ defmodule Liteskill.LlmModels do
           atomize_config(config) ++ base_opts
       end
 
+    provider_opts = maybe_enable_caching(provider_opts, m, opts)
+
     req_opts = [provider_options: provider_opts]
     req_opts = if base_url, do: Keyword.put(req_opts, :base_url, base_url), else: req_opts
 
     {model_spec, req_opts}
   end
+
+  defp maybe_enable_caching(provider_opts, model, opts) do
+    if Keyword.get(opts, :enable_caching, false) && anthropic_bedrock?(model) do
+      # Switch to native Anthropic API (not Converse) for caching support.
+      # anthropic_prompt_cache is set separately by LlmGenerate based on
+      # tool count, because ReqLLM adds cache_control to EVERY tool and
+      # Bedrock limits total cache_control blocks to 4.
+      Keyword.put(provider_opts, :use_converse, false)
+    else
+      provider_opts
+    end
+  end
+
+  defp anthropic_bedrock?(%LlmModel{
+         model_id: model_id,
+         provider: %LlmProvider{provider_type: "amazon_bedrock"}
+       })
+       when is_binary(model_id) do
+    String.contains?(model_id, "anthropic")
+  end
+
+  defp anthropic_bedrock?(_), do: false
 
   defp atomize_config(config) do
     Enum.reduce(config, [], fn {k, v}, acc ->

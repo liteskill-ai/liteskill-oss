@@ -19,8 +19,8 @@ defmodule LiteskillWeb.WikiComponents do
     ~H"""
     <div class="relative group">
       <.link navigate={~p"/wiki/#{@space.id}"} class="block">
-        <div class="card bg-base-100 border border-base-300 shadow-sm hover:border-primary/50 hover:shadow-md transition-all cursor-pointer">
-          <div class="card-body p-4">
+        <div class="card bg-base-100 border border-base-300 shadow-sm hover:border-primary/50 hover:shadow-md transition-all cursor-pointer h-full">
+          <div class="card-body p-4 flex flex-col">
             <div class="flex items-center gap-2">
               <.icon
                 name="hero-rectangle-group-micro"
@@ -34,11 +34,10 @@ defmodule LiteskillWeb.WikiComponents do
                 Shared
               </span>
             </div>
-            <p
-              :if={@space.content && @space.content != ""}
-              class="text-xs text-base-content/70 mt-1 line-clamp-2"
-            >
-              {String.slice(@space.content, 0..200)}
+            <p class="text-xs text-base-content/70 mt-1 line-clamp-3 flex-1 min-h-[3lh]">
+              {if @space.content && @space.content != "",
+                do: String.slice(@space.content, 0..200),
+                else: ""}
             </p>
             <div class="flex items-center mt-2">
               <span class="text-xs text-base-content/50">
@@ -62,6 +61,55 @@ defmodule LiteskillWeb.WikiComponents do
           <.icon name="hero-share-micro" class="size-3.5" />
         </button>
       </div>
+    </div>
+    """
+  end
+
+  attr :space, :map, required: true
+  attr :space_role, :string, default: nil
+
+  def space_list_item(assigns) do
+    ~H"""
+    <div class="relative group flex items-center gap-0 rounded-lg border border-base-300 bg-base-100 hover:border-primary/50 hover:bg-base-200/50 transition-all">
+      <.link
+        navigate={~p"/wiki/#{@space.id}"}
+        class="flex items-center gap-3 px-3 py-2.5 flex-1 min-w-0 cursor-pointer"
+      >
+        <.icon
+          name="hero-rectangle-group-micro"
+          class="size-4 text-base-content/60 flex-shrink-0"
+        />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-sm truncate">{@space.title}</span>
+            <span
+              :if={@space_role && @space_role != "owner"}
+              class="badge badge-xs badge-ghost flex-shrink-0"
+            >
+              Shared
+            </span>
+          </div>
+          <p
+            :if={@space.content && @space.content != ""}
+            class="text-xs text-base-content/70 truncate mt-0.5"
+          >
+            {String.slice(@space.content, 0..120)}
+          </p>
+        </div>
+        <span class="text-xs text-base-content/50 flex-shrink-0">
+          {Calendar.strftime(@space.updated_at, "%b %d, %Y")}
+        </span>
+      </.link>
+      <button
+        :if={@space_role in ["manager", "owner"]}
+        phx-click="open_sharing"
+        phx-value-entity-type="wiki_space"
+        phx-value-entity-id={@space.id}
+        class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mr-2"
+        title="Share space"
+      >
+        <.icon name="hero-share-micro" class="size-3.5" />
+      </button>
     </div>
     """
   end

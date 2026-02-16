@@ -607,6 +607,102 @@ defmodule Liteskill.LlmModelsTest do
     end
   end
 
+  describe "build_provider_options/2 — prompt caching" do
+    test "switches to native API for Anthropic on Bedrock" do
+      provider = %LlmProvider{
+        provider_type: "amazon_bedrock",
+        api_key: nil,
+        provider_config: %{"region" => "us-east-1"}
+      }
+
+      model = %LlmModel{
+        model_id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        provider: provider
+      }
+
+      {_model_spec, opts} = LlmModels.build_provider_options(model, enable_caching: true)
+      provider_opts = Keyword.get(opts, :provider_options)
+
+      # Switches to native Anthropic API (not Converse) for caching support.
+      # Actual anthropic_prompt_cache is set by LlmGenerate based on tool count.
+      assert Keyword.get(provider_opts, :use_converse) == false
+      refute Keyword.has_key?(provider_opts, :anthropic_prompt_cache)
+    end
+
+    test "does not switch API for non-Anthropic Bedrock models" do
+      provider = %LlmProvider{
+        provider_type: "amazon_bedrock",
+        api_key: nil,
+        provider_config: %{"region" => "us-east-1"}
+      }
+
+      model = %LlmModel{
+        model_id: "amazon.titan-text-express-v1",
+        provider: provider
+      }
+
+      {_model_spec, opts} = LlmModels.build_provider_options(model, enable_caching: true)
+      provider_opts = Keyword.get(opts, :provider_options)
+
+      assert Keyword.get(provider_opts, :use_converse) == true
+    end
+
+    test "does not switch API for non-Bedrock providers" do
+      provider = %LlmProvider{
+        provider_type: "anthropic",
+        api_key: "sk-ant-xxx",
+        provider_config: %{}
+      }
+
+      model = %LlmModel{
+        model_id: "claude-3-5-sonnet",
+        provider: provider
+      }
+
+      {_model_spec, opts} = LlmModels.build_provider_options(model, enable_caching: true)
+      provider_opts = Keyword.get(opts, :provider_options)
+
+      refute Keyword.has_key?(provider_opts, :use_converse)
+    end
+
+    test "does not switch API when enable_caching is false" do
+      provider = %LlmProvider{
+        provider_type: "amazon_bedrock",
+        api_key: nil,
+        provider_config: %{"region" => "us-east-1"}
+      }
+
+      model = %LlmModel{
+        model_id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        provider: provider
+      }
+
+      {_model_spec, opts} = LlmModels.build_provider_options(model, enable_caching: false)
+      provider_opts = Keyword.get(opts, :provider_options)
+
+      assert Keyword.get(provider_opts, :use_converse) == true
+    end
+
+    test "backward compat — 1-arity call works unchanged" do
+      provider = %LlmProvider{
+        provider_type: "amazon_bedrock",
+        api_key: nil,
+        provider_config: %{"region" => "us-east-1"}
+      }
+
+      model = %LlmModel{
+        model_id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        provider: provider
+      }
+
+      {_model_spec, opts} = LlmModels.build_provider_options(model)
+      provider_opts = Keyword.get(opts, :provider_options)
+
+      # No caching by default
+      assert Keyword.get(provider_opts, :use_converse) == true
+    end
+  end
+
   # --- LLM.available_models/1 integration ---
 
   describe "LLM.available_models/1" do

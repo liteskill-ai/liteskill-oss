@@ -367,6 +367,27 @@ defmodule Liteskill.Usage do
   end
 
   @doc """
+  Returns aggregated usage for a run since a given timestamp.
+
+  Useful for per-stage usage tracking: capture `DateTime.utc_now()` before
+  an agent runs, then call this after it completes to get that stage's usage.
+  """
+  def usage_by_run_since(run_id, %DateTime{} = since) do
+    naive_since = DateTime.to_naive(since)
+
+    UsageRecord
+    |> where([r], r.run_id == ^run_id and r.inserted_at >= ^naive_since)
+    |> select([r], %{
+      input_tokens: coalesce(sum(r.input_tokens), 0),
+      output_tokens: coalesce(sum(r.output_tokens), 0),
+      cached_tokens: coalesce(sum(r.cached_tokens), 0),
+      total_cost: sum(r.total_cost),
+      call_count: count(r.id)
+    })
+    |> Repo.one()
+  end
+
+  @doc """
   Returns usage for a run grouped by model.
   """
   def usage_by_run_and_model(run_id) do

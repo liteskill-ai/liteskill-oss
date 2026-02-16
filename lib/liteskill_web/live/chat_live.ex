@@ -929,18 +929,48 @@ defmodule LiteskillWeb.ChatLive do
                   Wiki
                 </h1>
               </div>
-              <button phx-click="show_wiki_form" class="btn btn-primary btn-sm gap-1">
-                <.icon name="hero-plus-micro" class="size-4" /> New Space
-              </button>
+              <div class="flex items-center gap-2">
+                <div class="join">
+                  <button
+                    phx-click="toggle_wiki_view_mode"
+                    phx-value-mode="card"
+                    class={"join-item btn btn-xs #{if @wiki_view_mode == "card", do: "btn-active", else: "btn-ghost"}"}
+                    title="Card view"
+                  >
+                    <.icon name="hero-squares-2x2-micro" class="size-3.5" />
+                  </button>
+                  <button
+                    phx-click="toggle_wiki_view_mode"
+                    phx-value-mode="list"
+                    class={"join-item btn btn-xs #{if @wiki_view_mode == "list", do: "btn-active", else: "btn-ghost"}"}
+                    title="List view"
+                  >
+                    <.icon name="hero-bars-4-micro" class="size-3.5" />
+                  </button>
+                </div>
+                <button phx-click="show_wiki_form" class="btn btn-primary btn-sm gap-1">
+                  <.icon name="hero-plus-micro" class="size-4" /> New Space
+                </button>
+              </div>
             </div>
           </header>
 
           <div class="flex-1 overflow-y-auto p-4 max-w-4xl mx-auto w-full">
             <div
-              :if={@source_documents.documents != []}
+              :if={@source_documents.documents != [] && @wiki_view_mode == "card"}
               class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
             >
               <WikiComponents.space_card
+                :for={space <- @source_documents.documents}
+                space={space}
+                space_role={Map.get(space, :space_role)}
+              />
+            </div>
+            <div
+              :if={@source_documents.documents != [] && @wiki_view_mode == "list"}
+              class="space-y-1"
+            >
+              <WikiComponents.space_list_item
                 :for={space <- @source_documents.documents}
                 space={space}
                 space_role={Map.get(space, :space_role)}
@@ -2532,7 +2562,7 @@ defmodule LiteskillWeb.ChatLive do
 
   @wiki_events ~w(show_wiki_form close_wiki_form create_wiki_page edit_wiki_page
     cancel_wiki_edit update_wiki_page delete_wiki_page open_wiki_export_modal
-    close_wiki_export_modal confirm_wiki_export)
+    close_wiki_export_modal confirm_wiki_export toggle_wiki_view_mode)
 
   def handle_event(event, params, socket) when event in @wiki_events do
     WikiLive.handle_event(event, params, socket)
@@ -2543,7 +2573,7 @@ defmodule LiteskillWeb.ChatLive do
   @studio_events ~w(save_agent confirm_delete_agent cancel_delete_agent
     add_agent_tool remove_agent_tool
     save_team confirm_delete_team cancel_delete_team add_team_member remove_team_member
-    save_run start_run rerun cancel_run confirm_delete_run cancel_delete_run
+    save_run start_run rerun retry_run cancel_run confirm_delete_run cancel_delete_run
     save_schedule toggle_schedule confirm_delete_schedule cancel_delete_schedule)
 
   @impl true
