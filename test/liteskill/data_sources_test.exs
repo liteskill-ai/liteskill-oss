@@ -1,5 +1,6 @@
 defmodule Liteskill.DataSourcesTest do
-  use Liteskill.DataCase, async: true
+  use Liteskill.DataCase, async: false
+  use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.Authorization
   alias Liteskill.Authorization.EntityAcl
@@ -1553,6 +1554,113 @@ defmodule Liteskill.DataSourcesTest do
 
       assert {:ok, :not_found} =
                DataSources.delete_document_by_external_id(source.id, "nope", owner.id)
+    end
+  end
+
+  describe "wiki sync enqueuing" do
+    test "create_document with content enqueues wiki sync", %{owner: owner} do
+      {:ok, doc} =
+        DataSources.create_document(
+          "builtin:wiki",
+          %{title: "Sync Page", content: "Hello world"},
+          owner.id
+        )
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => doc.id, "action" => "upsert"}
+      )
+    end
+
+    test "create_document without content does not enqueue", %{owner: owner} do
+      {:ok, _doc} =
+        DataSources.create_document("builtin:wiki", %{title: "Empty"}, owner.id)
+
+      refute_enqueued(worker: Liteskill.Rag.WikiSyncWorker)
+    end
+
+    test "create_document for non-wiki source does not enqueue", %{owner: owner} do
+      {:ok, _source} =
+        DataSources.create_source(%{name: "test-src", source_type: "wiki"}, owner.id)
+
+      {:ok, _doc} =
+        DataSources.create_document(
+          "test-src",
+          %{title: "Non Wiki", content: "Hello"},
+          owner.id
+        )
+
+      refute_enqueued(worker: Liteskill.Rag.WikiSyncWorker)
+    end
+
+    test "create_child_document with content enqueues wiki sync", %{owner: owner} do
+      {:ok, space} =
+        DataSources.create_document("builtin:wiki", %{title: "Space"}, owner.id)
+
+      # Drain the enqueue from space creation (no content, should be none)
+      Oban.drain_queue(queue: :rag_ingest)
+
+      {:ok, child} =
+        DataSources.create_child_document(
+          "builtin:wiki",
+          space.id,
+          %{title: "Child", content: "Child content"},
+          owner.id
+        )
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => child.id, "action" => "upsert"}
+      )
+    end
+
+    test "update_document of wiki doc enqueues upsert", %{owner: owner} do
+      {:ok, doc} =
+        DataSources.create_document("builtin:wiki", %{title: "Page"}, owner.id)
+
+      {:ok, _updated} =
+        DataSources.update_document(doc.id, %{content: "New content"}, owner.id)
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => doc.id, "action" => "upsert"}
+      )
+    end
+
+    test "delete_document of wiki doc enqueues delete", %{owner: owner} do
+      {:ok, doc} =
+        DataSources.create_document("builtin:wiki", %{title: "Doomed"}, owner.id)
+
+      {:ok, _} = DataSources.delete_document(doc.id, owner.id)
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => doc.id, "action" => "delete"}
+      )
+    end
+  end
+
+  describe "enqueue_index_source/2" do
+    test "enqueues upsert jobs only for documents with content", %{owner: owner} do
+      {:ok, with_content} =
+        DataSources.create_document(
+          "builtin:wiki",
+          %{title: "Has Content", content: "Some text"},
+          owner.id
+        )
+
+      {:ok, _no_content} =
+        DataSources.create_document("builtin:wiki", %{title: "No Content"}, owner.id)
+
+      # Drain jobs from create_document enqueuing
+      Oban.drain_queue(queue: :rag_ingest)
+
+      assert {:ok, 1} = DataSources.enqueue_index_source("builtin:wiki", owner.id)
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => with_content.id, "action" => "upsert"}
+      )
     end
   end
 end

@@ -157,8 +157,6 @@ defmodule LiteskillWeb.WikiLive do
 
     case result do
       {:ok, doc} ->
-        enqueue_wiki_sync(doc.id, user_id, "upsert")
-
         {:noreply,
          socket
          |> Phoenix.Component.assign(show_wiki_form: false)
@@ -191,8 +189,6 @@ defmodule LiteskillWeb.WikiLive do
 
     case Liteskill.DataSources.update_document(doc.id, attrs, user_id) do
       {:ok, updated} ->
-        enqueue_wiki_sync(updated.id, user_id, "upsert")
-
         {:noreply,
          socket
          |> Phoenix.Component.assign(
@@ -213,8 +209,6 @@ defmodule LiteskillWeb.WikiLive do
 
     case Liteskill.DataSources.delete_document(doc.id, user_id) do
       {:ok, _} ->
-        enqueue_wiki_sync(doc.id, user_id, "delete")
-
         redirect_to =
           if doc.parent_document_id,
             do: ~p"/wiki/#{doc.parent_document_id}",
@@ -257,8 +251,6 @@ defmodule LiteskillWeb.WikiLive do
              parent_id: parent_id
            ) do
         {:ok, doc} ->
-          enqueue_wiki_sync(doc.id, user_id, "upsert")
-
           {:noreply,
            socket
            |> Phoenix.Component.assign(show_wiki_export_modal: false)
@@ -303,13 +295,4 @@ defmodule LiteskillWeb.WikiLive do
   end
 
   def get_wiki_source, do: Liteskill.BuiltinSources.find("builtin:wiki")
-
-  def enqueue_wiki_sync(wiki_document_id, user_id, action) do
-    Liteskill.Rag.WikiSyncWorker.new(%{
-      "wiki_document_id" => wiki_document_id,
-      "user_id" => user_id,
-      "action" => action
-    })
-    |> Oban.insert()
-  end
 end

@@ -15,6 +15,7 @@ defmodule Liteskill.Rag.Document do
     field :metadata, :map, default: %{}
     field :chunk_count, :integer, default: 0
     field :status, :string, default: "pending"
+    field :error_message, :string
     field :content_hash, :string
 
     belongs_to :source, Liteskill.Rag.Source
@@ -32,6 +33,7 @@ defmodule Liteskill.Rag.Document do
       :metadata,
       :chunk_count,
       :status,
+      :error_message,
       :content_hash,
       :source_id,
       :user_id

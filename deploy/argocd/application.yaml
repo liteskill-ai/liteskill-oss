@@ -9,9 +9,9 @@ spec:
   project: default
 
   source:
-    repoURL: https://liteskill-ai.github.io/liteskill-oss/
+    repoURL: https://docs.liteskill.ai/helm
     chart: liteskill
-    targetRevision: 0.1.3
+    targetRevision: 0.2.11
     helm:
       releaseName: liteskill
       valuesObject:

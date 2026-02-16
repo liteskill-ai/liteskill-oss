@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -19,71 +19,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-charts:
-    name: Release Helm charts
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Create gh-pages branch if missing
-        run: |
-          if ! git ls-remote --exit-code origin gh-pages; then
-            git checkout --orphan gh-pages
-            git rm -rf .
-            git commit --allow-empty -m "Initialize gh-pages"
-            git push origin gh-pages
-            git checkout main
-          fi
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
-        with:
-          charts_dir: helm
-          pages_dir: helm
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-
   deploy:
     name: Build and deploy site
-    needs: release-charts
-    if: always() && !cancelled()
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install mdBook
         uses: jontze/action-mdbook@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
       - name: Build docs
         run: mdbook build docs/
 
-      - name: Prepare combined site
+      - name: Package Helm chart
         run: |
-          mkdir -p _site
-          cp -r docs/book/* _site/
-
-          # Fetch helm index from gh-pages branch if it exists
           mkdir -p _site/helm
-          if git fetch origin gh-pages:gh-pages 2>/dev/null; then
-            git show gh-pages:helm/index.yaml > _site/helm/index.yaml 2>/dev/null || echo "No helm index found yet"
-          fi
+          helm package helm/liteskill -d _site/helm/
+          helm repo index _site/helm/ --url https://docs.liteskill.ai/helm
+
+      - name: Prepare site
+        run: |
+          cp -r docs/book/* _site/
+          cp CNAME _site/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

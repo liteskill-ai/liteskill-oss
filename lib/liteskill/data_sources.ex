@@ -378,6 +378,10 @@ defmodule Liteskill.DataSources do
 
     with {:ok, doc} <- result do
       Authorization.create_owner_acl("wiki_space", doc.id, user_id)
+
+      if doc.content && doc.content != "" do
+        enqueue_wiki_sync(doc.id, user_id, "upsert")
+      end
     end
 
     result
@@ -399,11 +403,25 @@ defmodule Liteskill.DataSources do
         {:error, :not_found}
 
       %Document{user_id: ^user_id} = doc ->
-        doc |> Document.changeset(attrs) |> Repo.update()
+        result = doc |> Document.changeset(attrs) |> Repo.update()
+
+        with {:ok, updated} <- result do
+          if doc.source_ref == "builtin:wiki" do
+            enqueue_wiki_sync(updated.id, doc.user_id, "upsert")
+          end
+        end
+
+        result
 
       %Document{source_ref: "builtin:wiki"} = doc ->
         if can_edit_wiki_doc?(doc.id, user_id) do
-          doc |> Document.changeset(attrs) |> Repo.update()
+          result = doc |> Document.changeset(attrs) |> Repo.update()
+
+          with {:ok, updated} <- result do
+            enqueue_wiki_sync(updated.id, doc.user_id, "upsert")
+          end
+
+          result
         else
           {:error, :not_found}
         end
@@ -419,15 +437,31 @@ defmodule Liteskill.DataSources do
         {:error, :not_found}
 
       %Document{user_id: ^user_id} = doc ->
-        Repo.delete(doc)
+        result = Repo.delete(doc)
+
+        with {:ok, deleted} <- result do
+          if deleted.source_ref == "builtin:wiki" do
+            enqueue_wiki_sync(deleted.id, deleted.user_id, "delete")
+          end
+        end
+
+        result
 
       # Deleting a wiki space requires owner
       %Document{source_ref: "builtin:wiki", parent_document_id: nil} = doc ->
         case Authorization.get_role("wiki_space", doc.id, user_id) do
-          # coveralls-ignore-next-line
-          {:ok, "owner"} -> Repo.delete(doc)
-          {:ok, _} -> {:error, :forbidden}
-          _ -> {:error, :not_found}
+          # coveralls-ignore-start
+          {:ok, "owner"} ->
+            result = Repo.delete(doc)
+            with {:ok, _} <- result, do: enqueue_wiki_sync(doc.id, doc.user_id, "delete")
+            result
+
+          # coveralls-ignore-stop
+          {:ok, _} ->
+            {:error, :forbidden}
+
+          _ ->
+            {:error, :not_found}
         end
 
       # Deleting a wiki child page requires manager+
@@ -435,9 +469,16 @@ defmodule Liteskill.DataSources do
         case find_root_ancestor_by_id(doc.id) do
           {:ok, %Document{id: space_id}} ->
             case Authorization.get_role("wiki_space", space_id, user_id) do
-              {:ok, role} when role in ["manager", "owner"] -> Repo.delete(doc)
-              {:ok, _} -> {:error, :forbidden}
-              _ -> {:error, :not_found}
+              {:ok, role} when role in ["manager", "owner"] ->
+                result = Repo.delete(doc)
+                with {:ok, _} <- result, do: enqueue_wiki_sync(doc.id, doc.user_id, "delete")
+                result
+
+              {:ok, _} ->
+                {:error, :forbidden}
+
+              _ ->
+                {:error, :not_found}
             end
 
           # coveralls-ignore-start
@@ -551,15 +592,24 @@ defmodule Liteskill.DataSources do
         doc_user_id = space.user_id
         next_pos = next_document_position(source_ref, doc_user_id, parent_id)
 
-        %Document{}
-        |> Document.changeset(
-          attrs
-          |> Map.put(:source_ref, source_ref)
-          |> Map.put(:user_id, doc_user_id)
-          |> Map.put(:parent_document_id, parent_id)
-          |> Map.put(:position, next_pos)
-        )
-        |> Repo.insert()
+        result =
+          %Document{}
+          |> Document.changeset(
+            attrs
+            |> Map.put(:source_ref, source_ref)
+            |> Map.put(:user_id, doc_user_id)
+            |> Map.put(:parent_document_id, parent_id)
+            |> Map.put(:position, next_pos)
+          )
+          |> Repo.insert()
+
+        with {:ok, doc} <- result do
+          if doc.content && doc.content != "" do
+            enqueue_wiki_sync(doc.id, doc.user_id, "upsert")
+          end
+        end
+
+        result
       else
         {:error, :forbidden}
       end
@@ -746,6 +796,28 @@ defmodule Liteskill.DataSources do
       # coveralls-ignore-next-line
       _ -> {:error, :no_access}
     end
+  end
+
+  def enqueue_wiki_sync(wiki_document_id, user_id, action)
+      when action in ["upsert", "delete"] do
+    Liteskill.Rag.WikiSyncWorker.new(%{
+      "wiki_document_id" => wiki_document_id,
+      "user_id" => user_id,
+      "action" => action
+    })
+    |> Oban.insert()
+  end
+
+  def enqueue_index_source(source_ref, user_id) do
+    count =
+      list_documents(source_ref, user_id)
+      |> Enum.filter(&(&1.content not in [nil, ""]))
+      |> Enum.reduce(0, fn doc, acc ->
+        enqueue_wiki_sync(doc.id, user_id, "upsert")
+        acc + 1
+      end)
+
+    {:ok, count}
   end
 
   defp can_edit_wiki_doc?(document_id, user_id) do

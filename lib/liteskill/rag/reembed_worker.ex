@@ -9,7 +9,7 @@ defmodule Liteskill.Rag.ReembedWorker do
   use Oban.Worker, queue: :rag_ingest, max_attempts: 3
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Chunk, CohereClient, Document}
+  alias Liteskill.Rag.{Chunk, CohereClient, Document, EmbedQueue}
   alias Liteskill.Repo
   alias Liteskill.Settings
 
@@ -30,20 +30,30 @@ defmodule Liteskill.Rag.ReembedWorker do
       if documents == [] do
         :ok
       else
-        Enum.each(documents, fn doc ->
-          reembed_document(doc, user_id, args)
-        end)
+        result =
+          Enum.reduce_while(documents, :ok, fn doc, _acc ->
+            case reembed_document(doc, user_id, args) do
+              :ok -> {:cont, :ok}
+              {:error, _} = err -> {:halt, err}
+            end
+          end)
 
-        # Self-chain: enqueue next batch if more documents remain
-        remaining = Rag.list_documents_for_reembedding(1, 0)
+        case result do
+          :ok ->
+            # Self-chain: enqueue next batch if more documents remain
+            remaining = Rag.list_documents_for_reembedding(1, 0)
 
-        if remaining != [] do
-          %{"user_id" => user_id, "batch" => batch + 1}
-          |> __MODULE__.new()
-          |> Oban.insert()
+            if remaining != [] do
+              %{"user_id" => user_id, "batch" => batch + 1}
+              |> __MODULE__.new()
+              |> Oban.insert()
+            end
+
+            :ok
+
+          {:error, _} = err ->
+            err
         end
-
-        :ok
       end
     end
   end
@@ -57,6 +67,8 @@ defmodule Liteskill.Rag.ReembedWorker do
       document
       |> Document.changeset(%{status: "embedded"})
       |> Repo.update()
+
+      :ok
     else
       texts = Enum.map(chunks, & &1.content)
       plug = Map.get(args, "plug", false)
@@ -65,7 +77,7 @@ defmodule Liteskill.Rag.ReembedWorker do
         [input_type: "search_document", dimensions: 1024, user_id: user_id] ++
           if(plug, do: [plug: {Req.Test, CohereClient}], else: [])
 
-      case CohereClient.embed(texts, embed_opts) do
+      case EmbedQueue.embed(texts, embed_opts) do
         {:ok, embeddings} ->
           Repo.transaction(fn ->
             Enum.zip(chunks, embeddings)
@@ -80,10 +92,19 @@ defmodule Liteskill.Rag.ReembedWorker do
             |> Repo.update!()
           end)
 
+          :ok
+
+        {:error, %{status: status}} = error when status in [429, 503] ->
+          # Transient — bubble up so Oban retries the whole job
+          error
+
         {:error, _reason} ->
+          # Non-retryable — mark this doc as error, continue with others
           document
           |> Document.changeset(%{status: "error"})
           |> Repo.update()
+
+          :ok
       end
     end
   end

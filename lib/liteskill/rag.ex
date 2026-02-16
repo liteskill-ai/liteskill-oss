@@ -4,7 +4,16 @@ defmodule Liteskill.Rag do
   embedding generation, and semantic search.
   """
 
-  alias Liteskill.Rag.{Collection, Source, Document, Chunk, CohereClient, IngestWorker}
+  alias Liteskill.Rag.{
+    Collection,
+    Source,
+    Document,
+    Chunk,
+    CohereClient,
+    EmbedQueue,
+    IngestWorker
+  }
+
   alias Liteskill.Repo
 
   import Ecto.Query
@@ -194,7 +203,7 @@ defmodule Liteskill.Rag do
       dimensions = Keyword.get(opts, :dimensions, collection.embedding_dimensions)
       texts = Enum.map(chunks, & &1.content)
 
-      case CohereClient.embed(
+      case EmbedQueue.embed(
              texts,
              [{:input_type, "search_document"}, {:dimensions, dimensions}, {:user_id, user_id}] ++
                plug_opts
@@ -224,13 +233,17 @@ defmodule Liteskill.Rag do
             Repo.insert_all(Chunk, chunk_rows)
 
             document
-            |> Document.changeset(%{status: "embedded", chunk_count: length(chunks)})
+            |> Document.changeset(%{
+              status: "embedded",
+              chunk_count: length(chunks),
+              error_message: nil
+            })
             |> Repo.update!()
           end)
 
         {:error, reason} ->
           document
-          |> Document.changeset(%{status: "error"})
+          |> Document.changeset(%{status: "error", error_message: format_embed_error(reason)})
           |> Repo.update()
 
           {:error, reason}
@@ -709,4 +722,16 @@ defmodule Liteskill.Rag do
     )
     |> Repo.all()
   end
+
+  defp format_embed_error(%{status: status, body: %{"Message" => msg}}),
+    do: "HTTP #{status}: #{msg}"
+
+  # coveralls-ignore-start
+  defp format_embed_error(%{status: status, body: %{"message" => msg}}),
+    do: "HTTP #{status}: #{msg}"
+
+  defp format_embed_error(%{status: status}), do: "HTTP #{status}"
+  defp format_embed_error(reason) when is_binary(reason), do: reason
+  defp format_embed_error(reason), do: inspect(reason)
+  # coveralls-ignore-stop
 end

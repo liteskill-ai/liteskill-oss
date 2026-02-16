@@ -753,6 +753,15 @@ defmodule LiteskillWeb.ChatLive do
                   built-in
                 </span>
               </div>
+              <div class="flex items-center gap-2">
+                <button
+                  phx-click="queue_index_source"
+                  class="btn btn-sm btn-outline gap-1"
+                  title="Queue RAG indexing for all documents"
+                >
+                  <.icon name="hero-queue-list-micro" class="size-4" /> Queue Index
+                </button>
+              </div>
               <div
                 :if={!Map.get(@current_source, :builtin, false)}
                 class="flex items-center gap-2"
@@ -850,10 +859,11 @@ defmodule LiteskillWeb.ChatLive do
                       <p class="text-xs text-base-content/50">Status</p>
                       <span class={[
                         "badge badge-sm",
-                        if(@rag_document.status == "embedded",
-                          do: "badge-success",
-                          else: "badge-warning"
-                        )
+                        case @rag_document.status do
+                          "embedded" -> "badge-success"
+                          "error" -> "badge-error"
+                          _ -> "badge-warning"
+                        end
                       ]}>
                         {@rag_document.status}
                       </span>
@@ -874,6 +884,14 @@ defmodule LiteskillWeb.ChatLive do
                         {truncate_hash(@rag_document.content_hash)}
                       </p>
                     </div>
+                  </div>
+                  <div
+                    :if={@rag_document.status == "error" && @rag_document.error_message}
+                    class="mt-2 p-2 bg-error/10 border border-error/20 rounded-lg"
+                  >
+                    <p class="text-xs text-error font-medium">
+                      {@rag_document.error_message}
+                    </p>
                   </div>
                 <% else %>
                   <p class="text-sm text-base-content/50">
@@ -2478,6 +2496,20 @@ defmodule LiteskillWeb.ChatLive do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to start sync.")}
+    end
+  end
+
+  @impl true
+  def handle_event("queue_index_source", _params, socket) do
+    source = socket.assigns.current_source
+    user_id = socket.assigns.current_user.id
+
+    case Liteskill.DataSources.enqueue_index_source(source.id, user_id) do
+      {:ok, 0} ->
+        {:noreply, put_flash(socket, :info, "No documents with content to index.")}
+
+      {:ok, count} ->
+        {:noreply, put_flash(socket, :info, "Queued indexing for #{count} documents.")}
     end
   end
 

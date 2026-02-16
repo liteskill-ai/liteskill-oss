@@ -132,6 +132,28 @@ defmodule Liteskill.Rag.ReembedWorkerTest do
       assert updated_doc.status == "error"
     end
 
+    test "returns error on 429 without marking document as error", %{
+      owner: owner,
+      source: source
+    } do
+      {doc, _chunks} = create_pending_doc(source.id, owner.id, 1)
+
+      Req.Test.stub(CohereClient, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(429, Jason.encode!(%{"message" => "Rate limited"}))
+      end)
+
+      assert {:error, _} =
+               perform_job(ReembedWorker, %{
+                 "user_id" => owner.id,
+                 "plug" => true
+               })
+
+      updated_doc = Repo.get!(Document, doc.id)
+      assert updated_doc.status == "pending"
+    end
+
     test "handles document with zero chunks gracefully", %{owner: owner, source: source} do
       {:ok, doc} =
         Rag.create_document(source.id, %{title: "No Chunks"}, owner.id)

@@ -48,6 +48,11 @@ config :phoenix,
 
 config :liteskill, Oban, testing: :manual
 
+config :liteskill, Liteskill.Rag.EmbedQueue,
+  max_retries: 1,
+  backoff_ms: 1,
+  flush_ms: 50
+
 # Used by Application to skip ensure_admin_user Task (sandbox not available)
 config :liteskill, env: :test
 

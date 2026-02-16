@@ -20,6 +20,8 @@ defmodule Liteskill.Application do
         Liteskill.Repo,
         {DNSCluster, query: Application.get_env(:liteskill, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Liteskill.PubSub},
+        # coveralls-ignore-next-line
+        if(@env != :test, do: Liteskill.Rag.EmbedQueue),
         {Oban, Application.fetch_env!(:liteskill, Oban)},
         # Ensure root admin account exists on boot (skip in test — sandbox not available)
         # coveralls-ignore-start

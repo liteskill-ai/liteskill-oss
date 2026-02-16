@@ -1,5 +1,6 @@
 defmodule Liteskill.BuiltinTools.WikiTest do
-  use Liteskill.DataCase, async: true
+  use Liteskill.DataCase, async: false
+  use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.BuiltinTools.Wiki, as: WikiTool
 
@@ -836,6 +837,118 @@ defmodule Liteskill.BuiltinTools.WikiTest do
       assert length(data["results"]) >= 1
       found = Enum.find(data["results"], &(&1["title"] == "snippet_nil_content_test_xyz"))
       assert found["snippet"] == ""
+    end
+  end
+
+  describe "wiki sync enqueuing from agent tool calls" do
+    test "create_space with content enqueues wiki sync", %{user: user} do
+      {:ok, result} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{
+            "actions" => [
+              %{"action" => "create_space", "title" => "Agent Space", "content" => "Hello world"}
+            ]
+          },
+          user_id: user.id
+        )
+
+      data = decode_content(result)
+      [%{"status" => "ok", "id" => space_id}] = data["results"]
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => space_id, "action" => "upsert"}
+      )
+    end
+
+    test "create_article with content enqueues wiki sync", %{user: user} do
+      {:ok, _} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{"actions" => [%{"action" => "create_space", "title" => "Parent Space"}]},
+          user_id: user.id
+        )
+
+      {:ok, space_result} =
+        WikiTool.call_tool("wiki__read", %{"mode" => "spaces"}, user_id: user.id)
+
+      space =
+        decode_content(space_result)["spaces"] |> Enum.find(&(&1["title"] == "Parent Space"))
+
+      {:ok, result} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{
+            "actions" => [
+              %{
+                "action" => "create_article",
+                "parent_id" => space["id"],
+                "title" => "Agent Article",
+                "content" => "Article content"
+              }
+            ]
+          },
+          user_id: user.id
+        )
+
+      data = decode_content(result)
+      [%{"status" => "ok", "id" => article_id}] = data["results"]
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => article_id, "action" => "upsert"}
+      )
+    end
+
+    test "update with content enqueues wiki sync", %{user: user} do
+      {:ok, create_result} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{"actions" => [%{"action" => "create_space", "title" => "Update Space"}]},
+          user_id: user.id
+        )
+
+      [%{"id" => space_id}] = decode_content(create_result)["results"]
+
+      {:ok, _} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{
+            "actions" => [
+              %{"action" => "update", "id" => space_id, "content" => "Updated content"}
+            ]
+          },
+          user_id: user.id
+        )
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => space_id, "action" => "upsert"}
+      )
+    end
+
+    test "delete enqueues wiki sync delete", %{user: user} do
+      {:ok, create_result} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{"actions" => [%{"action" => "create_space", "title" => "Delete Space"}]},
+          user_id: user.id
+        )
+
+      [%{"id" => space_id}] = decode_content(create_result)["results"]
+
+      {:ok, _} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{"actions" => [%{"action" => "delete", "id" => space_id}]},
+          user_id: user.id
+        )
+
+      assert_enqueued(
+        worker: Liteskill.Rag.WikiSyncWorker,
+        args: %{"wiki_document_id" => space_id, "action" => "delete"}
+      )
     end
   end
 
