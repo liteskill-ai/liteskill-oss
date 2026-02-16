@@ -170,7 +170,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_create_agent(_user_id, _input), do: {:error, "Missing required field: name"}
+  defp do_create_agent(_user_id, _input), do: missing_field("name")
 
   defp do_list_agents(user_id) do
     agents = Agents.list_agents(user_id)
@@ -201,7 +201,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_get_agent(_user_id, _input), do: {:error, "Missing required field: agent_id"}
+  defp do_get_agent(_user_id, _input), do: missing_field("agent_id")
 
   defp do_delete_agent(user_id, %{"agent_id" => agent_id}) do
     case Agents.delete_agent(agent_id, user_id) do
@@ -210,7 +210,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_delete_agent(_user_id, _input), do: {:error, "Missing required field: agent_id"}
+  defp do_delete_agent(_user_id, _input), do: missing_field("agent_id")
 
   # ---------------------------------------------------------------------------
   # Teams
@@ -247,7 +247,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_create_team(_user_id, _input), do: {:error, "Missing required field: name"}
+  defp do_create_team(_user_id, _input), do: missing_field("name")
 
   defp do_list_teams(user_id) do
     teams = Teams.list_teams(user_id)
@@ -277,7 +277,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_get_team(_user_id, _input), do: {:error, "Missing required field: team_id"}
+  defp do_get_team(_user_id, _input), do: missing_field("team_id")
 
   defp do_delete_team(user_id, %{"team_id" => team_id}) do
     case Teams.delete_team(team_id, user_id) do
@@ -286,20 +286,33 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_delete_team(_user_id, _input), do: {:error, "Missing required field: team_id"}
+  defp do_delete_team(_user_id, _input), do: missing_field("team_id")
 
   # ---------------------------------------------------------------------------
   # Runs
   # ---------------------------------------------------------------------------
 
   defp do_start_run(user_id, %{"prompt" => prompt} = input) do
+    admin_max = Liteskill.Settings.get_default_mcp_run_cost_limit()
+
+    cost_limit =
+      case input["cost_limit"] do
+        nil ->
+          admin_max
+
+        val when is_number(val) ->
+          requested = Decimal.from_float(val / 1)
+          if Decimal.compare(requested, admin_max) == :gt, do: admin_max, else: requested
+      end
+
     attrs = %{
       user_id: user_id,
       name: input["name"] || "Tool-initiated run",
       prompt: prompt,
       team_definition_id: input["team_id"],
       topology: input["topology"] || "pipeline",
-      timeout_ms: input["timeout_ms"] || 1_800_000
+      timeout_ms: input["timeout_ms"] || 1_800_000,
+      cost_limit: cost_limit
     }
 
     case Runs.create_run(attrs) do
@@ -326,7 +339,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_start_run(_user_id, _input), do: {:error, "Missing required field: prompt"}
+  defp do_start_run(_user_id, _input), do: missing_field("prompt")
 
   defp do_list_runs(user_id) do
     runs = Runs.list_runs(user_id)
@@ -357,7 +370,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_get_run(_user_id, _input), do: {:error, "Missing required field: run_id"}
+  defp do_get_run(_user_id, _input), do: missing_field("run_id")
 
   defp do_cancel_run(user_id, %{"run_id" => run_id}) do
     case Runs.cancel_run(run_id, user_id) do
@@ -366,7 +379,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_cancel_run(_user_id, _input), do: {:error, "Missing required field: run_id"}
+  defp do_cancel_run(_user_id, _input), do: missing_field("run_id")
 
   # ---------------------------------------------------------------------------
   # Schedules
@@ -407,8 +420,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_create_schedule(_user_id, _input),
-    do: {:error, "Missing required field: cron_expression"}
+  defp do_create_schedule(_user_id, _input), do: missing_field("cron_expression")
 
   defp do_list_schedules(user_id) do
     schedules = Schedules.list_schedules(user_id)
@@ -437,11 +449,13 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     end
   end
 
-  defp do_delete_schedule(_user_id, _input), do: {:error, "Missing required field: schedule_id"}
+  defp do_delete_schedule(_user_id, _input), do: missing_field("schedule_id")
 
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
+
+  defp missing_field(name), do: {:error, "Missing required field: #{name}"}
 
   defp build_agent_config(%{"builtin_server_ids" => ids}) when is_list(ids) do
     %{"builtin_server_ids" => ids}
@@ -904,6 +918,12 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
           "timeout_ms" => %{
             "type" => "integer",
             "description" => "Timeout in milliseconds (default: 1800000 = 30 min)"
+          },
+          "cost_limit" => %{
+            "type" => "number",
+            "description" =>
+              "Maximum cost in USD. Defaults to server-configured limit (typically $1.00). " <>
+                "Cannot exceed the server-configured maximum."
           }
         },
         "required" => ["prompt"]

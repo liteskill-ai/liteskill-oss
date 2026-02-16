@@ -45,6 +45,25 @@ defmodule Liteskill.LLM.StreamHandler do
   end
 
   defp do_handle_stream(stream_id, messages, opts) do
+    cost_limit = Keyword.get(opts, :cost_limit)
+    conversation_id = Keyword.get(opts, :conversation_id)
+
+    if cost_limit && conversation_id do
+      case Usage.check_cost_limit(:conversation, conversation_id, cost_limit) do
+        :ok ->
+          do_start_stream(stream_id, messages, opts)
+
+        {:error, :cost_limit_exceeded, current} ->
+          {:error,
+           {"cost_limit",
+            "Cost limit of $#{cost_limit} reached (spent: $#{Decimal.round(current, 4)})"}}
+      end
+    else
+      do_start_stream(stream_id, messages, opts)
+    end
+  end
+
+  defp do_start_stream(stream_id, messages, opts) do
     llm_model = Keyword.get(opts, :llm_model)
 
     model_id =
@@ -585,7 +604,22 @@ defmodule Liteskill.LLM.StreamHandler do
         ]
 
     next_opts = Keyword.put(opts, :tool_round, Keyword.get(opts, :tool_round, 0) + 1)
-    handle_stream(stream_id, next_messages, next_opts)
+
+    # Check cost limit before continuing the tool-call loop
+    cost_limit = Keyword.get(next_opts, :cost_limit)
+    conversation_id = Keyword.get(next_opts, :conversation_id)
+
+    if cost_limit && conversation_id do
+      case Usage.check_cost_limit(:conversation, conversation_id, cost_limit) do
+        :ok ->
+          handle_stream(stream_id, next_messages, next_opts)
+
+        {:error, :cost_limit_exceeded, _current} ->
+          :cost_limit_exceeded
+      end
+    else
+      handle_stream(stream_id, next_messages, next_opts)
+    end
   end
 
   defp execute_or_await_tool_calls(

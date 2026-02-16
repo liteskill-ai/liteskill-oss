@@ -11,21 +11,12 @@ defmodule Liteskill.Runs.Runner do
   alias Liteskill.Agents
   alias Liteskill.Agents.{JidoAgent, ToolResolver}
   alias Liteskill.Agents.Actions.LlmGenerate
-  alias Liteskill.BuiltinTools.Reports, as: ReportsTools
+  alias Liteskill.Runs.{ReportBuilder, ResumeHandler}
 
   require Logger
 
-  @handoff_summary_max_chars 500
-
-  @doc false
-  def extract_handoff_summary(output) when is_binary(output) do
-    case Regex.run(~r/##?\s*Handoff Summary\s*\n(.*)/si, output) do
-      [_, summary] -> summary |> String.trim() |> String.slice(0, @handoff_summary_max_chars)
-      nil -> String.slice(output, 0, @handoff_summary_max_chars)
-    end
-  end
-
-  def extract_handoff_summary(_), do: ""
+  # Delegate extract_handoff_summary so existing callers (and tests) still work.
+  defdelegate extract_handoff_summary(output), to: ResumeHandler
 
   @doc """
   Runs a run asynchronously. Call from Task.Supervisor.
@@ -74,57 +65,24 @@ defmodule Liteskill.Runs.Runner do
       "agents" => Enum.map(agents, fn {a, m} -> %{"name" => a.name, "role" => m.role} end)
     })
 
-    context = [user_id: user_id, run_id: run.id]
+    context = [user_id: user_id, run_id: run.id, cost_limit: run.cost_limit]
 
-    case get_or_create_report(run, agents, context) do
+    case ReportBuilder.get_or_create_report(run, agents, context) do
       {:ok, report_id} ->
         case run_pipeline(run, agents, report_id, context) do
           :ok ->
             log(run.id, "info", "complete", "Run completed successfully")
             {:ok, report_id}
 
-          error ->
-            log(run.id, "error", "pipeline", "Pipeline failed: #{inspect(error)}")
-            {:error, error}
+          {:error, reason} ->
+            log(run.id, "error", "pipeline", "Pipeline failed: #{inspect(reason)}")
+            {:error, reason}
         end
 
       {:error, reason} ->
         log(run.id, "error", "create_report", "Failed to create report: #{inspect(reason)}")
         {:error, reason}
     end
-  end
-
-  defp get_or_create_report(run, agents, context) do
-    case find_existing_report(run) do
-      nil ->
-        title = build_report_title(run, agents)
-
-        with {:ok, %{"content" => [%{"text" => json}]}} <-
-               ReportsTools.call_tool("reports__create", %{"title" => title}, context),
-             %{"id" => report_id} <- Jason.decode!(json) do
-          log(run.id, "info", "create_report", "Created report", %{"report_id" => report_id})
-          {:ok, report_id}
-        else
-          error -> {:error, error}
-        end
-
-      report_id ->
-        log(run.id, "info", "resume", "Resuming with existing report", %{
-          "report_id" => report_id
-        })
-
-        {:ok, report_id}
-    end
-  end
-
-  defp find_existing_report(run) do
-    run.deliverables["report_id"] ||
-      run.run_logs
-      |> Enum.find(&(&1.step == "create_report"))
-      |> case do
-        nil -> nil
-        log_entry -> log_entry.metadata["report_id"]
-      end
   end
 
   defp run_pipeline(_run, [], _report_id, _context) do
@@ -147,8 +105,8 @@ defmodule Liteskill.Runs.Runner do
     is_resume = resume_from > 0
 
     unless is_resume do
-      overview = section("Overview", overview_content(run, agents))
-      :ok = write_sections(report_id, [overview], context)
+      overview = ReportBuilder.section("Overview", ReportBuilder.overview_content(run, agents))
+      :ok = ReportBuilder.write_sections(report_id, [overview], context)
     end
 
     # Build handoff from previously completed stages
@@ -157,7 +115,7 @@ defmodule Liteskill.Runs.Runner do
       |> Enum.with_index()
       |> Enum.take(resume_from)
       |> Enum.map(fn {{agent, member}, _idx} ->
-        summary = find_handoff_summary(run.run_logs, agent.name) || ""
+        summary = ResumeHandler.find_handoff_summary(run.run_logs, agent.name) || ""
         %{agent: agent.name, role: member.role || "worker", output: summary}
       end)
 
@@ -178,55 +136,42 @@ defmodule Liteskill.Runs.Runner do
       )
     end
 
-    final_context =
+    result =
       agents
       |> Enum.with_index()
-      |> Enum.reduce(handoff_context, fn {{agent, member}, idx}, acc ->
-        if idx < resume_from do
-          acc
-        else
-          run_agent_stage(run, agent, member, idx, acc, report_id, context)
+      |> Enum.reduce_while({:ok, handoff_context}, fn {{agent, member}, idx}, {:ok, acc} ->
+        cond do
+          idx < resume_from ->
+            {:cont, {:ok, acc}}
+
+          cost_limit_exceeded?(run) ->
+            reason = "Cost limit of $#{run.cost_limit} exceeded"
+            log(run.id, "error", "cost_limit", reason)
+            {:halt, {:error, reason}}
+
+          true ->
+            case run_agent_stage(run, agent, member, idx, acc, report_id, context) do
+              {:ok, updated_handoff} -> {:cont, {:ok, updated_handoff}}
+              {:error, reason} -> {:halt, {:error, reason}}
+            end
         end
       end)
 
-    closing_sections =
-      [
-        section("Pipeline Summary", synthesis_content(run, agents, final_context)),
-        section("Conclusion", conclusion_content(run, agents))
-      ]
+    case result do
+      {:ok, final_context} ->
+        closing_sections =
+          [
+            ReportBuilder.section(
+              "Pipeline Summary",
+              ReportBuilder.synthesis_content(run, agents, final_context)
+            ),
+            ReportBuilder.section("Conclusion", ReportBuilder.conclusion_content(run, agents))
+          ]
 
-    write_sections(report_id, closing_sections, context)
-  end
+        ReportBuilder.write_sections(report_id, closing_sections, context)
 
-  defp find_handoff_summary(logs, agent_name) do
-    logs
-    |> Enum.filter(fn log ->
-      log.step == "agent_complete" && log.metadata["agent"] == agent_name
-    end)
-    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
-    |> List.first()
-    |> case do
-      nil ->
-        nil
-
-      log_entry ->
-        # Prefer stored handoff_summary; fall back to extracting from full output
-        # (backward compat with pre-migration logs)
-        log_entry.metadata["handoff_summary"] ||
-          extract_handoff_summary(log_entry.metadata["output"])
-    end
-  end
-
-  defp find_crash_messages(logs, agent_name) do
-    logs
-    |> Enum.filter(fn log ->
-      log.step == "agent_crash" && log.metadata["agent"] == agent_name
-    end)
-    |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
-    |> List.first()
-    |> case do
-      nil -> nil
-      log_entry -> log_entry.metadata["messages"]
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -256,7 +201,7 @@ defmodule Liteskill.Runs.Runner do
     stage_started_at = DateTime.utc_now()
 
     # Check for crash messages from a previous failed attempt
-    resume_messages = find_crash_messages(run.run_logs, agent.name)
+    resume_messages = ResumeHandler.find_crash_messages(run.run_logs, agent.name)
 
     if resume_messages do
       log(run.id, "info", "agent_resume", "Resuming #{stage_name} from saved context", %{
@@ -276,16 +221,19 @@ defmodule Liteskill.Runs.Runner do
     case agent_result do
       {:ok, agent_output} ->
         agent_sections = [
-          section("#{stage_name}/Configuration", agent_config_content(agent)),
-          section("#{stage_name}/Analysis", agent_output.analysis),
-          section("#{stage_name}/Output", agent_output.output)
+          ReportBuilder.section(
+            "#{stage_name}/Configuration",
+            ReportBuilder.agent_config_content(agent)
+          ),
+          ReportBuilder.section("#{stage_name}/Analysis", agent_output.analysis),
+          ReportBuilder.section("#{stage_name}/Output", agent_output.output)
         ]
 
-        result = write_sections(report_id, agent_sections, context)
+        result = ReportBuilder.write_sections(report_id, agent_sections, context)
         duration_ms = System.monotonic_time(:millisecond) - start_time
         complete_task(task, result, duration_ms, "#{agent.name} (#{role}) completed")
 
-        handoff_summary = extract_handoff_summary(agent_output.output)
+        handoff_summary = ResumeHandler.extract_handoff_summary(agent_output.output)
 
         # Aggregate per-stage usage for observability
         stage_usage = Liteskill.Usage.usage_by_run_since(run.id, stage_started_at)
@@ -300,12 +248,13 @@ defmodule Liteskill.Runs.Runner do
           "usage" => format_stage_usage(stage_usage)
         })
 
-        %{
-          handoff
-          | prior_outputs:
-              handoff.prior_outputs ++
-                [%{agent: agent.name, role: role, output: handoff_summary}]
-        }
+        {:ok,
+         %{
+           handoff
+           | prior_outputs:
+               handoff.prior_outputs ++
+                 [%{agent: agent.name, role: role, output: handoff_summary}]
+         }}
 
       {:error, reason, messages} ->
         duration_ms = System.monotonic_time(:millisecond) - start_time
@@ -323,7 +272,7 @@ defmodule Liteskill.Runs.Runner do
           "messages" => messages
         })
 
-        raise reason
+        {:error, reason}
     end
   end
 
@@ -361,6 +310,7 @@ defmodule Liteskill.Runs.Runner do
       tool_servers: tool_servers,
       user_id: user_id,
       run_id: run_id,
+      cost_limit: Keyword.get(context, :cost_limit),
       config: agent.config || %{},
       prompt: handoff.prompt,
       prior_context: format_prior_context(handoff.prior_outputs),
@@ -394,26 +344,21 @@ defmodule Liteskill.Runs.Runner do
     end
   end
 
+  defp cost_limit_exceeded?(%{cost_limit: nil}), do: false
+
+  defp cost_limit_exceeded?(%{cost_limit: cost_limit, id: run_id}) do
+    case Liteskill.Usage.check_cost_limit(:run, run_id, cost_limit) do
+      :ok -> false
+      {:error, :cost_limit_exceeded, _} -> true
+    end
+  end
+
   defp format_prior_context([]), do: ""
 
   defp format_prior_context(outputs) do
     Enum.map_join(outputs, "\n\n", fn %{agent: name, role: role, output: summary} ->
       "--- #{name} (#{role}) ---\n#{summary}"
     end)
-  end
-
-  # Report building helpers
-  defp section(path, content), do: %{"action" => "upsert", "path" => path, "content" => content}
-
-  defp write_sections(report_id, sections, context) do
-    case ReportsTools.call_tool(
-           "reports__modify_sections",
-           %{"report_id" => report_id, "actions" => sections},
-           context
-         ) do
-      {:ok, %{"content" => _}} -> :ok
-      error -> error
-    end
   end
 
   defp complete_task(task, :ok, duration_ms, summary) do
@@ -471,77 +416,6 @@ defmodule Liteskill.Runs.Runner do
             []
         end
     end
-  end
-
-  defp build_report_title(run, agents) do
-    agent_names = Enum.map_join(agents, ", ", fn {agent, _} -> agent.name end)
-    "#{run.name} — #{agent_names}"
-  end
-
-  defp overview_content(run, agents) do
-    agent_list =
-      agents
-      |> Enum.with_index(1)
-      |> Enum.map_join("\n", fn {{agent, member}, idx} ->
-        role = member.role || "worker"
-        "#{idx}. **#{agent.name}** — #{role} (#{agent.strategy})"
-      end)
-
-    "**Prompt:** #{run.prompt}\n\n" <>
-      "**Topology:** #{run.topology}\n\n" <>
-      "**Pipeline Stages:**\n#{agent_list}\n\n" <>
-      "**Execution:** Sequential pipeline — each agent processes in order, " <>
-      "passing context forward to the next stage."
-  end
-
-  defp synthesis_content(run, agents, final_context) do
-    stage_summary =
-      final_context.prior_outputs
-      |> Enum.with_index(1)
-      |> Enum.map_join("\n", fn {%{agent: name, role: role}, idx} ->
-        "#{idx}. **#{name}** (#{role}) — completed successfully"
-      end)
-
-    "## Pipeline Execution Summary\n\n" <>
-      "The run **#{run.name}** was executed through a " <>
-      "**#{length(agents)}-stage pipeline**.\n\n" <>
-      "**Stages completed:**\n#{stage_summary}\n\n" <>
-      "All #{length(agents)} agents processed the prompt sequentially, " <>
-      "each building on the outputs of prior stages."
-  end
-
-  defp conclusion_content(run, agents) do
-    "Run **#{run.name}** completed successfully through a " <>
-      "**#{length(agents)}-agent pipeline**. " <>
-      "Each agent contributed their specialized analysis, " <>
-      "producing a comprehensive deliverable. " <>
-      "This report was generated automatically by the Agent Studio runner."
-  end
-
-  defp agent_config_content(agent) do
-    lines = [
-      "- **Name:** #{agent.name}",
-      "- **Strategy:** #{agent.strategy}",
-      "- **Status:** #{agent.status}"
-    ]
-
-    lines = lines ++ ["- **Model:** #{agent.llm_model.name}"]
-
-    lines =
-      lines ++
-        if(agent.system_prompt && agent.system_prompt != "",
-          do: ["\n**System Prompt:**\n```\n#{agent.system_prompt}\n```"],
-          else: []
-        )
-
-    lines =
-      lines ++
-        if(agent.backstory,
-          do: ["\n**Backstory:** #{agent.backstory}"],
-          else: []
-        )
-
-    Enum.join(lines, "\n")
   end
 
   defp safe_fail_run(run_id, user_id, step, error_message) do

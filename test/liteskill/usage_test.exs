@@ -798,4 +798,73 @@ defmodule Liteskill.UsageTest do
       assert Usage.embedding_by_user(from: future) == []
     end
   end
+
+  describe "check_cost_limit/3" do
+    test "returns :ok when cost_limit is nil", %{user: user, conversation: conv} do
+      assert :ok = Usage.check_cost_limit(:conversation, conv.id, nil)
+      assert :ok = Usage.check_cost_limit(:run, Ecto.UUID.generate(), nil)
+
+      # Even with usage recorded, nil limit always passes
+      Usage.record_usage(valid_attrs(user, conv))
+      assert :ok = Usage.check_cost_limit(:conversation, conv.id, nil)
+    end
+
+    test "returns :ok when conversation cost is under limit", %{user: user, conversation: conv} do
+      Usage.record_usage(valid_attrs(user, conv, %{total_cost: Decimal.new("0.50")}))
+      assert :ok = Usage.check_cost_limit(:conversation, conv.id, Decimal.new("1.00"))
+    end
+
+    test "returns :ok when cost is exactly at limit", %{user: user, conversation: conv} do
+      Usage.record_usage(valid_attrs(user, conv, %{total_cost: Decimal.new("1.00")}))
+      assert :ok = Usage.check_cost_limit(:conversation, conv.id, Decimal.new("1.00"))
+    end
+
+    test "returns error when conversation cost exceeds limit", %{
+      user: user,
+      conversation: conv
+    } do
+      Usage.record_usage(valid_attrs(user, conv, %{total_cost: Decimal.new("1.50")}))
+
+      assert {:error, :cost_limit_exceeded, current} =
+               Usage.check_cost_limit(:conversation, conv.id, Decimal.new("1.00"))
+
+      assert Decimal.compare(current, Decimal.new("1.50")) == :eq
+    end
+
+    test "returns :ok for conversation with no usage", %{conversation: conv} do
+      assert :ok = Usage.check_cost_limit(:conversation, conv.id, Decimal.new("1.00"))
+    end
+
+    test "works with :run type", %{user: user, conversation: conv} do
+      {:ok, run} =
+        Liteskill.Runs.create_run(%{
+          name: "Cost check run",
+          prompt: "test",
+          topology: "pipeline",
+          user_id: user.id
+        })
+
+      {:ok, _} =
+        Usage.record_usage(
+          valid_attrs(user, conv, %{run_id: run.id, total_cost: Decimal.new("2.00")})
+        )
+
+      assert {:error, :cost_limit_exceeded, _} =
+               Usage.check_cost_limit(:run, run.id, Decimal.new("1.00"))
+
+      assert :ok = Usage.check_cost_limit(:run, run.id, Decimal.new("5.00"))
+    end
+
+    test "returns :ok for run with no usage", %{user: user} do
+      {:ok, run} =
+        Liteskill.Runs.create_run(%{
+          name: "Empty run",
+          prompt: "test",
+          topology: "pipeline",
+          user_id: user.id
+        })
+
+      assert :ok = Usage.check_cost_limit(:run, run.id, Decimal.new("1.00"))
+    end
+  end
 end

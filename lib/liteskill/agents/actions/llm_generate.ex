@@ -179,13 +179,38 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
   defp llm_call_loop(llm_model, system_prompt, llm_context, state, round) do
     max_iter = get_in(state, [:config, "max_iterations"]) || @default_max_iterations
 
-    if round >= max_iter do
-      Logger.warning("LlmGenerate: #{state[:agent_name]} hit max iterations (#{max_iter})")
+    cond do
+      round >= max_iter ->
+        Logger.warning("LlmGenerate: #{state[:agent_name]} hit max iterations (#{max_iter})")
 
-      last_text = extract_last_assistant_text(llm_context)
-      {:ok, last_text <> "\n\n[Max iterations (#{max_iter}) reached]", llm_context}
+        last_text = extract_last_assistant_text(llm_context)
+        {:ok, last_text <> "\n\n[Max iterations (#{max_iter}) reached]", llm_context}
+
+      cost_limit_exceeded?(state) ->
+        cost_limit = state[:cost_limit]
+
+        Logger.warning("LlmGenerate: #{state[:agent_name]} hit cost limit ($#{cost_limit})")
+
+        last_text = extract_last_assistant_text(llm_context)
+
+        {:ok, last_text <> "\n\n[Cost limit of $#{cost_limit} reached]", llm_context}
+
+      true ->
+        do_llm_call(llm_model, system_prompt, llm_context, state, round)
+    end
+  end
+
+  defp cost_limit_exceeded?(state) do
+    cost_limit = state[:cost_limit]
+    run_id = state[:run_id]
+
+    if cost_limit && run_id do
+      case Liteskill.Usage.check_cost_limit(:run, run_id, cost_limit) do
+        :ok -> false
+        {:error, :cost_limit_exceeded, _} -> true
+      end
     else
-      do_llm_call(llm_model, system_prompt, llm_context, state, round)
+      false
     end
   end
 
@@ -434,9 +459,17 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
                       case tc["function"]["arguments"] do
                         a when is_binary(a) ->
                           case Jason.decode(a) do
-                            {:ok, decoded} -> decoded
-                            # coveralls-ignore-next-line
-                            {:error, _} -> %{}
+                            {:ok, decoded} ->
+                              decoded
+
+                            # coveralls-ignore-start
+                            {:error, err} ->
+                              Logger.warning(
+                                "Failed to decode tool call arguments during deserialization: #{inspect(err)}, raw: #{inspect(a)}"
+                              )
+
+                              %{}
+                              # coveralls-ignore-stop
                           end
 
                         # coveralls-ignore-start

@@ -26,6 +26,7 @@ defmodule Liteskill.Runs.Run do
     field :error, :string
     field :timeout_ms, :integer, default: 1_800_000
     field :max_iterations, :integer, default: 50
+    field :cost_limit, :decimal
     field :started_at, :utc_datetime
     field :completed_at, :utc_datetime
 
@@ -53,6 +54,7 @@ defmodule Liteskill.Runs.Run do
       :error,
       :timeout_ms,
       :max_iterations,
+      :cost_limit,
       :started_at,
       :completed_at,
       :team_definition_id,

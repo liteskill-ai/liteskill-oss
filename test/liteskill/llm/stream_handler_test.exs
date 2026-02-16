@@ -1298,4 +1298,182 @@ defmodule Liteskill.LLM.StreamHandlerTest do
       assert length(ctx.messages) == 1
     end
   end
+
+  describe "cost limit guardrail" do
+    test "blocks stream when conversation cost exceeds limit", %{
+      user: user,
+      conversation: conv
+    } do
+      # Record usage that exceeds $1 limit
+      Liteskill.Usage.record_usage(%{
+        user_id: user.id,
+        conversation_id: conv.id,
+        model_id: "test-model",
+        input_tokens: 100,
+        output_tokens: 50,
+        total_tokens: 150,
+        input_cost: Decimal.new("0.80"),
+        output_cost: Decimal.new("0.30"),
+        total_cost: Decimal.new("1.10"),
+        latency_ms: 100,
+        call_type: "stream",
+        tool_round: 0
+      })
+
+      result =
+        StreamHandler.handle_stream(
+          conv.stream_id,
+          [%{role: :user, content: "test"}],
+          model_id: "test-model",
+          stream_fn: text_stream_fn("Should not appear"),
+          cost_limit: Decimal.new("1.00"),
+          conversation_id: conv.id
+        )
+
+      assert {:error, {"cost_limit", msg}} = result
+      assert msg =~ "Cost limit of $1"
+      assert msg =~ "spent"
+    end
+
+    test "allows stream when cost is under limit", %{user: user, conversation: conv} do
+      # Record small usage
+      Liteskill.Usage.record_usage(%{
+        user_id: user.id,
+        conversation_id: conv.id,
+        model_id: "test-model",
+        input_tokens: 10,
+        output_tokens: 5,
+        total_tokens: 15,
+        input_cost: Decimal.new("0.001"),
+        output_cost: Decimal.new("0.001"),
+        total_cost: Decimal.new("0.002"),
+        latency_ms: 100,
+        call_type: "stream",
+        tool_round: 0
+      })
+
+      assert :ok =
+               StreamHandler.handle_stream(
+                 conv.stream_id,
+                 [%{role: :user, content: "test"}],
+                 model_id: "test-model",
+                 stream_fn: text_stream_fn("Hello!"),
+                 cost_limit: Decimal.new("10.00"),
+                 conversation_id: conv.id
+               )
+    end
+
+    test "skips cost check when cost_limit is nil", %{conversation: conv} do
+      assert :ok =
+               StreamHandler.handle_stream(
+                 conv.stream_id,
+                 [%{role: :user, content: "test"}],
+                 model_id: "test-model",
+                 stream_fn: text_stream_fn("Hello!"),
+                 cost_limit: nil,
+                 conversation_id: conv.id
+               )
+    end
+
+    test "skips cost check when conversation_id is nil", %{conversation: conv} do
+      assert :ok =
+               StreamHandler.handle_stream(
+                 conv.stream_id,
+                 [%{role: :user, content: "test"}],
+                 model_id: "test-model",
+                 stream_fn: text_stream_fn("Hello!"),
+                 cost_limit: Decimal.new("1.00")
+               )
+    end
+
+    test "checks cost limit between tool-call rounds and continues when under limit", %{
+      user: user,
+      conversation: conv
+    } do
+      on_exit(fn -> Process.delete(:stream_fn_round) end)
+
+      tool_use_id = "toolu_#{System.unique_integer([:positive])}"
+      tool_calls = [%{tool_use_id: tool_use_id, name: "search", input: %{"q" => "test"}}]
+      tools = [%{"toolSpec" => %{"name" => "search", "description" => "Search"}}]
+
+      assert :ok =
+               StreamHandler.handle_stream(
+                 conv.stream_id,
+                 [%{role: :user, content: "test"}],
+                 model_id: "test-model",
+                 stream_fn: tool_call_stream_fn("Searching.", tool_calls),
+                 tools: tools,
+                 tool_servers: %{"search" => %{builtin: Liteskill.LLM.FakeToolServer}},
+                 auto_confirm: true,
+                 cost_limit: Decimal.new("100.00"),
+                 conversation_id: conv.id,
+                 user_id: user.id
+               )
+
+      events = Store.read_stream_forward(conv.stream_id)
+      event_types = Enum.map(events, & &1.event_type)
+      assert "ToolCallCompleted" in event_types
+      assert Enum.count(event_types, &(&1 == "AssistantStreamCompleted")) == 2
+    end
+
+    test "stops tool-call loop when cost limit exceeded between rounds", %{
+      user: user,
+      conversation: conv
+    } do
+      on_exit(fn -> Process.delete(:stream_fn_round) end)
+
+      tool_use_id = "toolu_#{System.unique_integer([:positive])}"
+      tool_calls = [%{tool_use_id: tool_use_id, name: "search", input: %{"q" => "test"}}]
+      tools = [%{"toolSpec" => %{"name" => "search", "description" => "Search"}}]
+
+      # First round returns tool calls + usage that will exceed the $0.0001 limit.
+      # The initial cost check passes ($0 spent), but after the first round records
+      # usage via complete_stream_with_stop_reason → maybe_record_usage, the
+      # between-rounds check catches the exceeded limit.
+      usage = %{
+        input_tokens: 1_000_000,
+        output_tokens: 500_000,
+        total_tokens: 1_500_000,
+        input_cost: 1.0,
+        output_cost: 1.0,
+        total_cost: 2.0
+      }
+
+      stream_fn = fn _model_id, _messages, on_chunk, _opts ->
+        round = Process.get(:stream_fn_round, 0)
+        Process.put(:stream_fn_round, round + 1)
+
+        if round == 0 do
+          on_chunk.("Searching.")
+          {:ok, "Searching.", tool_calls, usage}
+        else
+          on_chunk.("Done.")
+          {:ok, "Done.", []}
+        end
+      end
+
+      llm_model = %Liteskill.LlmModels.LlmModel{
+        model_id: "test-model",
+        provider: %Liteskill.LlmProviders.LlmProvider{
+          provider_type: "anthropic",
+          api_key: "test-key",
+          provider_config: %{}
+        }
+      }
+
+      assert :cost_limit_exceeded =
+               StreamHandler.handle_stream(
+                 conv.stream_id,
+                 [%{role: :user, content: "test"}],
+                 llm_model: llm_model,
+                 stream_fn: stream_fn,
+                 tools: tools,
+                 tool_servers: %{"search" => %{builtin: Liteskill.LLM.FakeToolServer}},
+                 auto_confirm: true,
+                 cost_limit: Decimal.new("0.0001"),
+                 conversation_id: conv.id,
+                 user_id: user.id
+               )
+    end
+  end
 end

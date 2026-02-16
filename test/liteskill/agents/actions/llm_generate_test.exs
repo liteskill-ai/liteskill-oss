@@ -1183,4 +1183,131 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
       end
     end
   end
+
+  describe "run/2 — cost limit" do
+    test "stops when run cost exceeds limit", %{model: model} do
+      stub_llm_response("first round")
+
+      {:ok, owner} =
+        Liteskill.Accounts.find_or_create_from_oidc(%{
+          email: "costlimit-#{System.unique_integer([:positive])}@example.com",
+          name: "Cost Limit User",
+          oidc_sub: "costlimit-#{System.unique_integer([:positive])}",
+          oidc_issuer: "https://test.example.com"
+        })
+
+      {:ok, run} =
+        Liteskill.Runs.create_run(%{
+          name: "Cost Test",
+          prompt: "test",
+          topology: "pipeline",
+          user_id: owner.id,
+          cost_limit: Decimal.new("0.01")
+        })
+
+      # Record usage that exceeds the $0.01 limit
+      Liteskill.Usage.record_usage(%{
+        user_id: owner.id,
+        run_id: run.id,
+        model_id: "claude-3-5-sonnet-20241022",
+        input_tokens: 1000,
+        output_tokens: 500,
+        total_tokens: 1500,
+        input_cost: Decimal.new("0.50"),
+        output_cost: Decimal.new("0.50"),
+        total_cost: Decimal.new("1.00"),
+        latency_ms: 100,
+        call_type: "complete",
+        tool_round: 0
+      })
+
+      context =
+        make_context(%{
+          agent_name: "CostAgent",
+          system_prompt: "",
+          backstory: "",
+          opinions: %{},
+          role: "worker",
+          strategy: "direct",
+          llm_model: LlmModels.get_model!(model.id),
+          tools: [],
+          tool_servers: %{},
+          user_id: owner.id,
+          prompt: "should not reach LLM",
+          prior_context: "",
+          run_id: run.id,
+          cost_limit: Decimal.new("0.01")
+        })
+
+      assert {:ok, result} = LlmGenerate.run(%{}, context)
+      assert result.output =~ "Cost limit of $0.01 reached"
+    end
+
+    test "proceeds when cost is under limit", %{model: model} do
+      stub_llm_response("completed successfully")
+
+      {:ok, owner} =
+        Liteskill.Accounts.find_or_create_from_oidc(%{
+          email: "costok-#{System.unique_integer([:positive])}@example.com",
+          name: "Cost OK User",
+          oidc_sub: "costok-#{System.unique_integer([:positive])}",
+          oidc_issuer: "https://test.example.com"
+        })
+
+      {:ok, run} =
+        Liteskill.Runs.create_run(%{
+          name: "Cost OK Test",
+          prompt: "test",
+          topology: "pipeline",
+          user_id: owner.id,
+          cost_limit: Decimal.new("10.00")
+        })
+
+      context =
+        make_context(%{
+          agent_name: "CostOKAgent",
+          system_prompt: "",
+          backstory: "",
+          opinions: %{},
+          role: "worker",
+          strategy: "direct",
+          llm_model: LlmModels.get_model!(model.id),
+          tools: [],
+          tool_servers: %{},
+          user_id: owner.id,
+          prompt: "test",
+          prior_context: "",
+          run_id: run.id,
+          cost_limit: Decimal.new("10.00")
+        })
+
+      assert {:ok, result} = LlmGenerate.run(%{}, context)
+      assert result.output == "completed successfully"
+      refute result.output =~ "Cost limit"
+    end
+
+    test "skips cost check when cost_limit is nil", %{model: model} do
+      stub_llm_response("no limit")
+
+      context =
+        make_context(%{
+          agent_name: "NoLimitAgent",
+          system_prompt: "",
+          backstory: "",
+          opinions: %{},
+          role: "worker",
+          strategy: "direct",
+          llm_model: LlmModels.get_model!(model.id),
+          tools: [],
+          tool_servers: %{},
+          user_id: nil,
+          prompt: "test",
+          prior_context: "",
+          cost_limit: nil
+        })
+
+      assert {:ok, result} = LlmGenerate.run(%{}, context)
+      assert result.output == "no limit"
+    end
+  end
 end

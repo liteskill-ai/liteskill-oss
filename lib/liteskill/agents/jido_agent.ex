@@ -22,6 +22,7 @@ defmodule Liteskill.Agents.JidoAgent do
       tool_servers: [type: :any, default: %{}],
       user_id: [type: :any, default: nil],
       run_id: [type: :any, default: nil],
+      cost_limit: [type: :any, default: nil],
       config: [type: :any, default: %{}],
       prompt: [type: :string, default: ""],
       prior_context: [type: :string, default: ""],

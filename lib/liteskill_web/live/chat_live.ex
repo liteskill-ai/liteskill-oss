@@ -133,6 +133,11 @@ defmodule LiteskillWeb.ChatLive do
        # LLM model selection
        available_llm_models: available_llm_models,
        selected_llm_model_id: selected_llm_model_id,
+       # Cost guardrail
+       cost_limit: nil,
+       cost_limit_input: "",
+       cost_limit_tokens: nil,
+       show_cost_popover: false,
        # Conversation usage modal
        show_usage_modal: false,
        usage_modal_data: nil,
@@ -1887,6 +1892,12 @@ defmodule LiteskillWeb.ChatLive do
                       <.icon name="hero-bars-3-micro" class="size-5" />
                     </button>
                     <h1 class="text-lg font-semibold truncate flex-1">{@conversation.title}</h1>
+                    <.cost_limit_button
+                      cost_limit={@cost_limit}
+                      cost_limit_input={@cost_limit_input}
+                      cost_limit_tokens={@cost_limit_tokens}
+                      show_cost_popover={@show_cost_popover}
+                    />
                     <button
                       phx-click="show_usage_modal"
                       class="btn btn-ghost btn-sm btn-square"
@@ -2060,12 +2071,19 @@ defmodule LiteskillWeb.ChatLive do
                     <.icon name="hero-paper-airplane-micro" class="size-5" />
                   </button>
                 </.form>
-                <.model_picker
-                  id="model-picker-new"
-                  class="mt-2"
-                  available_llm_models={@available_llm_models}
-                  selected_llm_model_id={@selected_llm_model_id}
-                />
+                <div class="flex items-center justify-center gap-2 mt-2">
+                  <.model_picker
+                    id="model-picker-new"
+                    available_llm_models={@available_llm_models}
+                    selected_llm_model_id={@selected_llm_model_id}
+                  />
+                  <.cost_limit_button
+                    cost_limit={@cost_limit}
+                    cost_limit_input={@cost_limit_input}
+                    cost_limit_tokens={@cost_limit_tokens}
+                    show_cost_popover={@show_cost_popover}
+                  />
+                </div>
                 <p
                   :if={@available_llm_models == []}
                   class="text-sm text-warning mt-2 px-1"
@@ -2989,7 +3007,94 @@ defmodule LiteskillWeb.ChatLive do
   def handle_event("select_llm_model", %{"model_id" => id}, socket) do
     user = socket.assigns.current_user
     Liteskill.Accounts.update_preferences(user, %{"preferred_llm_model_id" => id})
-    {:noreply, assign(socket, selected_llm_model_id: id)}
+
+    # Keep cost fixed, recalculate tokens for new model
+    tokens =
+      if socket.assigns.cost_limit do
+        estimate_tokens(socket.assigns.cost_limit, id, socket.assigns.available_llm_models)
+      end
+
+    {:noreply, assign(socket, selected_llm_model_id: id, cost_limit_tokens: tokens)}
+  end
+
+  @impl true
+  def handle_event("toggle_cost_popover", _params, socket) do
+    {:noreply, assign(socket, show_cost_popover: !socket.assigns.show_cost_popover)}
+  end
+
+  @impl true
+  def handle_event("update_cost_limit", %{"cost" => ""}, socket) do
+    {:noreply, assign(socket, cost_limit: nil, cost_limit_input: "", cost_limit_tokens: nil)}
+  end
+
+  def handle_event("update_cost_limit", %{"cost" => cost_str} = params, socket) do
+    if params["_target"] == ["cost"] do
+      case Decimal.parse(cost_str) do
+        {cost, _} ->
+          tokens =
+            estimate_tokens(
+              cost,
+              socket.assigns.selected_llm_model_id,
+              socket.assigns.available_llm_models
+            )
+
+          {:noreply,
+           assign(socket,
+             cost_limit: cost,
+             cost_limit_input: cost_str,
+             cost_limit_tokens: tokens
+           )}
+
+        :error ->
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("update_cost_limit", %{"tokens" => ""}, socket) do
+    {:noreply, assign(socket, cost_limit: nil, cost_limit_input: "", cost_limit_tokens: nil)}
+  end
+
+  def handle_event("update_cost_limit", %{"tokens" => tokens_str} = params, socket) do
+    if params["_target"] == ["tokens"] do
+      case Integer.parse(tokens_str) do
+        {tokens, _} when tokens > 0 ->
+          cost =
+            estimate_cost(
+              tokens,
+              socket.assigns.selected_llm_model_id,
+              socket.assigns.available_llm_models
+            )
+
+          input_str = if cost, do: Decimal.to_string(Decimal.round(cost, 4)), else: ""
+
+          {:noreply,
+           assign(socket,
+             cost_limit: cost,
+             cost_limit_input: input_str,
+             cost_limit_tokens: tokens
+           )}
+
+        _ ->
+          {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("clear_cost_limit", _params, socket) do
+    {:noreply,
+     assign(socket,
+       cost_limit: nil,
+       cost_limit_input: "",
+       cost_limit_tokens: nil,
+       show_cost_popover: false
+     )}
   end
 
   @impl true
@@ -3710,7 +3815,7 @@ defmodule LiteskillWeb.ChatLive do
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   attr :id, :string, required: true
-  attr :class, :string, default: "mt-1"
+  attr :class, :string, default: ""
   attr :available_llm_models, :list, required: true
   attr :selected_llm_model_id, :string, default: nil
 
@@ -3731,6 +3836,79 @@ defmodule LiteskillWeb.ChatLive do
           <% end %>
         </select>
       </form>
+    </div>
+    """
+  end
+
+  attr :cost_limit, :any, default: nil
+  attr :cost_limit_input, :string, default: ""
+  attr :cost_limit_tokens, :any, default: nil
+  attr :show_cost_popover, :boolean, default: false
+
+  defp cost_limit_button(assigns) do
+    ~H"""
+    <div class="relative">
+      <button
+        type="button"
+        phx-click="toggle_cost_popover"
+        class={[
+          "btn btn-ghost btn-sm btn-square",
+          if(@cost_limit, do: "text-warning", else: "text-base-content/50")
+        ]}
+        title={if @cost_limit, do: "Cost limit: $#{@cost_limit_input}", else: "Set cost limit"}
+      >
+        <.icon name="hero-currency-dollar-micro" class="size-4" />
+      </button>
+      <div
+        :if={@show_cost_popover}
+        class="absolute top-full right-0 mt-1 z-50"
+        phx-click-away="toggle_cost_popover"
+      >
+        <div class="card bg-base-100 shadow-xl border border-base-300 p-3 w-56">
+          <h4 class="text-xs font-semibold mb-2">Cost Guardrail</h4>
+          <span :if={@cost_limit} class="badge badge-warning badge-sm mb-2">
+            ${@cost_limit_input}
+            <span :if={@cost_limit_tokens} class="ml-1 opacity-70">
+              (~{@cost_limit_tokens} tokens)
+            </span>
+          </span>
+          <form phx-change="update_cost_limit">
+            <div class="flex gap-2">
+              <div class="form-control flex-1">
+                <label class="text-xs text-base-content/60 mb-0.5">Cost ($)</label>
+                <input
+                  name="cost"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={@cost_limit_input}
+                  class="input input-xs input-bordered w-full"
+                  placeholder="0.50"
+                />
+              </div>
+              <div class="form-control flex-1">
+                <label class="text-xs text-base-content/60 mb-0.5">Tokens</label>
+                <input
+                  name="tokens"
+                  type="number"
+                  step="1000"
+                  min="0"
+                  value={@cost_limit_tokens}
+                  class="input input-xs input-bordered w-full"
+                  placeholder="—"
+                />
+              </div>
+            </div>
+          </form>
+          <button
+            type="button"
+            phx-click="clear_cost_limit"
+            class="btn btn-ghost btn-xs mt-2 w-full text-base-content/50"
+          >
+            No limit
+          </button>
+        </div>
+      </div>
     </div>
     """
   end
@@ -3824,6 +4002,38 @@ defmodule LiteskillWeb.ChatLive do
 
   defp handle_event_store_event(_event, socket), do: socket
 
+  # --- Cost guardrail helpers ---
+
+  defp estimate_tokens(cost_decimal, model_id, models) do
+    zero = Decimal.new(0)
+
+    case Enum.find(models, &(&1.id == model_id)) do
+      %{input_cost_per_million: rate} when not is_nil(rate) ->
+        if Decimal.compare(rate, zero) != :eq do
+          cost_decimal
+          |> Decimal.div(rate)
+          |> Decimal.mult(1_000_000)
+          |> Decimal.round(0)
+          |> Decimal.to_integer()
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp estimate_cost(tokens, model_id, models) do
+    case Enum.find(models, &(&1.id == model_id)) do
+      %{input_cost_per_million: rate} when not is_nil(rate) ->
+        Decimal.new(tokens)
+        |> Decimal.mult(rate)
+        |> Decimal.div(1_000_000)
+
+      _ ->
+        nil
+    end
+  end
+
   # --- Helpers ---
 
   defp trigger_llm_stream(conversation, user_id, socket, tool_config) do
@@ -3868,6 +4078,14 @@ defmodule LiteskillWeb.ChatLive do
 
     # Always pass user_id and conversation_id for usage tracking
     opts = [{:user_id, user_id}, {:conversation_id, conversation.id} | opts]
+
+    # Cost guardrail
+    opts =
+      if socket.assigns.cost_limit do
+        [{:cost_limit, socket.assigns.cost_limit} | opts]
+      else
+        opts
+      end
 
     # Add tool options if tools are selected
     opts = opts ++ tool_opts

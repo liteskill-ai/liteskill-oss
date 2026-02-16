@@ -805,7 +805,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-3 gap-4">
         <div>
           <label class="label"><span class="label-text font-medium">Timeout (ms)</span></label>
           <input
@@ -825,6 +825,23 @@ defmodule LiteskillWeb.AgentStudioComponents do
             class="input input-bordered w-full"
             min="1"
           />
+        </div>
+        <div>
+          <label class="label"><span class="label-text font-medium">Cost Limit ($)</span></label>
+          <input
+            type="number"
+            name={@form[:cost_limit].name}
+            value={@form[:cost_limit].value}
+            class="input input-bordered w-full"
+            step="0.10"
+            min="0"
+            placeholder="1.00"
+          />
+          <label class="label">
+            <span class="label-text-alt text-base-content/50">
+              Leave empty for no limit
+            </span>
+          </label>
         </div>
       </div>
     </div>
@@ -1407,6 +1424,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
           <button
             phx-click="retry_run"
             phx-value-id={@run.id}
+            phx-disable-with="Retrying…"
             class="btn btn-primary btn-sm"
           >
             <.icon name="hero-arrow-path-micro" class="size-4" /> Retry

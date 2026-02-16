@@ -104,7 +104,8 @@ defmodule LiteskillWeb.AgentStudioLive do
           "topology" => "pipeline",
           "team_definition_id" => "",
           "timeout_ms" => "1800000",
-          "max_iterations" => "50"
+          "max_iterations" => "50",
+          "cost_limit" => ""
         },
         data
       ),
@@ -661,7 +662,12 @@ defmodule LiteskillWeb.AgentStudioLive do
   def handle_studio_event("save_run", %{"run" => params}, socket) do
     user_id = socket.assigns.current_user.id
 
-    case Runs.create_run(Map.put(params, "user_id", user_id)) do
+    params =
+      params
+      |> Map.put("user_id", user_id)
+      |> parse_cost_limit_param()
+
+    case Runs.create_run(params) do
       {:ok, run} ->
         {:noreply,
          socket
@@ -708,6 +714,7 @@ defmodule LiteskillWeb.AgentStudioLive do
              team_definition_id: original.team_definition_id,
              timeout_ms: original.timeout_ms,
              max_iterations: original.max_iterations,
+             cost_limit: original.cost_limit,
              user_id: user_id
            }) do
       Task.Supervisor.start_child(Liteskill.TaskSupervisor, fn ->
@@ -872,6 +879,18 @@ defmodule LiteskillWeb.AgentStudioLive do
   end
 
   defp decode_opinions(params), do: params
+
+  defp parse_cost_limit_param(%{"cost_limit" => ""} = params),
+    do: Map.delete(params, "cost_limit")
+
+  defp parse_cost_limit_param(%{"cost_limit" => val} = params) when is_binary(val) do
+    case Decimal.parse(val) do
+      {d, ""} -> %{params | "cost_limit" => d}
+      _ -> Map.delete(params, "cost_limit")
+    end
+  end
+
+  defp parse_cost_limit_param(params), do: params
 
   defp format_errors(%Ecto.Changeset{} = changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->

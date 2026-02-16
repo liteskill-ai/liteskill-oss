@@ -577,6 +577,35 @@ defmodule LiteskillWeb.AdminLive do
 
       <div class="card bg-base-100 shadow">
         <div class="card-body">
+          <h2 class="card-title mb-4">Cost Guardrails</h2>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="font-medium">Default MCP Run Cost Limit</p>
+              <p class="text-sm text-base-content/60">
+                Maximum cost (USD) for agent runs started via MCP tools.
+                Users cannot exceed this limit.
+              </p>
+            </div>
+            <form phx-change="update_mcp_cost_limit" class="flex items-center gap-1">
+              <span class="text-sm text-base-content/60">$</span>
+              <input
+                type="number"
+                name="cost_limit"
+                step="0.10"
+                min="0.10"
+                value={
+                  @server_settings && @server_settings.default_mcp_run_cost_limit &&
+                    Decimal.to_string(@server_settings.default_mcp_run_cost_limit)
+                }
+                class="input input-bordered input-sm w-24"
+              />
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
           <h2 class="card-title mb-4">Database</h2>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <.info_row label="Host" value={to_string(@repo_config[:hostname] || "—")} />
@@ -2775,6 +2804,25 @@ defmodule LiteskillWeb.AdminLive do
 
         {:error, _} ->
           {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to toggle registration")}
+      end
+    end)
+  end
+
+  def handle_event("update_mcp_cost_limit", %{"cost_limit" => val}, socket) do
+    require_admin(socket, fn ->
+      case parse_decimal(val) do
+        nil ->
+          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Invalid cost limit")}
+
+        cost_limit ->
+          case Settings.update(%{default_mcp_run_cost_limit: cost_limit}) do
+            {:ok, settings} ->
+              {:noreply, Phoenix.Component.assign(socket, server_settings: settings)}
+
+            {:error, _} ->
+              {:noreply,
+               Phoenix.LiveView.put_flash(socket, :error, "Failed to update cost limit")}
+          end
       end
     end)
   end

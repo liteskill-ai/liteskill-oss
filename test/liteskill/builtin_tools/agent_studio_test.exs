@@ -761,6 +761,64 @@ defmodule Liteskill.BuiltinTools.AgentStudioTest do
     end
   end
 
+  describe "start_run cost_limit" do
+    test "defaults cost_limit to admin-configured value", %{user: user} do
+      ctx = [user_id: user.id]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__start_run",
+                 %{"prompt" => "Test with default cost limit"},
+                 ctx
+               )
+
+      data = decode_content(result)
+      run_id = data["id"]
+      Process.sleep(50)
+
+      {:ok, run} = Liteskill.Runs.get_run(run_id, user.id)
+      admin_default = Liteskill.Settings.get_default_mcp_run_cost_limit()
+      assert Decimal.compare(run.cost_limit, admin_default) == :eq
+    end
+
+    test "caps cost_limit to admin max when requested higher", %{user: user} do
+      ctx = [user_id: user.id]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__start_run",
+                 %{"prompt" => "Expensive run", "cost_limit" => 9999.0},
+                 ctx
+               )
+
+      data = decode_content(result)
+      run_id = data["id"]
+      Process.sleep(50)
+
+      {:ok, run} = Liteskill.Runs.get_run(run_id, user.id)
+      admin_default = Liteskill.Settings.get_default_mcp_run_cost_limit()
+      assert Decimal.compare(run.cost_limit, admin_default) == :eq
+    end
+
+    test "uses requested cost_limit when under admin max", %{user: user} do
+      ctx = [user_id: user.id]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__start_run",
+                 %{"prompt" => "Cheap run", "cost_limit" => 0.25},
+                 ctx
+               )
+
+      data = decode_content(result)
+      run_id = data["id"]
+      Process.sleep(50)
+
+      {:ok, run} = Liteskill.Runs.get_run(run_id, user.id)
+      assert Decimal.compare(run.cost_limit, Decimal.new("0.25")) == :eq
+    end
+  end
+
   defp decode_content(%{"content" => [%{"text" => json}]}) do
     Jason.decode!(json)
   end

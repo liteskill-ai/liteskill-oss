@@ -409,6 +409,35 @@ defmodule Liteskill.Usage do
   end
 
   @doc """
+  Checks if accumulated cost exceeds the given limit.
+
+  Returns `:ok` when under or at the limit, or
+  `{:error, :cost_limit_exceeded, current_cost}` when exceeded.
+  Always returns `:ok` when `cost_limit` is `nil`.
+  """
+  def check_cost_limit(_type, _entity_id, nil), do: :ok
+
+  def check_cost_limit(:conversation, conversation_id, cost_limit) do
+    usage = usage_by_conversation(conversation_id)
+    do_check_cost(usage, cost_limit)
+  end
+
+  def check_cost_limit(:run, run_id, cost_limit) do
+    usage = usage_by_run(run_id)
+    do_check_cost(usage, cost_limit)
+  end
+
+  defp do_check_cost(usage, cost_limit) do
+    current = usage.total_cost || Decimal.new(0)
+
+    if Decimal.compare(current, cost_limit) in [:lt, :eq] do
+      :ok
+    else
+      {:error, :cost_limit_exceeded, current}
+    end
+  end
+
+  @doc """
   Returns instance-wide usage totals.
 
   ## Options

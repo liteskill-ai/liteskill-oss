@@ -35,6 +35,10 @@ defmodule Liteskill.Settings do
     get().embedding_model_id != nil
   end
 
+  def get_default_mcp_run_cost_limit do
+    get().default_mcp_run_cost_limit || Decimal.new("1.0")
+  end
+
   def update_embedding_model(model_id) do
     update(%{embedding_model_id: model_id})
   end
