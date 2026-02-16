@@ -215,7 +215,13 @@ defmodule Liteskill.Runs.Runner do
       try do
         execute_agent(agent, member, handoff, context, run.id, resume_messages)
       rescue
-        e -> {:error, Exception.message(e), []}
+        e ->
+          Logger.error(
+            "Agent #{agent.name} raised during execution:\n" <>
+              Exception.format(:error, e, __STACKTRACE__)
+          )
+
+          {:error, Exception.message(e), []}
       end
 
     case agent_result do

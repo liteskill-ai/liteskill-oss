@@ -16,7 +16,7 @@ defmodule Liteskill.Runs.ResumeHandler do
   #{@handoff_summary_max_chars} characters of the output.
   """
   def extract_handoff_summary(output) when is_binary(output) do
-    case Regex.run(~r/##?\s*Handoff Summary\s*\n(.*)/si, output) do
+    case Regex.run(~r/##?\s*Handoff Summary\s*\n(.*?)(?:\n##|\z)/si, output) do
       [_, summary] -> summary |> String.trim() |> String.slice(0, @handoff_summary_max_chars)
       nil -> String.slice(output, 0, @handoff_summary_max_chars)
     end

@@ -598,6 +598,7 @@ defmodule LiteskillWeb.AdminLive do
                     Decimal.to_string(@server_settings.default_mcp_run_cost_limit)
                 }
                 class="input input-bordered input-sm w-24"
+                phx-debounce="500"
               />
             </form>
           </div>

@@ -51,8 +51,13 @@ defmodule Liteskill.Runs.ReportBuilder do
            %{"report_id" => report_id, "actions" => sections},
            context
          ) do
-      {:ok, %{"content" => _}} -> :ok
-      error -> error
+      {:ok, %{"content" => _}} ->
+        :ok
+
+      # coveralls-ignore-start
+      error ->
+        error
+        # coveralls-ignore-stop
     end
   end
 

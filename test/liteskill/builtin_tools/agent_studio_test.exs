@@ -800,6 +800,25 @@ defmodule Liteskill.BuiltinTools.AgentStudioTest do
       assert Decimal.compare(run.cost_limit, admin_default) == :eq
     end
 
+    test "defaults non-positive cost_limit to admin max", %{user: user} do
+      ctx = [user_id: user.id]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__start_run",
+                 %{"prompt" => "Zero cost run", "cost_limit" => 0},
+                 ctx
+               )
+
+      data = decode_content(result)
+      run_id = data["id"]
+      Process.sleep(50)
+
+      {:ok, run} = Liteskill.Runs.get_run(run_id, user.id)
+      admin_default = Liteskill.Settings.get_default_mcp_run_cost_limit()
+      assert Decimal.compare(run.cost_limit, admin_default) == :eq
+    end
+
     test "uses requested cost_limit when under admin max", %{user: user} do
       ctx = [user_id: user.id]
 

@@ -300,9 +300,12 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
         nil ->
           admin_max
 
-        val when is_number(val) ->
-          requested = Decimal.from_float(val / 1)
+        val when is_number(val) and val > 0 ->
+          requested = Decimal.new("#{val}")
           if Decimal.compare(requested, admin_max) == :gt, do: admin_max, else: requested
+
+        _non_positive ->
+          admin_max
       end
 
     attrs = %{

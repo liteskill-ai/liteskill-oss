@@ -30,8 +30,6 @@
     "lib/liteskill_web/live/agent_studio_live.ex",
     "lib/liteskill_web/components/agent_studio_components.ex",
     "lib/liteskill/runs/runner.ex",
-    "lib/liteskill/runs/report_builder.ex",
-    "lib/liteskill/runs/resume_handler.ex",
     "lib/liteskill/agents/jido_agent.ex",
     "lib/liteskill/schedules/schedule_tick.ex",
     "lib/liteskill/schedules/schedule_worker.ex",
