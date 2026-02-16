@@ -41,7 +41,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
     </header>
     <div class="flex-1 overflow-y-auto p-6">
       <div class="max-w-3xl">
-        <.form for={@form} phx-submit="save_agent" class="space-y-6">
+        <.form for={@form} phx-submit="save_agent" phx-change="validate_agent" class="space-y-6">
           <.agent_form_fields form={@form} editing={@editing} available_models={@available_models} />
           <div class="flex items-center gap-3 pt-4 border-t border-base-200">
             <button type="submit" class="btn btn-primary">
@@ -290,15 +290,15 @@ defmodule LiteskillWeb.AgentStudioComponents do
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="label"><span class="label-text font-medium">Strategy</span></label>
-          <select name={@form[:strategy].name} class="select select-bordered w-full">
-            <option
-              :for={s <- AgentDefinition.valid_strategies()}
-              value={s}
-              selected={@form[:strategy].value == s}
-            >
-              {strategy_label(s)}
-            </option>
-          </select>
+          <input type="hidden" name={@form[:strategy].name} value={@form[:strategy].value} />
+          <button
+            type="button"
+            onclick="document.getElementById('strategy-modal').showModal()"
+            class="btn btn-outline w-full justify-between font-normal"
+          >
+            {strategy_label(@form[:strategy].value)}
+            <.icon name="hero-chevron-down-micro" class="size-4 opacity-50" />
+          </button>
         </div>
 
         <div>
@@ -315,6 +315,27 @@ defmodule LiteskillWeb.AgentStudioComponents do
           </select>
         </div>
       </div>
+
+      <dialog id="strategy-modal" class="modal">
+        <div class="modal-box max-w-2xl">
+          <h3 class="text-lg font-bold mb-4">Choose a Strategy</h3>
+          <div class="grid grid-cols-1 gap-3">
+            <.strategy_card
+              :for={s <- AgentDefinition.valid_strategies()}
+              strategy={s}
+              selected={@form[:strategy].value == s}
+            />
+          </div>
+          <div class="modal-action">
+            <form method="dialog">
+              <button class="btn btn-sm">Cancel</button>
+            </form>
+          </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+          <button>close</button>
+        </form>
+      </dialog>
 
       <div>
         <label class="label"><span class="label-text font-medium">Backstory</span></label>
@@ -346,26 +367,99 @@ defmodule LiteskillWeb.AgentStudioComponents do
 
       <div>
         <label class="label"><span class="label-text font-medium">Opinions</span></label>
-        <textarea
-          name={@form[:opinions].name}
-          class="textarea textarea-bordered w-full h-24 font-mono text-sm"
-          placeholder="tone: professional\nformat: markdown\nverbosity: concise"
-        >{@form[:opinions].value}</textarea>
-        <label class="label">
-          <span class="label-text-alt text-base-content/50">
-            Key-value pairs (one per line, key: value) that shape the agent's behavior
-          </span>
-        </label>
+        <p class="text-sm text-base-content/50 mb-3">
+          Steer the agent's style and defaults. e.g. <span class="font-mono">tone</span>
+          &rarr; <span class="font-mono">concise and direct</span>,
+          <span class="font-mono">format</span>
+          &rarr; <span class="font-mono">markdown with headers</span>
+        </p>
+        <div class="space-y-2">
+          <div
+            :for={{entry, idx} <- Enum.with_index(@form[:opinions].value || [])}
+            class="flex items-center gap-2"
+          >
+            <input
+              type="text"
+              name={"#{@form[:opinions].name}[#{idx}][key]"}
+              value={entry["key"]}
+              class="input input-bordered input-sm flex-1 font-mono"
+              placeholder="key"
+            />
+            <input
+              type="text"
+              name={"#{@form[:opinions].name}[#{idx}][value]"}
+              value={entry["value"]}
+              class="input input-bordered input-sm flex-1 font-mono"
+              placeholder="value"
+            />
+            <button
+              type="button"
+              phx-click="remove_opinion"
+              phx-value-index={idx}
+              class="btn btn-ghost btn-sm btn-circle text-error"
+            >
+              <.icon name="hero-x-mark-micro" class="size-4" />
+            </button>
+          </div>
+        </div>
+        <button type="button" phx-click="add_opinion" class="btn btn-ghost btn-sm mt-2 gap-1">
+          <.icon name="hero-plus-micro" class="size-4" /> Add opinion
+        </button>
       </div>
     </div>
     """
   end
 
-  defp strategy_label("react"), do: "ReAct (Reason + Act)"
-  defp strategy_label("chain_of_thought"), do: "Chain of Thought"
-  defp strategy_label("tree_of_thoughts"), do: "Tree of Thoughts"
-  defp strategy_label("direct"), do: "Direct"
-  defp strategy_label(s), do: s
+  attr :strategy, :string, required: true
+  attr :selected, :boolean, default: false
+
+  defp strategy_card(assigns) do
+    {label, desc} = strategy_info(assigns.strategy)
+    assigns = assign(assigns, label: label, desc: desc)
+
+    ~H"""
+    <button
+      type="button"
+      phx-click="select_strategy"
+      phx-value-strategy={@strategy}
+      onclick="document.getElementById('strategy-modal').close()"
+      class={"card card-bordered cursor-pointer transition-all hover:border-primary p-4 text-left #{if @selected, do: "border-primary bg-primary/5 ring-1 ring-primary", else: "border-base-300"}"}
+    >
+      <div class="flex items-center gap-2 mb-1">
+        <span class="font-semibold">{@label}</span>
+        <span :if={@selected} class="badge badge-primary badge-sm">Selected</span>
+      </div>
+      <p class="text-sm text-base-content/60">{@desc}</p>
+    </button>
+    """
+  end
+
+  defp strategy_info("react") do
+    {"ReAct (Reason + Act)",
+     "Thinks step-by-step, then acts. The agent reasons about what to do, uses a tool, observes the result, and repeats. Best for tasks that need multiple tool calls with decisions between each."}
+  end
+
+  defp strategy_info("chain_of_thought") do
+    {"Chain of Thought",
+     "Reasons through the full problem before responding. Produces a detailed internal monologue, then gives a single answer. Best for complex analysis where getting the logic right matters more than using tools."}
+  end
+
+  defp strategy_info("tree_of_thoughts") do
+    {"Tree of Thoughts",
+     "Explores multiple reasoning paths and picks the best one. Generates several candidate approaches, evaluates each, then commits. Best for open-ended problems with many valid solutions."}
+  end
+
+  defp strategy_info("direct") do
+    {"Direct",
+     "Responds immediately with no explicit reasoning steps. The agent gets the prompt and replies in one shot. Best for simple, well-defined tasks where extra deliberation adds no value."}
+  end
+
+  defp strategy_label(s) do
+    {label, _} = strategy_info(s)
+    label
+  rescue
+    _ -> s
+  end
 
   # ---- Teams ----
 

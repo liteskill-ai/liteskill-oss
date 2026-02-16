@@ -2620,8 +2620,8 @@ defmodule LiteskillWeb.ChatLive do
 
   # --- Agent Studio Event Delegation ---
 
-  @studio_events ~w(save_agent confirm_delete_agent cancel_delete_agent
-    add_agent_tool remove_agent_tool
+  @studio_events ~w(save_agent validate_agent confirm_delete_agent cancel_delete_agent
+    add_agent_tool remove_agent_tool add_opinion remove_opinion select_strategy
     save_team confirm_delete_team cancel_delete_team add_team_member remove_team_member
     save_run start_run rerun retry_run cancel_run confirm_delete_run cancel_delete_run
     save_schedule toggle_schedule confirm_delete_schedule cancel_delete_schedule)

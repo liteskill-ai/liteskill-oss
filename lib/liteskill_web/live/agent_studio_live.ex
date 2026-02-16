@@ -67,7 +67,7 @@ defmodule LiteskillWeb.AgentStudioLive do
           "name" => "",
           "description" => "",
           "backstory" => "",
-          "opinions" => "",
+          "opinions" => [],
           "system_prompt" => "",
           "strategy" => "react",
           "llm_model_id" => ""
@@ -450,6 +450,35 @@ defmodule LiteskillWeb.AgentStudioLive do
          |> Phoenix.LiveView.put_flash(:error, format_errors(changeset))
          |> Phoenix.Component.assign(agent_form: agent_form(params))}
     end
+  end
+
+  def handle_studio_event("validate_agent", %{"agent" => params}, socket) do
+    params = normalize_opinion_params(params)
+    {:noreply, Phoenix.Component.assign(socket, agent_form: agent_form(params))}
+  end
+
+  def handle_studio_event("select_strategy", %{"strategy" => strategy}, socket) do
+    current = socket.assigns.agent_form.params
+
+    {:noreply,
+     Phoenix.Component.assign(socket, agent_form: agent_form(%{current | "strategy" => strategy}))}
+  end
+
+  def handle_studio_event("add_opinion", _params, socket) do
+    current = socket.assigns.agent_form.params
+    opinions = (current["opinions"] || []) ++ [%{"key" => "", "value" => ""}]
+
+    {:noreply,
+     Phoenix.Component.assign(socket, agent_form: agent_form(%{current | "opinions" => opinions}))}
+  end
+
+  def handle_studio_event("remove_opinion", %{"index" => idx}, socket) do
+    idx = String.to_integer(idx)
+    current = socket.assigns.agent_form.params
+    opinions = List.delete_at(current["opinions"] || [], idx)
+
+    {:noreply,
+     Phoenix.Component.assign(socket, agent_form: agent_form(%{current | "opinions" => opinions}))}
   end
 
   def handle_studio_event("confirm_delete_agent", %{"id" => id}, socket) do
@@ -857,28 +886,37 @@ defmodule LiteskillWeb.AgentStudioLive do
 
   # --- Helpers ---
 
-  defp encode_opinions(nil), do: ""
-  defp encode_opinions(map) when map == %{}, do: ""
+  defp encode_opinions(nil), do: []
+  defp encode_opinions(map) when map == %{}, do: []
 
   defp encode_opinions(map) when is_map(map) do
-    Enum.map_join(map, "\n", fn {k, v} -> "#{k}: #{v}" end)
+    Enum.map(map, fn {k, v} -> %{"key" => to_string(k), "value" => to_string(v)} end)
   end
 
-  defp decode_opinions(%{"opinions" => text} = params) when is_binary(text) do
+  defp decode_opinions(%{"opinions" => entries} = params) when is_map(entries) do
     opinions =
-      text
-      |> String.split("\n", trim: true)
-      |> Enum.reduce(%{}, fn line, acc ->
-        case String.split(line, ":", parts: 2) do
-          [key, value] -> Map.put(acc, String.trim(key), String.trim(value))
-          _ -> acc
-        end
+      entries
+      |> Enum.sort_by(fn {idx, _} -> String.to_integer(idx) end)
+      |> Enum.reduce(%{}, fn {_idx, %{"key" => k, "value" => v}}, acc ->
+        key = String.trim(k)
+        if key != "", do: Map.put(acc, key, String.trim(v)), else: acc
       end)
 
     Map.put(params, "opinions", opinions)
   end
 
   defp decode_opinions(params), do: params
+
+  defp normalize_opinion_params(%{"opinions" => entries} = params) when is_map(entries) do
+    opinions =
+      entries
+      |> Enum.sort_by(fn {idx, _} -> String.to_integer(idx) end)
+      |> Enum.map(fn {_idx, entry} -> entry end)
+
+    %{params | "opinions" => opinions}
+  end
+
+  defp normalize_opinion_params(params), do: params
 
   defp parse_cost_limit_param(%{"cost_limit" => ""} = params),
     do: Map.delete(params, "cost_limit")
