@@ -36,5 +36,6 @@ defmodule Liteskill.Reports.SectionComment do
     |> foreign_key_constraint(:report_id)
     |> foreign_key_constraint(:section_id)
     |> foreign_key_constraint(:user_id)
+    |> foreign_key_constraint(:parent_comment_id)
   end
 end

@@ -412,7 +412,7 @@ defmodule Liteskill.LlmModelsTest do
 
       assert Keyword.get(opts, :provider_options) |> Keyword.get(:region) == "us-west-2"
       assert Keyword.get(opts, :provider_options) |> Keyword.get(:use_converse) == true
-      assert Keyword.get(opts, :provider_options) |> Keyword.get(:api_key) == "my-token"
+      assert Keyword.get(opts, :api_key) == "my-token"
     end
 
     test "amazon_bedrock defaults region" do
@@ -461,7 +461,7 @@ defmodule Liteskill.LlmModelsTest do
       assert Keyword.get(provider_opts, :resource_name) == "my-resource"
       assert Keyword.get(provider_opts, :deployment_id) == "gpt4o-deploy"
       assert Keyword.get(provider_opts, :api_version) == "2024-02-15"
-      assert Keyword.get(provider_opts, :api_key) == "az-key"
+      assert Keyword.get(opts, :api_key) == "az-key"
     end
 
     test "azure omits nil config values" do
@@ -491,7 +491,8 @@ defmodule Liteskill.LlmModelsTest do
       {model_spec, opts} = LlmModels.build_provider_options(model)
 
       assert model_spec == %{id: "claude-3-5-sonnet", provider: :anthropic}
-      assert Keyword.get(opts, :provider_options) == [api_key: "sk-ant-xxx"]
+      assert Keyword.get(opts, :provider_options) == []
+      assert Keyword.get(opts, :api_key) == "sk-ant-xxx"
     end
 
     test "openai with api_key" do
@@ -506,7 +507,8 @@ defmodule Liteskill.LlmModelsTest do
       {model_spec, opts} = LlmModels.build_provider_options(model)
 
       assert model_spec == %{id: "gpt-4o", provider: :openai}
-      assert Keyword.get(opts, :provider_options) == [api_key: "sk-xxx"]
+      assert Keyword.get(opts, :provider_options) == []
+      assert Keyword.get(opts, :api_key) == "sk-xxx"
     end
 
     test "provider without api_key" do
@@ -536,8 +538,8 @@ defmodule Liteskill.LlmModelsTest do
       {_model_spec, opts} = LlmModels.build_provider_options(model)
 
       assert Keyword.get(opts, :base_url) == "http://litellm:4000/v1"
+      assert Keyword.get(opts, :api_key) == "sk-xxx"
       provider_opts = Keyword.get(opts, :provider_options)
-      assert Keyword.get(provider_opts, :api_key) == "sk-xxx"
       refute Keyword.has_key?(provider_opts, :base_url)
     end
 
@@ -584,10 +586,10 @@ defmodule Liteskill.LlmModelsTest do
       {_model_spec, opts} = LlmModels.build_provider_options(model)
 
       assert Keyword.get(opts, :base_url) == "http://custom:8080"
+      assert Keyword.get(opts, :api_key) == "token"
       provider_opts = Keyword.get(opts, :provider_options)
       assert Keyword.get(provider_opts, :region) == "eu-west-1"
       assert Keyword.get(provider_opts, :use_converse) == true
-      assert Keyword.get(provider_opts, :api_key) == "token"
     end
 
     test "unknown config keys are skipped gracefully" do
@@ -601,9 +603,9 @@ defmodule Liteskill.LlmModelsTest do
 
       {_model_spec, opts} = LlmModels.build_provider_options(model)
 
+      assert Keyword.get(opts, :api_key) == "sk-xxx"
       provider_opts = Keyword.get(opts, :provider_options)
-      assert Keyword.get(provider_opts, :api_key) == "sk-xxx"
-      assert length(provider_opts) == 1
+      assert provider_opts == []
     end
   end
 

@@ -17,8 +17,10 @@ defmodule Liteskill.Rag do
       CohereClient,
       DocumentSyncWorker,
       EmbedQueue,
+      EmbeddingClient,
       EmbeddingRequest,
       IngestWorker,
+      OpenAIEmbeddingClient,
       Pipeline,
       ReembedWorker,
       WikiSyncWorker
@@ -35,6 +37,7 @@ defmodule Liteskill.Rag do
     Document,
     Chunk,
     CohereClient,
+    EmbeddingClient,
     EmbedQueue,
     IngestWorker
   }
@@ -284,7 +287,7 @@ defmodule Liteskill.Rag do
       dimensions = Keyword.get(opts, :dimensions, collection.embedding_dimensions)
       limit = Keyword.get(opts, :limit, 20)
 
-      case CohereClient.embed(
+      case EmbeddingClient.embed(
              [query],
              [{:input_type, "search_query"}, {:dimensions, dimensions}, {:user_id, user_id}] ++
                plug_opts
@@ -358,7 +361,7 @@ defmodule Liteskill.Rag do
         search_limit = Keyword.get(rest, :search_limit, 50)
         top_n = Keyword.get(rest, :top_n, 10)
 
-        case CohereClient.embed(
+        case EmbeddingClient.embed(
                [query],
                [{:input_type, "search_query"}, {:dimensions, dimensions}, {:user_id, user_id}] ++
                  plug_opts
@@ -391,9 +394,9 @@ defmodule Liteskill.Rag do
   def augment_context(query, user_id, opts \\ []) do
     {plug_opts, _rest} = Keyword.split(opts, [:plug])
 
-    case CohereClient.embed(
+    case EmbeddingClient.embed(
            [query],
-           [{:input_type, "search_query"}, {:dimensions, 1024}, {:user_id, user_id}] ++ plug_opts
+           [{:input_type, "search_query"}, {:user_id, user_id}] ++ plug_opts
          ) do
       {:ok, [query_embedding]} ->
         results = vector_search_all(user_id, query_embedding, 100)
@@ -748,10 +751,10 @@ defmodule Liteskill.Rag do
     |> Repo.all()
   end
 
+  # coveralls-ignore-start
   defp format_embed_error(%{status: status, body: %{"Message" => msg}}),
     do: "HTTP #{status}: #{msg}"
 
-  # coveralls-ignore-start
   defp format_embed_error(%{status: status, body: %{"message" => msg}}),
     do: "HTTP #{status}: #{msg}"
 

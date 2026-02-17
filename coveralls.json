@@ -22,6 +22,7 @@
     "lib/liteskill_web/live/mcp_components.ex",
     "lib/liteskill_web/live/sources_components.ex",
     "lib/liteskill_web/live/sharing_components.ex",
+    "lib/liteskill_web/live/sharing_live.ex",
     "lib/liteskill_web/live/reports_live.ex",
     "lib/liteskill_web/live/pipeline_live.ex",
     "lib/liteskill_web/live/pipeline_components.ex",

@@ -9,7 +9,7 @@ defmodule Liteskill.Rag.ReembedWorker do
   use Oban.Worker, queue: :rag_ingest, max_attempts: 3
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Chunk, CohereClient, Document, EmbedQueue}
+  alias Liteskill.Rag.{Chunk, Document, EmbeddingClient, EmbedQueue}
   alias Liteskill.Repo
   alias Liteskill.Settings
 
@@ -74,8 +74,8 @@ defmodule Liteskill.Rag.ReembedWorker do
       plug = Map.get(args, "plug", false)
 
       embed_opts =
-        [input_type: "search_document", dimensions: 1024, user_id: user_id] ++
-          if(plug, do: [plug: {Req.Test, CohereClient}], else: [])
+        [input_type: "search_document", user_id: user_id] ++
+          if(plug, do: [plug: {Req.Test, EmbeddingClient}], else: [])
 
       case EmbedQueue.embed(texts, embed_opts) do
         {:ok, embeddings} ->

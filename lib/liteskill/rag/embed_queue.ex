@@ -14,7 +14,7 @@ defmodule Liteskill.Rag.EmbedQueue do
 
   use GenServer
 
-  alias Liteskill.Rag.CohereClient
+  alias Liteskill.Rag.EmbeddingClient
 
   @default_batch_size 96
   @default_flush_ms 2_000
@@ -32,7 +32,7 @@ defmodule Liteskill.Rag.EmbedQueue do
   @doc """
   Embed a list of texts, batched with other concurrent callers.
 
-  Accepts the same opts as `CohereClient.embed/2` plus:
+  Accepts the same opts as `EmbeddingClient.embed/2` plus:
   - `:name` — the GenServer to call (default `__MODULE__`)
 
   Returns `{:ok, embeddings}` or `{:error, reason}`.
@@ -43,8 +43,8 @@ defmodule Liteskill.Rag.EmbedQueue do
     if Process.whereis(name) do
       GenServer.call(name, {:embed, texts, opts}, :infinity)
     else
-      # Fallback: call CohereClient directly (e.g., in test env without GenServer)
-      CohereClient.embed(texts, opts)
+      # Fallback: call EmbeddingClient directly (e.g., in test env without GenServer)
+      EmbeddingClient.embed(texts, opts)
     end
   end
 
@@ -131,7 +131,7 @@ defmodule Liteskill.Rag.EmbedQueue do
   end
 
   defp embed_with_retry(texts, opts, retries_left, backoff_ms) do
-    case CohereClient.embed(texts, opts) do
+    case EmbeddingClient.embed(texts, opts) do
       {:ok, _} = success ->
         success
 

@@ -20,7 +20,11 @@ defmodule LiteskillWeb.ReportsLive do
       section_tree: [],
       report_comments: [],
       editing_section_id: nil,
-      report_mode: :view
+      report_mode: :view,
+      show_wiki_export_modal: false,
+      wiki_export_title: "",
+      wiki_export_parent_id: nil,
+      wiki_export_tree: []
     ]
   end
 
@@ -41,7 +45,6 @@ defmodule LiteskillWeb.ReportsLive do
       reports_page: page,
       reports_total_pages: total_pages,
       reports_total: total,
-      wiki_sidebar_tree: [],
       page_title: "Reports"
     )
   end
@@ -72,7 +75,6 @@ defmodule LiteskillWeb.ReportsLive do
           report_comments: report_comments,
           editing_section_id: nil,
           report_mode: :view,
-          wiki_sidebar_tree: [],
           page_title: report.title
         )
 
@@ -220,6 +222,55 @@ defmodule LiteskillWeb.ReportsLive do
 
       {:error, _reason} ->
         {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to update section")}
+    end
+  end
+
+  # --- Wiki Export Events ---
+
+  def handle_event("open_wiki_export_modal", _params, socket) do
+    user_id = socket.assigns.current_user.id
+    tree = Liteskill.DataSources.document_tree("builtin:wiki", user_id)
+
+    {:noreply,
+     Phoenix.Component.assign(socket,
+       show_wiki_export_modal: true,
+       wiki_export_title: socket.assigns.report.title,
+       wiki_export_parent_id: nil,
+       wiki_export_tree: tree
+     )}
+  end
+
+  def handle_event("close_wiki_export_modal", _params, socket) do
+    {:noreply, Phoenix.Component.assign(socket, show_wiki_export_modal: false)}
+  end
+
+  def handle_event("confirm_wiki_export", %{"title" => title, "parent_id" => parent_id}, socket) do
+    if parent_id == "" do
+      {:noreply,
+       Phoenix.LiveView.put_flash(socket, :error, "Please select a space for the wiki page")}
+    else
+      user_id = socket.assigns.current_user.id
+      report = socket.assigns.report
+
+      case Liteskill.DataSources.export_report_to_wiki(report.id, user_id,
+             title: title,
+             parent_id: parent_id
+           ) do
+        {:ok, doc} ->
+          {:noreply,
+           socket
+           |> Phoenix.Component.assign(show_wiki_export_modal: false)
+           |> Phoenix.LiveView.put_flash(:info, "Report exported to wiki")
+           |> Phoenix.LiveView.push_navigate(to: ~p"/wiki/#{doc.id}")}
+
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(
+             socket,
+             :error,
+             action_error("export report to wiki", reason)
+           )}
+      end
     end
   end
 

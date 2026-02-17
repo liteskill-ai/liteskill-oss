@@ -6,8 +6,7 @@ defmodule Liteskill.Rbac.PermissionsTest do
   describe "all_permissions/0" do
     test "returns non-empty list" do
       perms = Permissions.all_permissions()
-      assert is_list(perms)
-      assert perms != []
+      assert [_ | _] = perms
     end
 
     test "all entries are strings" do

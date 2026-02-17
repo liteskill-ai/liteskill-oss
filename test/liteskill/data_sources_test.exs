@@ -53,8 +53,7 @@ defmodule Liteskill.DataSourcesTest do
   describe "available_source_types/0" do
     test "returns a list" do
       types = DataSources.available_source_types()
-      assert is_list(types)
-      assert types != []
+      assert [_ | _] = types
     end
 
     test "each entry has name and source_type" do

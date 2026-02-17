@@ -90,7 +90,7 @@ defmodule Liteskill.RunsTest do
 
     test "defaults are applied", %{owner: owner} do
       assert {:ok, run} = Runs.create_run(run_attrs(owner))
-      assert run.timeout_ms == 1_800_000
+      assert run.timeout_ms == 3_600_000
       assert run.max_iterations == 50
       assert run.context == %{}
       assert run.deliverables == %{}

@@ -16,7 +16,7 @@ defmodule LiteskillWeb.ChatLive do
   alias LiteskillWeb.{PipelineComponents, PipelineLive}
   alias LiteskillWeb.{ReportComponents, ReportsLive}
   alias LiteskillWeb.{AgentStudioComponents, AgentStudioLive}
-  alias LiteskillWeb.{SharingComponents, SourcesComponents, WikiComponents, WikiLive}
+  alias LiteskillWeb.{SharingComponents, SharingLive, SourcesComponents, WikiComponents}
 
   @impl true
   def mount(_params, _session, socket) do
@@ -143,7 +143,6 @@ defmodule LiteskillWeb.ChatLive do
        usage_modal_data: nil,
        has_admin_access: Liteskill.Rbac.has_any_admin_permission?(user.id)
      )
-     |> assign(WikiLive.wiki_assigns())
      |> assign(ReportsLive.reports_assigns())
      |> assign(PipelineLive.pipeline_assigns())
      |> assign(AgentStudioLive.studio_assigns())
@@ -179,8 +178,7 @@ defmodule LiteskillWeb.ChatLive do
       messages: [],
       streaming: false,
       stream_content: "",
-      pending_tool_calls: [],
-      wiki_sidebar_tree: []
+      pending_tool_calls: []
     )
     |> ProfileLive.apply_profile_action(action, socket.assigns.current_user)
   end
@@ -205,8 +203,7 @@ defmodule LiteskillWeb.ChatLive do
       messages: [],
       streaming: false,
       stream_content: "",
-      pending_tool_calls: [],
-      wiki_sidebar_tree: []
+      pending_tool_calls: []
     )
     |> AdminLive.apply_admin_action(action, socket.assigns.current_user)
   end
@@ -222,7 +219,6 @@ defmodule LiteskillWeb.ChatLive do
       streaming: false,
       stream_content: "",
       pending_tool_calls: [],
-      wiki_sidebar_tree: [],
       page_title: "Liteskill"
     )
   end
@@ -242,7 +238,6 @@ defmodule LiteskillWeb.ChatLive do
       streaming: false,
       stream_content: "",
       pending_tool_calls: [],
-      wiki_sidebar_tree: [],
       managed_conversations: managed,
       conversations_page: 1,
       conversations_search: "",
@@ -268,7 +263,6 @@ defmodule LiteskillWeb.ChatLive do
       show_mcp_modal: false,
       editing_mcp: nil,
       pending_tool_calls: [],
-      wiki_sidebar_tree: [],
       page_title: "Tools"
     )
   end
@@ -293,7 +287,6 @@ defmodule LiteskillWeb.ChatLive do
       stream_content: "",
       pending_tool_calls: [],
       data_sources: sources,
-      wiki_sidebar_tree: [],
       rag_query_collections: rag_collections,
       show_rag_query: false,
       rag_query_results: [],
@@ -302,11 +295,6 @@ defmodule LiteskillWeb.ChatLive do
       rag_enabled: Liteskill.Settings.embedding_enabled?(),
       page_title: "Data Sources"
     )
-  end
-
-  defp apply_action(socket, action, params) when action in [:wiki, :wiki_page_show] do
-    maybe_unsubscribe(socket)
-    WikiLive.apply_wiki_action(socket, action, params)
   end
 
   defp apply_action(socket, :source_show, %{"source_id" => source_url_id}) do
@@ -335,7 +323,6 @@ defmodule LiteskillWeb.ChatLive do
           current_source: source,
           source_documents: result,
           source_search: "",
-          wiki_sidebar_tree: [],
           page_title: source.name
         )
 
@@ -374,7 +361,6 @@ defmodule LiteskillWeb.ChatLive do
         source_document: doc,
         rag_document: rag_doc,
         rag_chunks: chunks,
-        wiki_sidebar_tree: [],
         page_title: doc.title
       )
     else
@@ -432,7 +418,6 @@ defmodule LiteskillWeb.ChatLive do
             streaming: streaming,
             stream_content: "",
             pending_tool_calls: pending,
-            wiki_sidebar_tree: [],
             page_title: conversation.title
           )
 
@@ -468,173 +453,14 @@ defmodule LiteskillWeb.ChatLive do
   def render(assigns) do
     ~H"""
     <div class="flex h-screen relative">
-      <%!-- Sidebar --%>
-      <aside
-        id="sidebar"
-        phx-hook="SidebarNav"
-        class={[
-          "flex-shrink-0 bg-base-200 flex flex-col border-r border-base-300 transition-all duration-200 overflow-hidden",
-          if(@sidebar_open,
-            do: "w-64 max-sm:fixed max-sm:inset-0 max-sm:w-full max-sm:z-40",
-            else: "w-0 border-r-0"
-          )
-        ]}
-      >
-        <div class="flex items-center justify-between p-3 border-b border-base-300 min-w-64">
-          <div class="flex items-center gap-2">
-            <img src={~p"/images/logo_dark_mode.svg"} class="size-7 hidden dark:block" />
-            <img src={~p"/images/logo_light_mode.svg"} class="size-7 block dark:hidden" />
-            <span class="text-lg tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
-              LiteSkill
-            </span>
-          </div>
-          <div class="flex items-center gap-1">
-            <Layouts.theme_toggle />
-            <button phx-click="toggle_sidebar" class="btn btn-circle btn-ghost btn-sm">
-              <.icon name="hero-arrow-left-end-on-rectangle-micro" class="size-5" />
-            </button>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between px-3 py-2 min-w-64">
-          <.link
-            navigate={~p"/conversations"}
-            class={[
-              "text-sm font-semibold tracking-wide hover:text-primary transition-colors",
-              if(@live_action == :conversations,
-                do: "text-primary",
-                else: "text-base-content/70"
-              )
-            ]}
-          >
-            Conversations
-          </.link>
-          <button
-            phx-click="new_conversation"
-            class="btn btn-ghost btn-sm btn-circle"
-            title="New Chat"
-          >
-            <.icon name="hero-plus-micro" class="size-4" />
-          </button>
-        </div>
-
-        <nav class="flex-1 overflow-y-auto px-2 space-y-1 pb-4 min-w-64">
-          <ChatComponents.conversation_item
-            :for={conv <- @conversations}
-            conversation={conv}
-            active={@conversation && @conversation.id == conv.id}
-          />
-          <p
-            :if={@conversations == []}
-            class="text-xs text-base-content/50 text-center py-4"
-          >
-            No conversations yet
-          </p>
-        </nav>
-
-        <div class="p-2 border-t border-base-300 min-w-64">
-          <.link
-            navigate={~p"/wiki"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(@live_action in [:wiki, :wiki_page_show],
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-book-open-micro" class="size-4" /> Wiki
-          </.link>
-          <.link
-            navigate={~p"/sources"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(@live_action in [:sources, :source_show, :source_document_show],
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-circle-stack-micro" class="size-4" /> Data Sources
-          </.link>
-          <.link
-            navigate={~p"/mcp"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(@live_action == :mcp_servers,
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-wrench-screwdriver-micro" class="size-4" /> Tools
-          </.link>
-          <.link
-            navigate={~p"/reports"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(@live_action in [:reports, :report_show],
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-document-text-micro" class="size-4" /> Reports
-          </.link>
-        </div>
-        <div class="p-2 border-t border-base-300 min-w-64">
-          <.link
-            navigate={~p"/agents"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(AgentStudioLive.studio_action?(@live_action),
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-cpu-chip-micro" class="size-4" /> Agent Studio
-          </.link>
-        </div>
-
-        <div
-          :if={@has_admin_access}
-          class="p-2 border-t border-base-300 min-w-64"
-        >
-          <.link
-            navigate={~p"/admin"}
-            class={[
-              "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
-              if(AdminLive.admin_action?(@live_action),
-                do: "bg-primary/10 text-primary font-medium",
-                else: "hover:bg-base-200 text-base-content/70"
-              )
-            ]}
-          >
-            <.icon name="hero-cog-6-tooth-micro" class="size-4" /> Admin
-          </.link>
-        </div>
-
-        <div class="p-3 border-t border-base-300 min-w-64">
-          <div class="flex items-center gap-2">
-            <.link
-              navigate={~p"/profile"}
-              class={[
-                "flex-1 truncate text-sm hover:text-base-content",
-                if(ProfileLive.profile_action?(@live_action),
-                  do: "text-primary font-medium",
-                  else: "text-base-content/70"
-                )
-              ]}
-            >
-              {@current_user.email}
-            </.link>
-            <.link href={~p"/auth/logout"} method="delete" class="btn btn-ghost btn-xs">
-              <.icon name="hero-arrow-right-start-on-rectangle-micro" class="size-4" />
-            </.link>
-          </div>
-        </div>
-      </aside>
+      <Layouts.sidebar
+        sidebar_open={@sidebar_open}
+        live_action={@live_action}
+        conversations={@conversations}
+        active_conversation_id={@conversation && @conversation.id}
+        current_user={@current_user}
+        has_admin_access={@has_admin_access}
+      />
 
       <%!-- Main Area --%>
       <main class="flex-1 flex flex-col min-w-0">
@@ -935,348 +761,6 @@ defmodule LiteskillWeb.ChatLive do
               </div>
             <% end %>
           </div>
-        <% end %>
-        <%= if @live_action == :wiki do %>
-          <%!-- Wiki Home — Spaces --%>
-          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <button
-                  :if={!@sidebar_open}
-                  phx-click="toggle_sidebar"
-                  class="btn btn-circle btn-ghost btn-sm"
-                >
-                  <.icon name="hero-bars-3-micro" class="size-5" />
-                </button>
-                <h1 class="text-xl tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
-                  Wiki
-                </h1>
-              </div>
-              <div class="flex items-center gap-2">
-                <div class="join">
-                  <button
-                    phx-click="toggle_wiki_view_mode"
-                    phx-value-mode="card"
-                    class={"join-item btn btn-xs #{if @wiki_view_mode == "card", do: "btn-active", else: "btn-ghost"}"}
-                    title="Card view"
-                  >
-                    <.icon name="hero-squares-2x2-micro" class="size-3.5" />
-                  </button>
-                  <button
-                    phx-click="toggle_wiki_view_mode"
-                    phx-value-mode="list"
-                    class={"join-item btn btn-xs #{if @wiki_view_mode == "list", do: "btn-active", else: "btn-ghost"}"}
-                    title="List view"
-                  >
-                    <.icon name="hero-bars-4-micro" class="size-3.5" />
-                  </button>
-                </div>
-                <button phx-click="show_wiki_form" class="btn btn-primary btn-sm gap-1">
-                  <.icon name="hero-plus-micro" class="size-4" /> New Space
-                </button>
-              </div>
-            </div>
-          </header>
-
-          <div class="flex-1 overflow-y-auto p-4 max-w-4xl mx-auto w-full">
-            <div
-              :if={@source_documents.documents != [] && @wiki_view_mode == "card"}
-              class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            >
-              <WikiComponents.space_card
-                :for={space <- @source_documents.documents}
-                space={space}
-                space_role={Map.get(space, :space_role)}
-              />
-            </div>
-            <div
-              :if={@source_documents.documents != [] && @wiki_view_mode == "list"}
-              class="space-y-1"
-            >
-              <WikiComponents.space_list_item
-                :for={space <- @source_documents.documents}
-                space={space}
-                space_role={Map.get(space, :space_role)}
-              />
-            </div>
-            <p
-              :if={@source_documents.documents == []}
-              class="text-base-content/50 text-center py-12 text-sm"
-            >
-              No spaces yet. Create your first space to get started.
-            </p>
-
-            <div :if={@source_documents.total_pages > 1} class="flex justify-center gap-1 pt-4">
-              <button
-                :if={@source_documents.page > 1}
-                phx-click="source_page"
-                phx-value-page={@source_documents.page - 1}
-                class="btn btn-ghost btn-xs"
-              >
-                Previous
-              </button>
-              <span class="btn btn-ghost btn-xs no-animation">
-                {@source_documents.page} / {@source_documents.total_pages}
-              </span>
-              <button
-                :if={@source_documents.page < @source_documents.total_pages}
-                phx-click="source_page"
-                phx-value-page={@source_documents.page + 1}
-                class="btn btn-ghost btn-xs"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-
-          <ChatComponents.modal
-            id="wiki-form-modal"
-            title="New Space"
-            show={@show_wiki_form}
-            on_close="close_wiki_form"
-          >
-            <.form for={@wiki_form} phx-submit="create_wiki_page" class="space-y-4">
-              <div class="form-control">
-                <label class="label"><span class="label-text">Space Name *</span></label>
-                <input
-                  type="text"
-                  name="wiki_page[title]"
-                  value={Phoenix.HTML.Form.input_value(@wiki_form, :title)}
-                  class="input input-bordered w-full"
-                  required
-                />
-              </div>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Description (Markdown)</span></label>
-                <textarea
-                  name="wiki_page[content]"
-                  class="textarea textarea-bordered w-full font-mono text-sm"
-                  rows="6"
-                >{Phoenix.HTML.Form.input_value(@wiki_form, :content)}</textarea>
-              </div>
-              <div class="flex justify-end gap-2 pt-2">
-                <button type="button" phx-click="close_wiki_form" class="btn btn-ghost btn-sm">
-                  Cancel
-                </button>
-                <button type="submit" class="btn btn-primary btn-sm">Create Space</button>
-              </div>
-            </.form>
-          </ChatComponents.modal>
-        <% end %>
-        <%= if @live_action == :wiki_page_show && @wiki_document do %>
-          <%!-- Wiki Page Detail --%>
-          <header class="px-4 py-3 border-b border-base-300 flex-shrink-0">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <button
-                  :if={!@sidebar_open}
-                  phx-click="toggle_sidebar"
-                  class="btn btn-circle btn-ghost btn-sm"
-                >
-                  <.icon name="hero-bars-3-micro" class="size-5" />
-                </button>
-                <.link
-                  navigate={
-                    if is_nil(@wiki_document.parent_document_id),
-                      do: ~p"/wiki",
-                      else: ~p"/wiki/#{@wiki_document.parent_document_id}"
-                  }
-                  class="btn btn-ghost btn-xs"
-                >
-                  <.icon name="hero-arrow-left-micro" class="size-4" />
-                </.link>
-                <h1
-                  class="text-xl tracking-wide truncate"
-                  style="font-family: 'Bebas Neue', sans-serif;"
-                >
-                  {@wiki_document.title}
-                </h1>
-              </div>
-              <div :if={!@wiki_editing} class="flex gap-1">
-                <button
-                  :if={@wiki_user_role in ["editor", "manager", "owner"]}
-                  phx-click="edit_wiki_page"
-                  class="btn btn-ghost btn-sm gap-1"
-                >
-                  <.icon name="hero-pencil-square-micro" class="size-4" /> Edit
-                </button>
-                <button
-                  :if={@wiki_user_role in ["editor", "manager", "owner"]}
-                  phx-click="show_wiki_form"
-                  phx-value-parent-id={@wiki_document.id}
-                  class="btn btn-ghost btn-sm gap-1"
-                >
-                  <.icon name="hero-plus-micro" class="size-4" /> Add Child
-                </button>
-                <button
-                  :if={@wiki_user_role in ["manager", "owner"] && @wiki_space}
-                  phx-click="open_sharing"
-                  phx-value-entity-type="wiki_space"
-                  phx-value-entity-id={@wiki_space.id}
-                  class="btn btn-ghost btn-sm gap-1"
-                >
-                  <.icon name="hero-share-micro" class="size-4" /> Share
-                </button>
-                <button
-                  :if={@wiki_user_role in ["manager", "owner"]}
-                  phx-click="delete_wiki_page"
-                  data-confirm="Delete this page and all children?"
-                  class="btn btn-ghost btn-sm text-error gap-1"
-                >
-                  <.icon name="hero-trash-micro" class="size-4" /> Delete
-                </button>
-              </div>
-            </div>
-          </header>
-
-          <div class="flex flex-1 min-h-0 overflow-hidden">
-            <%= if @wiki_sidebar_tree != [] && @wiki_space do %>
-              <%= if @wiki_sidebar_open do %>
-                <aside class="w-56 flex-shrink-0 border-r border-base-300 overflow-y-auto bg-base-200/50">
-                  <div class="p-3 min-w-56">
-                    <div class="flex items-center justify-between mb-2">
-                      <.link
-                        navigate={~p"/wiki/#{@wiki_space.id}"}
-                        class="text-xs font-semibold text-base-content/50 uppercase tracking-wider hover:text-primary transition-colors truncate"
-                      >
-                        {@wiki_space.title}
-                      </.link>
-                      <button
-                        phx-click="toggle_wiki_sidebar"
-                        class="btn btn-ghost btn-xs btn-circle"
-                        title="Collapse sidebar"
-                      >
-                        <.icon name="hero-chevron-left-micro" class="size-3.5" />
-                      </button>
-                    </div>
-                    <WikiComponents.wiki_tree_sidebar
-                      tree={@wiki_sidebar_tree}
-                      active_doc_id={if @wiki_document, do: @wiki_document.id, else: nil}
-                    />
-                  </div>
-                </aside>
-              <% else %>
-                <div class="flex-shrink-0 border-r border-base-300 bg-base-200/50 flex items-start pt-2 px-1">
-                  <button
-                    phx-click="toggle_wiki_sidebar"
-                    class="btn btn-ghost btn-xs btn-circle"
-                    title="Show wiki nav"
-                  >
-                    <.icon name="hero-chevron-right-micro" class="size-3.5" />
-                  </button>
-                </div>
-              <% end %>
-            <% end %>
-            <div class="flex-1 min-w-0 flex flex-col">
-              <%= if @wiki_editing do %>
-                <div class="flex-1 overflow-y-auto px-6 py-6 max-w-3xl mx-auto w-full">
-                  <.form for={@wiki_form} phx-submit="update_wiki_page" class="space-y-4">
-                    <div class="form-control">
-                      <input
-                        type="text"
-                        name="wiki_page[title]"
-                        value={Phoenix.HTML.Form.input_value(@wiki_form, :title)}
-                        class="input input-bordered w-full text-lg font-semibold"
-                        required
-                      />
-                    </div>
-                    <input
-                      type="hidden"
-                      name="wiki_page[content]"
-                      data-editor-content
-                      value={Phoenix.HTML.Form.input_value(@wiki_form, :content)}
-                    />
-                    <div
-                      id="wiki-editor"
-                      phx-hook="WikiEditor"
-                      phx-update="ignore"
-                      data-content={Phoenix.HTML.Form.input_value(@wiki_form, :content)}
-                      class="border border-base-300 rounded-lg overflow-hidden"
-                    >
-                      <div data-editor-target class="min-h-[300px]"></div>
-                    </div>
-                    <div class="flex justify-end gap-2 pt-2">
-                      <button
-                        type="button"
-                        phx-click="cancel_wiki_edit"
-                        class="btn btn-ghost btn-sm"
-                      >
-                        Cancel
-                      </button>
-                      <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                    </div>
-                  </.form>
-                </div>
-              <% else %>
-                <div class="flex-1 overflow-y-auto px-6 py-6 max-w-3xl mx-auto w-full space-y-6">
-                  <div
-                    :if={@wiki_document.content && @wiki_document.content != ""}
-                    id="wiki-content"
-                    phx-hook="CopyCode"
-                    class="prose prose-sm max-w-none"
-                  >
-                    {LiteskillWeb.Markdown.render(@wiki_document.content)}
-                  </div>
-                  <p
-                    :if={!@wiki_document.content || @wiki_document.content == ""}
-                    class="text-base-content/50 text-center py-8"
-                  >
-                    This page has no content yet. Click "Edit" to add some.
-                  </p>
-
-                  <WikiComponents.wiki_children
-                    source={@current_source}
-                    document={@wiki_document}
-                    tree={@wiki_tree}
-                  />
-                </div>
-              <% end %>
-            </div>
-          </div>
-
-          <ChatComponents.modal
-            id="wiki-page-modal"
-            title="New Child Page"
-            show={@show_wiki_form}
-            on_close="close_wiki_form"
-          >
-            <.form for={@wiki_form} phx-submit="create_wiki_page" class="space-y-4">
-              <div class="form-control">
-                <label class="label"><span class="label-text">Title *</span></label>
-                <input
-                  type="text"
-                  name="wiki_page[title]"
-                  value={Phoenix.HTML.Form.input_value(@wiki_form, :title)}
-                  class="input input-bordered w-full"
-                  required
-                />
-              </div>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Content (Markdown)</span></label>
-                <input
-                  type="hidden"
-                  name="wiki_page[content]"
-                  data-editor-content
-                  value={Phoenix.HTML.Form.input_value(@wiki_form, :content)}
-                />
-                <div
-                  id="wiki-child-editor"
-                  phx-hook="WikiEditor"
-                  phx-update="ignore"
-                  data-content={Phoenix.HTML.Form.input_value(@wiki_form, :content)}
-                  class="border border-base-300 rounded-lg overflow-hidden"
-                >
-                  <div data-editor-target class="min-h-[200px]"></div>
-                </div>
-              </div>
-              <div class="flex justify-end gap-2 pt-2">
-                <button type="button" phx-click="close_wiki_form" class="btn btn-ghost btn-sm">
-                  Cancel
-                </button>
-                <button type="submit" class="btn btn-primary btn-sm">Create</button>
-              </div>
-            </.form>
-          </ChatComponents.modal>
         <% end %>
         <%= if @live_action == :mcp_servers do %>
           <%!-- MCP Servers --%>
@@ -1895,7 +1379,7 @@ defmodule LiteskillWeb.ChatLive do
             sidebar_open={@sidebar_open}
           />
         <% end %>
-        <%= if @live_action not in [:sources, :source_show, :source_document_show, :wiki, :wiki_page_show, :mcp_servers, :reports, :report_show, :conversations, :pipeline, :agent_studio, :agents, :agent_new, :agent_show, :agent_edit, :teams, :team_new, :team_show, :team_edit, :runs, :run_new, :run_show, :run_log_show, :schedules, :schedule_new, :schedule_show] and not ProfileLive.profile_action?(@live_action) and not AdminLive.admin_action?(@live_action) do %>
+        <%= if @live_action not in [:sources, :source_show, :source_document_show, :mcp_servers, :reports, :report_show, :conversations, :pipeline, :agent_studio, :agents, :agent_new, :agent_show, :agent_edit, :teams, :team_new, :team_show, :team_edit, :runs, :run_new, :run_show, :run_log_show, :schedules, :schedule_new, :schedule_show] and not ProfileLive.profile_action?(@live_action) and not AdminLive.admin_action?(@live_action) do %>
           <%= if @conversation do %>
             <%!-- Active conversation --%>
             <div class="flex flex-1 min-w-0 overflow-hidden">
@@ -2604,20 +2088,6 @@ defmodule LiteskillWeb.ChatLive do
     end
   end
 
-  # --- Wiki Event Delegation ---
-
-  def handle_event("toggle_wiki_sidebar", _params, socket) do
-    {:noreply, assign(socket, wiki_sidebar_open: !socket.assigns.wiki_sidebar_open)}
-  end
-
-  @wiki_events ~w(show_wiki_form close_wiki_form create_wiki_page edit_wiki_page
-    cancel_wiki_edit update_wiki_page delete_wiki_page open_wiki_export_modal
-    close_wiki_export_modal confirm_wiki_export toggle_wiki_view_mode)
-
-  def handle_event(event, params, socket) when event in @wiki_events do
-    WikiLive.handle_event(event, params, socket)
-  end
-
   # --- Agent Studio Event Delegation ---
 
   @studio_events ~w(save_agent validate_agent confirm_delete_agent cancel_delete_agent
@@ -2649,11 +2119,6 @@ defmodule LiteskillWeb.ChatLive do
   @impl true
   def handle_event("delete_schedule|" <> id, _params, socket) do
     AgentStudioLive.handle_studio_event("delete_schedule", %{"id" => id}, socket)
-  end
-
-  @impl true
-  def handle_event("new_conversation", _params, socket) do
-    {:noreply, push_navigate(socket, to: ~p"/")}
   end
 
   @impl true
@@ -3347,7 +2812,8 @@ defmodule LiteskillWeb.ChatLive do
 
   @reports_events ~w(delete_report leave_report export_report add_section_comment
     add_report_comment reply_to_comment report_edit_mode report_view_mode
-    edit_section cancel_edit_section save_section)
+    edit_section cancel_edit_section save_section open_wiki_export_modal
+    close_wiki_export_modal confirm_wiki_export)
 
   def handle_event(event, params, socket) when event in @reports_events do
     ReportsLive.handle_event(event, params, socket)
@@ -3470,191 +2936,11 @@ defmodule LiteskillWeb.ChatLive do
 
   # --- Sharing Modal Events ---
 
-  @impl true
-  def handle_event("open_sharing", %{"entity-type" => type, "entity-id" => id}, socket) do
-    user_id = socket.assigns.current_user.id
-
-    # Bootstrap owner ACL if none exist AND user actually owns the entity
-    if Liteskill.Authorization.list_acls(type, id) == [] do
-      schema = ownership_schema(type)
-
-      if schema && Liteskill.Authorization.verify_ownership(schema, id, user_id) == :ok do
-        Liteskill.Authorization.create_owner_acl(type, id, user_id)
-      end
-    end
-
-    # Authorize: user must have access to view sharing settings
-    if Liteskill.Authorization.has_access?(type, id, user_id) do
-      acls = Liteskill.Authorization.list_acls(type, id)
-      groups = Liteskill.Groups.list_groups(user_id)
-
-      filtered_groups =
-        Enum.reject(groups, fn g ->
-          Enum.any?(acls, &(&1.group_id == g.id))
-        end)
-
-      {:noreply,
-       assign(socket,
-         show_sharing: true,
-         sharing_entity_type: type,
-         sharing_entity_id: id,
-         sharing_acls: acls,
-         sharing_user_search_results: [],
-         sharing_user_search_query: "",
-         sharing_groups: filtered_groups,
-         sharing_error: nil
-       )}
-    else
-      {:noreply, socket}
-    end
-  end
+  @sharing_events SharingLive.sharing_events()
 
   @impl true
-  def handle_event("close_sharing", _params, socket) do
-    {:noreply,
-     assign(socket,
-       show_sharing: false,
-       sharing_entity_type: nil,
-       sharing_entity_id: nil,
-       sharing_acls: [],
-       sharing_user_search_results: [],
-       sharing_user_search_query: "",
-       sharing_groups: [],
-       sharing_error: nil
-     )}
-  end
-
-  @impl true
-  def handle_event("search_users", %{"user_search" => query}, socket) do
-    if String.length(query) >= 2 do
-      existing_user_ids =
-        Enum.map(socket.assigns.sharing_acls, & &1.user_id) |> Enum.reject(&is_nil/1)
-
-      exclude = [socket.assigns.current_user.id | existing_user_ids]
-      results = Liteskill.Accounts.search_users(query, exclude: exclude, limit: 5)
-
-      {:noreply,
-       assign(socket,
-         sharing_user_search_results: results,
-         sharing_user_search_query: query
-       )}
-    else
-      {:noreply,
-       assign(socket, sharing_user_search_results: [], sharing_user_search_query: query)}
-    end
-  end
-
-  @impl true
-  def handle_event("grant_access", %{"user-id" => user_id, "role" => role}, socket) do
-    type = socket.assigns.sharing_entity_type
-    id = socket.assigns.sharing_entity_id
-    grantor_id = socket.assigns.current_user.id
-
-    case Liteskill.Authorization.grant_access(type, id, grantor_id, user_id, role) do
-      {:ok, _acl} ->
-        acls = Liteskill.Authorization.list_acls(type, id)
-
-        {:noreply,
-         assign(socket,
-           sharing_acls: acls,
-           sharing_user_search_results: [],
-           sharing_user_search_query: "",
-           sharing_error: nil
-         )}
-
-      {:error, reason} ->
-        {:noreply, assign(socket, sharing_error: humanize_error(reason))}
-    end
-  end
-
-  @impl true
-  def handle_event("grant_group_access", %{"group-id" => group_id, "role" => role}, socket) do
-    type = socket.assigns.sharing_entity_type
-    id = socket.assigns.sharing_entity_id
-    grantor_id = socket.assigns.current_user.id
-
-    case Liteskill.Authorization.grant_group_access(type, id, grantor_id, group_id, role) do
-      {:ok, _acl} ->
-        acls = Liteskill.Authorization.list_acls(type, id)
-        groups = Liteskill.Groups.list_groups(grantor_id)
-
-        filtered_groups =
-          Enum.reject(groups, fn g -> Enum.any?(acls, &(&1.group_id == g.id)) end)
-
-        {:noreply,
-         assign(socket,
-           sharing_acls: acls,
-           sharing_groups: filtered_groups,
-           sharing_error: nil
-         )}
-
-      {:error, reason} ->
-        {:noreply, assign(socket, sharing_error: humanize_error(reason))}
-    end
-  end
-
-  @impl true
-  def handle_event("change_role", %{"acl-id" => acl_id, "role" => new_role}, socket) do
-    type = socket.assigns.sharing_entity_type
-    id = socket.assigns.sharing_entity_id
-    grantor_id = socket.assigns.current_user.id
-
-    acl = Enum.find(socket.assigns.sharing_acls, &(&1.id == acl_id))
-
-    if acl && acl.user_id do
-      case Liteskill.Authorization.update_role(type, id, grantor_id, acl.user_id, new_role) do
-        {:ok, _} ->
-          acls = Liteskill.Authorization.list_acls(type, id)
-          {:noreply, assign(socket, sharing_acls: acls, sharing_error: nil)}
-
-        {:error, reason} ->
-          {:noreply, assign(socket, sharing_error: humanize_error(reason))}
-      end
-    else
-      {:noreply, assign(socket, sharing_error: "Role change not applicable")}
-    end
-  end
-
-  @impl true
-  def handle_event("revoke_access", %{"user-id" => user_id}, socket) do
-    type = socket.assigns.sharing_entity_type
-    id = socket.assigns.sharing_entity_id
-    revoker_id = socket.assigns.current_user.id
-
-    case Liteskill.Authorization.revoke_access(type, id, revoker_id, user_id) do
-      {:ok, _} ->
-        acls = Liteskill.Authorization.list_acls(type, id)
-        {:noreply, assign(socket, sharing_acls: acls, sharing_error: nil)}
-
-      {:error, reason} ->
-        {:noreply, assign(socket, sharing_error: humanize_error(reason))}
-    end
-  end
-
-  @impl true
-  def handle_event("revoke_group_access", %{"group-id" => group_id}, socket) do
-    type = socket.assigns.sharing_entity_type
-    id = socket.assigns.sharing_entity_id
-    revoker_id = socket.assigns.current_user.id
-
-    case Liteskill.Authorization.revoke_group_access(type, id, revoker_id, group_id) do
-      {:ok, _} ->
-        acls = Liteskill.Authorization.list_acls(type, id)
-        groups = Liteskill.Groups.list_groups(revoker_id)
-
-        filtered_groups =
-          Enum.reject(groups, fn g -> Enum.any?(acls, &(&1.group_id == g.id)) end)
-
-        {:noreply,
-         assign(socket,
-           sharing_acls: acls,
-           sharing_groups: filtered_groups,
-           sharing_error: nil
-         )}
-
-      {:error, reason} ->
-        {:noreply, assign(socket, sharing_error: humanize_error(reason))}
-    end
+  def handle_event(event, params, socket) when event in @sharing_events do
+    SharingLive.handle_event(event, params, socket)
   end
 
   # --- PubSub Handlers ---
@@ -4612,16 +3898,4 @@ defmodule LiteskillWeb.ChatLive do
 
   defp safe_page(page) when is_integer(page) and page > 0, do: page
   defp safe_page(_), do: 1
-
-  defp ownership_schema("agent_definition"), do: Liteskill.Agents.AgentDefinition
-  defp ownership_schema("conversation"), do: Liteskill.Chat.Conversation
-  defp ownership_schema("data_source"), do: Liteskill.DataSources.Source
-  defp ownership_schema("run"), do: Liteskill.Runs.Run
-  defp ownership_schema("llm_model"), do: Liteskill.LlmModels.LlmModel
-  defp ownership_schema("llm_provider"), do: Liteskill.LlmProviders.LlmProvider
-  defp ownership_schema("mcp_server"), do: Liteskill.McpServers.McpServer
-  defp ownership_schema("schedule"), do: Liteskill.Schedules.Schedule
-  defp ownership_schema("team_definition"), do: Liteskill.Teams.TeamDefinition
-  defp ownership_schema("wiki_space"), do: Liteskill.DataSources.Document
-  defp ownership_schema(_), do: nil
 end

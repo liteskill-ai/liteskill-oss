@@ -181,7 +181,12 @@ defmodule Liteskill.LlmModels do
 
     provider_opts = maybe_enable_caching(provider_opts, m, opts)
 
+    # api_key must be top-level for ReqLLM.Keys.get! (used by streaming path),
+    # not nested inside provider_options
+    {api_key, provider_opts} = Keyword.pop(provider_opts, :api_key)
+
     req_opts = [provider_options: provider_opts]
+    req_opts = if api_key, do: Keyword.put(req_opts, :api_key, api_key), else: req_opts
     req_opts = if base_url, do: Keyword.put(req_opts, :base_url, base_url), else: req_opts
 
     {model_spec, req_opts}

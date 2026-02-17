@@ -186,7 +186,7 @@ defmodule Liteskill.Rag.IngestWorker do
   defp embed_chunks(document, chunks, user_id, plug) do
     embed_opts =
       if plug do
-        [plug: {Req.Test, Liteskill.Rag.CohereClient}]
+        [plug: {Req.Test, Liteskill.Rag.EmbeddingClient}]
       else
         []
       end

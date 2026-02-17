@@ -22,7 +22,7 @@ defmodule Liteskill.Schedules.Schedule do
     field :prompt, :string
     field :topology, :string, default: "pipeline"
     field :context, :map, default: %{}
-    field :timeout_ms, :integer, default: 1_800_000
+    field :timeout_ms, :integer, default: 3_600_000
     field :max_iterations, :integer, default: 50
     field :last_run_at, :utc_datetime
     field :next_run_at, :utc_datetime

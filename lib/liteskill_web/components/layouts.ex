@@ -116,6 +116,180 @@ defmodule LiteskillWeb.Layouts do
     """
   end
 
+  attr :sidebar_open, :boolean, required: true
+  attr :live_action, :atom, required: true
+  attr :conversations, :list, required: true
+  attr :active_conversation_id, :any, default: nil
+  attr :current_user, :map, required: true
+  attr :has_admin_access, :boolean, required: true
+
+  def sidebar(assigns) do
+    ~H"""
+    <aside
+      id="sidebar"
+      phx-hook="SidebarNav"
+      class={[
+        "flex-shrink-0 bg-base-200 flex flex-col border-r border-base-300 transition-all duration-200 overflow-hidden",
+        if(@sidebar_open,
+          do: "w-64 max-sm:fixed max-sm:inset-0 max-sm:w-full max-sm:z-40",
+          else: "w-0 border-r-0"
+        )
+      ]}
+    >
+      <div class="flex items-center justify-between p-3 border-b border-base-300 min-w-64">
+        <div class="flex items-center gap-2">
+          <img src={~p"/images/logo_dark_mode.svg"} class="size-7 hidden dark:block" />
+          <img src={~p"/images/logo_light_mode.svg"} class="size-7 block dark:hidden" />
+          <span class="text-lg tracking-wide" style="font-family: 'Bebas Neue', sans-serif;">
+            LiteSkill
+          </span>
+        </div>
+        <div class="flex items-center gap-1">
+          <.theme_toggle />
+          <button phx-click="toggle_sidebar" class="btn btn-circle btn-ghost btn-sm">
+            <.icon name="hero-arrow-left-end-on-rectangle-micro" class="size-5" />
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between px-3 py-2 min-w-64">
+        <.link
+          navigate={~p"/conversations"}
+          class={[
+            "text-sm font-semibold tracking-wide hover:text-primary transition-colors",
+            if(@live_action == :conversations,
+              do: "text-primary",
+              else: "text-base-content/70"
+            )
+          ]}
+        >
+          Conversations
+        </.link>
+        <.link navigate={~p"/"} class="btn btn-ghost btn-sm btn-circle" title="New Chat">
+          <.icon name="hero-plus-micro" class="size-4" />
+        </.link>
+      </div>
+
+      <nav class="flex-1 overflow-y-auto px-2 space-y-1 pb-4 min-w-64">
+        <LiteskillWeb.ChatComponents.conversation_item
+          :for={conv <- @conversations}
+          conversation={conv}
+          active={@active_conversation_id == conv.id}
+        />
+        <p
+          :if={@conversations == []}
+          class="text-xs text-base-content/50 text-center py-4"
+        >
+          No conversations yet
+        </p>
+      </nav>
+
+      <div class="p-2 border-t border-base-300 min-w-64">
+        <.link
+          navigate={~p"/wiki"}
+          class={[
+            "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+            if(@live_action in [:wiki, :wiki_page_show],
+              do: "bg-primary/10 text-primary font-medium",
+              else: "hover:bg-base-200 text-base-content/70"
+            )
+          ]}
+        >
+          <.icon name="hero-book-open-micro" class="size-4" /> Wiki
+        </.link>
+        <.link
+          navigate={~p"/sources"}
+          class={[
+            "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+            if(@live_action in [:sources, :source_show, :source_document_show],
+              do: "bg-primary/10 text-primary font-medium",
+              else: "hover:bg-base-200 text-base-content/70"
+            )
+          ]}
+        >
+          <.icon name="hero-circle-stack-micro" class="size-4" /> Data Sources
+        </.link>
+        <.link
+          navigate={~p"/mcp"}
+          class={[
+            "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+            if(@live_action == :mcp_servers,
+              do: "bg-primary/10 text-primary font-medium",
+              else: "hover:bg-base-200 text-base-content/70"
+            )
+          ]}
+        >
+          <.icon name="hero-wrench-screwdriver-micro" class="size-4" /> Tools
+        </.link>
+        <.link
+          navigate={~p"/reports"}
+          class={[
+            "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+            if(@live_action in [:reports, :report_show],
+              do: "bg-primary/10 text-primary font-medium",
+              else: "hover:bg-base-200 text-base-content/70"
+            )
+          ]}
+        >
+          <.icon name="hero-document-text-micro" class="size-4" /> Reports
+        </.link>
+      </div>
+      <div class="p-2 border-t border-base-300 min-w-64">
+        <.link
+          navigate={~p"/agents"}
+          class={[
+            "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+            if(LiteskillWeb.AgentStudioLive.studio_action?(@live_action),
+              do: "bg-primary/10 text-primary font-medium",
+              else: "hover:bg-base-200 text-base-content/70"
+            )
+          ]}
+        >
+          <.icon name="hero-cpu-chip-micro" class="size-4" /> Agent Studio
+        </.link>
+      </div>
+
+      <div
+        :if={@has_admin_access}
+        class="p-2 border-t border-base-300 min-w-64"
+      >
+        <.link
+          navigate={~p"/admin"}
+          class={[
+            "flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors",
+            if(LiteskillWeb.AdminLive.admin_action?(@live_action),
+              do: "bg-primary/10 text-primary font-medium",
+              else: "hover:bg-base-200 text-base-content/70"
+            )
+          ]}
+        >
+          <.icon name="hero-cog-6-tooth-micro" class="size-4" /> Admin
+        </.link>
+      </div>
+
+      <div class="p-3 border-t border-base-300 min-w-64">
+        <div class="flex items-center gap-2">
+          <.link
+            navigate={~p"/profile"}
+            class={[
+              "flex-1 truncate text-sm hover:text-base-content",
+              if(LiteskillWeb.ProfileLive.profile_action?(@live_action),
+                do: "text-primary font-medium",
+                else: "text-base-content/70"
+              )
+            ]}
+          >
+            {@current_user.email}
+          </.link>
+          <.link href={~p"/auth/logout"} method="delete" class="btn btn-ghost btn-xs">
+            <.icon name="hero-arrow-right-start-on-rectangle-micro" class="size-4" />
+          </.link>
+        </div>
+      </div>
+    </aside>
+    """
+  end
+
   @doc """
   Provides dark vs light theme toggle based on themes defined in app.css.
 

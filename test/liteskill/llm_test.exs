@@ -133,7 +133,8 @@ defmodule Liteskill.LLMTest do
 
       generate_fn = fn model, _context, opts ->
         assert model == %{id: "claude-3-5-sonnet", provider: :anthropic}
-        assert Keyword.get(opts, :provider_options) == [api_key: "test-key"]
+        assert Keyword.get(opts, :provider_options) == []
+        assert Keyword.get(opts, :api_key) == "test-key"
         {:ok, fake_response("ok")}
       end
 
@@ -163,7 +164,7 @@ defmodule Liteskill.LLMTest do
         provider_opts = Keyword.get(opts, :provider_options)
         assert Keyword.get(provider_opts, :region) == "us-west-2"
         assert Keyword.get(provider_opts, :use_converse) == true
-        assert Keyword.get(provider_opts, :api_key) == "bedrock-token"
+        assert Keyword.get(opts, :api_key) == "bedrock-token"
         {:ok, fake_response("ok")}
       end
 

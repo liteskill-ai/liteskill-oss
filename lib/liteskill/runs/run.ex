@@ -24,7 +24,7 @@ defmodule Liteskill.Runs.Run do
     field :context, :map, default: %{}
     field :deliverables, :map, default: %{}
     field :error, :string
-    field :timeout_ms, :integer, default: 1_800_000
+    field :timeout_ms, :integer, default: 3_600_000
     field :max_iterations, :integer, default: 50
     field :cost_limit, :decimal
     field :started_at, :utc_datetime

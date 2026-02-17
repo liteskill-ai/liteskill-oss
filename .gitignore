@@ -41,3 +41,6 @@ npm-debug.log
 # mdBook build output
 /docs/book/
 
+# dev sqlite
+*.db
+

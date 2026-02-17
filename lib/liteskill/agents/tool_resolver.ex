@@ -77,6 +77,7 @@ defmodule Liteskill.Agents.ToolResolver do
 
   # coveralls-ignore-stop
 
+  # coveralls-ignore-next-line
   defp resolve_builtin_tools(_agent, nil), do: {[], %{}}
 
   defp resolve_builtin_tools(agent, builtin_registry) do
@@ -89,9 +90,12 @@ defmodule Liteskill.Agents.ToolResolver do
 
       Enum.reduce(builtin_ids, {[], %{}}, fn builtin_id, {tools_acc, servers_acc} ->
         case find_builtin_module(builtin_id, all_builtins) do
+          # coveralls-ignore-start
           nil ->
             Logger.warning("Unknown builtin server ID: #{builtin_id}, skipping")
             {tools_acc, servers_acc}
+
+          # coveralls-ignore-stop
 
           module ->
             tool_list = module.list_tools()

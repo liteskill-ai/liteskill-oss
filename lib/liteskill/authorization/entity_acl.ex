@@ -53,6 +53,7 @@ defmodule Liteskill.Authorization.EntityAcl do
     )
     |> check_constraint(:user_id, name: :entity_acl_user_or_group)
     |> foreign_key_constraint(:user_id)
+    |> foreign_key_constraint(:group_id)
   end
 
   defp validate_user_or_group(changeset) do

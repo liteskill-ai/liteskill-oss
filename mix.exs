@@ -130,7 +130,7 @@ defmodule Liteskill.MixProject do
         "credo --strict",
         "sobelow --config --exit low",
         "dialyzer",
-        "test",
+        "coveralls",
         "cmd mdbook build docs/"
       ]
     ]

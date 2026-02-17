@@ -103,7 +103,7 @@ defmodule LiteskillWeb.AgentStudioLive do
           "prompt" => "",
           "topology" => "pipeline",
           "team_definition_id" => "",
-          "timeout_ms" => "1800000",
+          "timeout_minutes" => "60",
           "max_iterations" => "50",
           "cost_limit" => ""
         },
@@ -695,12 +695,13 @@ defmodule LiteskillWeb.AgentStudioLive do
 
   # Run events
 
-  def handle_studio_event("save_run", %{"run" => params}, socket) do
+  def handle_studio_event("save_run", %{"run" => form_params}, socket) do
     user_id = socket.assigns.current_user.id
 
     params =
-      params
+      form_params
       |> Map.put("user_id", user_id)
+      |> parse_timeout_param()
       |> parse_cost_limit_param()
 
     case Runs.create_run(params) do
@@ -714,7 +715,7 @@ defmodule LiteskillWeb.AgentStudioLive do
         {:noreply,
          socket
          |> Phoenix.LiveView.put_flash(:error, format_changeset(changeset))
-         |> Phoenix.Component.assign(run_form: run_form(params))}
+         |> Phoenix.Component.assign(run_form: run_form(form_params))}
     end
   end
 
@@ -927,6 +928,17 @@ defmodule LiteskillWeb.AgentStudioLive do
   end
 
   defp normalize_opinion_params(params), do: params
+
+  defp parse_timeout_param(%{"timeout_minutes" => val} = params) do
+    params = Map.delete(params, "timeout_minutes")
+
+    case Integer.parse(to_string(val)) do
+      {minutes, _} when minutes > 0 -> Map.put(params, "timeout_ms", minutes * 60_000)
+      _ -> params
+    end
+  end
+
+  defp parse_timeout_param(params), do: params
 
   defp parse_cost_limit_param(%{"cost_limit" => ""} = params),
     do: Map.delete(params, "cost_limit")

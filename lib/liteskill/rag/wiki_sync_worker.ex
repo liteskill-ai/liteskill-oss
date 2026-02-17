@@ -72,7 +72,7 @@ defmodule Liteskill.Rag.WikiSyncWorker do
 
       embed_opts =
         if plug do
-          [plug: {Req.Test, Liteskill.Rag.CohereClient}]
+          [plug: {Req.Test, Liteskill.Rag.EmbeddingClient}]
         else
           []
         end

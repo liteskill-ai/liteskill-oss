@@ -52,18 +52,20 @@ defmodule Liteskill.BuiltinTools.AgentStudioTest do
     assert is_binary(AgentStudioTool.description())
   end
 
-  test "list_tools/0 returns 17 tool definitions" do
+  test "list_tools/0 returns 19 tool definitions" do
     tools = AgentStudioTool.list_tools()
-    assert length(tools) == 17
+    assert length(tools) == 19
 
     names = Enum.map(tools, & &1["name"])
     assert "agent_studio__list_models" in names
     assert "agent_studio__list_available_tools" in names
     assert "agent_studio__create_agent" in names
+    assert "agent_studio__update_agent" in names
     assert "agent_studio__list_agents" in names
     assert "agent_studio__get_agent" in names
     assert "agent_studio__delete_agent" in names
     assert "agent_studio__create_team" in names
+    assert "agent_studio__update_team" in names
     assert "agent_studio__list_teams" in names
     assert "agent_studio__get_team" in names
     assert "agent_studio__delete_team" in names
@@ -234,6 +236,169 @@ defmodule Liteskill.BuiltinTools.AgentStudioTest do
       assert {:ok, result} = AgentStudioTool.call_tool("agent_studio__delete_agent", %{}, ctx)
       assert decode_content(result)["error"] =~ "Missing required field"
     end
+
+    test "update agent changes fields", %{user: user, model: model} do
+      ctx = [user_id: user.id]
+
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_agent",
+          %{
+            "name" => "Original Name #{System.unique_integer([:positive])}",
+            "description" => "Original description",
+            "llm_model_id" => model.id
+          },
+          ctx
+        )
+
+      agent_id = decode_content(result)["id"]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_agent",
+                 %{
+                   "agent_id" => agent_id,
+                   "name" => "Updated Name",
+                   "description" => "Updated description",
+                   "strategy" => "direct"
+                 },
+                 ctx
+               )
+
+      data = decode_content(result)
+      assert data["name"] == "Updated Name"
+      assert data["description"] == "Updated description"
+      assert data["strategy"] == "direct"
+      assert data["model"]["id"] == model.id
+    end
+
+    test "update agent with llm_model_id changes model", %{user: user, model: model} do
+      ctx = [user_id: user.id]
+
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_agent",
+          %{"name" => "Model Agent #{System.unique_integer([:positive])}"},
+          ctx
+        )
+
+      agent_id = decode_content(result)["id"]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_agent",
+                 %{"agent_id" => agent_id, "llm_model_id" => model.id},
+                 ctx
+               )
+
+      data = decode_content(result)
+      assert data["model"]["id"] == model.id
+    end
+
+    test "update agent preserves config when builtin_server_ids not provided", %{user: user} do
+      ctx = [user_id: user.id]
+
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_agent",
+          %{
+            "name" => "Config Agent #{System.unique_integer([:positive])}",
+            "builtin_server_ids" => ["builtin:reports"]
+          },
+          ctx
+        )
+
+      agent_id = decode_content(result)["id"]
+
+      # Update name only — should NOT wipe config
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_agent",
+                 %{"agent_id" => agent_id, "name" => "Renamed Agent"},
+                 ctx
+               )
+
+      data = decode_content(result)
+      assert data["name"] == "Renamed Agent"
+      assert data["config"]["builtin_server_ids"] == ["builtin:reports"]
+    end
+
+    test "update agent with builtin_server_ids updates config", %{user: user} do
+      ctx = [user_id: user.id]
+
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_agent",
+          %{
+            "name" => "Config Update Agent #{System.unique_integer([:positive])}",
+            "builtin_server_ids" => ["builtin:reports"]
+          },
+          ctx
+        )
+
+      agent_id = decode_content(result)["id"]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_agent",
+                 %{
+                   "agent_id" => agent_id,
+                   "builtin_server_ids" => ["builtin:wiki", "builtin:reports"]
+                 },
+                 ctx
+               )
+
+      data = decode_content(result)
+      assert data["config"]["builtin_server_ids"] == ["builtin:wiki", "builtin:reports"]
+    end
+
+    test "update non-existent agent returns error", %{user: user} do
+      ctx = [user_id: user.id]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_agent",
+                 %{"agent_id" => Ecto.UUID.generate(), "name" => "Nope"},
+                 ctx
+               )
+
+      assert decode_content(result)["error"] == "not_found"
+    end
+
+    test "update agent with invalid strategy returns validation error", %{user: user} do
+      ctx = [user_id: user.id]
+
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_agent",
+          %{"name" => "Bad Strategy Agent #{System.unique_integer([:positive])}"},
+          ctx
+        )
+
+      agent_id = decode_content(result)["id"]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_agent",
+                 %{"agent_id" => agent_id, "strategy" => "invalid_strategy"},
+                 ctx
+               )
+
+      assert decode_content(result)["error"] =~ "Validation failed"
+    end
+
+    test "update agent missing agent_id returns error", %{user: user} do
+      ctx = [user_id: user.id]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_agent",
+                 %{"name" => "No ID"},
+                 ctx
+               )
+
+      assert decode_content(result)["error"] =~ "Missing required field"
+    end
   end
 
   describe "team tools" do
@@ -371,6 +536,119 @@ defmodule Liteskill.BuiltinTools.AgentStudioTest do
     test "delete team missing field returns error", %{user: user} do
       ctx = [user_id: user.id]
       assert {:ok, result} = AgentStudioTool.call_tool("agent_studio__delete_team", %{}, ctx)
+      assert decode_content(result)["error"] =~ "Missing required field"
+    end
+
+    test "update team changes fields", %{user: user} do
+      ctx = [user_id: user.id]
+
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_team",
+          %{
+            "name" => "Original Team #{System.unique_integer([:positive])}",
+            "description" => "Original desc",
+            "topology" => "pipeline"
+          },
+          ctx
+        )
+
+      team_id = decode_content(result)["id"]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_team",
+                 %{
+                   "team_id" => team_id,
+                   "name" => "Updated Team",
+                   "description" => "Updated desc",
+                   "topology" => "parallel",
+                   "aggregation_strategy" => "merge"
+                 },
+                 ctx
+               )
+
+      data = decode_content(result)
+      assert data["name"] == "Updated Team"
+      assert data["description"] == "Updated desc"
+      assert data["topology"] == "parallel"
+      assert data["aggregation_strategy"] == "merge"
+    end
+
+    test "update team partial fields preserves others", %{user: user} do
+      ctx = [user_id: user.id]
+
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_team",
+          %{
+            "name" => "Partial Team #{System.unique_integer([:positive])}",
+            "topology" => "pipeline",
+            "aggregation_strategy" => "last"
+          },
+          ctx
+        )
+
+      team_id = decode_content(result)["id"]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_team",
+                 %{"team_id" => team_id, "name" => "Renamed Team"},
+                 ctx
+               )
+
+      data = decode_content(result)
+      assert data["name"] == "Renamed Team"
+      assert data["topology"] == "pipeline"
+      assert data["aggregation_strategy"] == "last"
+    end
+
+    test "update non-existent team returns error", %{user: user} do
+      ctx = [user_id: user.id]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_team",
+                 %{"team_id" => Ecto.UUID.generate(), "name" => "Nope"},
+                 ctx
+               )
+
+      assert decode_content(result)["error"] == "not_found"
+    end
+
+    test "update team with invalid topology returns validation error", %{user: user} do
+      ctx = [user_id: user.id]
+
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_team",
+          %{"name" => "Bad Topo Team #{System.unique_integer([:positive])}"},
+          ctx
+        )
+
+      team_id = decode_content(result)["id"]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_team",
+                 %{"team_id" => team_id, "topology" => "invalid_topology"},
+                 ctx
+               )
+
+      assert decode_content(result)["error"] =~ "Validation failed"
+    end
+
+    test "update team missing team_id returns error", %{user: user} do
+      ctx = [user_id: user.id]
+
+      assert {:ok, result} =
+               AgentStudioTool.call_tool(
+                 "agent_studio__update_team",
+                 %{"name" => "No ID"},
+                 ctx
+               )
+
       assert decode_content(result)["error"] =~ "Missing required field"
     end
   end

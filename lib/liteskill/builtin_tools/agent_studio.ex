@@ -37,11 +37,13 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
       list_available_tools_tool(),
       # Agents
       create_agent_tool(),
+      update_agent_tool(),
       list_agents_tool(),
       get_agent_tool(),
       delete_agent_tool(),
       # Teams
       create_team_tool(),
+      update_team_tool(),
       list_teams_tool(),
       get_team_tool(),
       delete_team_tool(),
@@ -64,29 +66,39 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   @impl true
   def call_tool(tool_name, input, context) do
     user_id = Keyword.fetch!(context, :user_id)
-
-    case tool_name do
-      "agent_studio__list_models" -> do_list_models(user_id)
-      "agent_studio__list_available_tools" -> do_list_available_tools(user_id)
-      "agent_studio__create_agent" -> do_create_agent(user_id, input)
-      "agent_studio__list_agents" -> do_list_agents(user_id)
-      "agent_studio__get_agent" -> do_get_agent(user_id, input)
-      "agent_studio__delete_agent" -> do_delete_agent(user_id, input)
-      "agent_studio__create_team" -> do_create_team(user_id, input)
-      "agent_studio__list_teams" -> do_list_teams(user_id)
-      "agent_studio__get_team" -> do_get_team(user_id, input)
-      "agent_studio__delete_team" -> do_delete_team(user_id, input)
-      "agent_studio__start_run" -> do_start_run(user_id, input)
-      "agent_studio__list_runs" -> do_list_runs(user_id)
-      "agent_studio__get_run" -> do_get_run(user_id, input)
-      "agent_studio__cancel_run" -> do_cancel_run(user_id, input)
-      "agent_studio__create_schedule" -> do_create_schedule(user_id, input)
-      "agent_studio__list_schedules" -> do_list_schedules(user_id)
-      "agent_studio__delete_schedule" -> do_delete_schedule(user_id, input)
-      _ -> {:error, "Unknown tool: #{tool_name}"}
-    end
-    |> wrap_result()
+    dispatch(tool_name, user_id, input) |> wrap_result()
   end
+
+  defp dispatch("agent_studio__list_models", user_id, _input), do: do_list_models(user_id)
+
+  defp dispatch("agent_studio__list_available_tools", user_id, _input),
+    do: do_list_available_tools(user_id)
+
+  defp dispatch("agent_studio__create_agent", user_id, input), do: do_create_agent(user_id, input)
+  defp dispatch("agent_studio__update_agent", user_id, input), do: do_update_agent(user_id, input)
+  defp dispatch("agent_studio__list_agents", user_id, _input), do: do_list_agents(user_id)
+  defp dispatch("agent_studio__get_agent", user_id, input), do: do_get_agent(user_id, input)
+  defp dispatch("agent_studio__delete_agent", user_id, input), do: do_delete_agent(user_id, input)
+  defp dispatch("agent_studio__create_team", user_id, input), do: do_create_team(user_id, input)
+  defp dispatch("agent_studio__update_team", user_id, input), do: do_update_team(user_id, input)
+  defp dispatch("agent_studio__list_teams", user_id, _input), do: do_list_teams(user_id)
+  defp dispatch("agent_studio__get_team", user_id, input), do: do_get_team(user_id, input)
+  defp dispatch("agent_studio__delete_team", user_id, input), do: do_delete_team(user_id, input)
+  defp dispatch("agent_studio__start_run", user_id, input), do: do_start_run(user_id, input)
+  defp dispatch("agent_studio__list_runs", user_id, _input), do: do_list_runs(user_id)
+  defp dispatch("agent_studio__get_run", user_id, input), do: do_get_run(user_id, input)
+  defp dispatch("agent_studio__cancel_run", user_id, input), do: do_cancel_run(user_id, input)
+
+  defp dispatch("agent_studio__create_schedule", user_id, input),
+    do: do_create_schedule(user_id, input)
+
+  defp dispatch("agent_studio__list_schedules", user_id, _input),
+    do: do_list_schedules(user_id)
+
+  defp dispatch("agent_studio__delete_schedule", user_id, input),
+    do: do_delete_schedule(user_id, input)
+
+  defp dispatch(tool_name, _user_id, _input), do: {:error, "Unknown tool: #{tool_name}"}
 
   # ---------------------------------------------------------------------------
   # Discovery
@@ -145,7 +157,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
       opinions: input["opinions"] || %{},
       strategy: input["strategy"] || "react",
       llm_model_id: input["llm_model_id"],
-      config: build_agent_config(input)
+      config: build_agent_config(input) || %{}
     }
 
     case Agents.create_agent(attrs) do
@@ -171,6 +183,33 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   end
 
   defp do_create_agent(_user_id, _input), do: missing_field("name")
+
+  defp do_update_agent(user_id, %{"agent_id" => agent_id} = input) do
+    attrs =
+      %{}
+      |> maybe_put(:name, input["name"])
+      |> maybe_put(:description, input["description"])
+      |> maybe_put(:system_prompt, input["system_prompt"])
+      |> maybe_put(:backstory, input["backstory"])
+      |> maybe_put(:opinions, input["opinions"])
+      |> maybe_put(:strategy, input["strategy"])
+      |> maybe_put(:llm_model_id, input["llm_model_id"])
+      |> maybe_put(:config, build_agent_config(input))
+
+    case Agents.update_agent(agent_id, user_id, attrs) do
+      {:ok, _agent} ->
+        {:ok, agent} = Agents.get_agent(agent_id, user_id)
+        {:ok, serialize_agent(agent)}
+
+      {:error, %Ecto.Changeset{} = cs} ->
+        {:error, format_changeset(cs)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp do_update_agent(_user_id, _input), do: missing_field("agent_id")
 
   defp do_list_agents(user_id) do
     agents = Agents.list_agents(user_id)
@@ -249,6 +288,28 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
 
   defp do_create_team(_user_id, _input), do: missing_field("name")
 
+  defp do_update_team(user_id, %{"team_id" => team_id} = input) do
+    attrs =
+      %{}
+      |> maybe_put(:name, input["name"])
+      |> maybe_put(:description, input["description"])
+      |> maybe_put(:default_topology, input["topology"])
+      |> maybe_put(:aggregation_strategy, input["aggregation_strategy"])
+
+    case Teams.update_team(team_id, user_id, attrs) do
+      {:ok, team} ->
+        {:ok, serialize_team(team)}
+
+      {:error, %Ecto.Changeset{} = cs} ->
+        {:error, format_changeset(cs)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp do_update_team(_user_id, _input), do: missing_field("team_id")
+
   defp do_list_teams(user_id) do
     teams = Teams.list_teams(user_id)
 
@@ -314,7 +375,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
       prompt: prompt,
       team_definition_id: input["team_id"],
       topology: input["topology"] || "pipeline",
-      timeout_ms: input["timeout_ms"] || 1_800_000,
+      timeout_ms: input["timeout_ms"] || 3_600_000,
       cost_limit: cost_limit
     }
 
@@ -397,7 +458,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
       prompt: input["prompt"] || "",
       team_definition_id: input["team_id"],
       topology: input["topology"] || "pipeline",
-      timeout_ms: input["timeout_ms"] || 1_800_000,
+      timeout_ms: input["timeout_ms"] || 3_600_000,
       enabled: Map.get(input, "enabled", true)
     }
 
@@ -460,11 +521,14 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
 
   defp missing_field(name), do: {:error, "Missing required field: #{name}"}
 
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
   defp build_agent_config(%{"builtin_server_ids" => ids}) when is_list(ids) do
     %{"builtin_server_ids" => ids}
   end
 
-  defp build_agent_config(_input), do: %{}
+  defp build_agent_config(_input), do: nil
 
   defp assign_agent_tools(agent_id, user_id, tools) do
     {builtin_tools, mcp_tools} =
@@ -768,6 +832,44 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     }
   end
 
+  defp update_agent_tool do
+    %{
+      "name" => "agent_studio__update_agent",
+      "description" =>
+        "Update an existing agent definition. Only include fields you want to change. " <>
+          "Use agent_studio__list_models to get valid llm_model_id values.",
+      "inputSchema" => %{
+        "type" => "object",
+        "properties" => %{
+          "agent_id" => %{"type" => "string", "description" => "Agent UUID to update"},
+          "name" => %{"type" => "string", "description" => "New agent name"},
+          "description" => %{"type" => "string", "description" => "New description"},
+          "system_prompt" => %{"type" => "string", "description" => "New system prompt"},
+          "backstory" => %{"type" => "string", "description" => "New backstory"},
+          "opinions" => %{
+            "type" => "object",
+            "description" => "New opinions key-value pairs"
+          },
+          "strategy" => %{
+            "type" => "string",
+            "enum" => ["react", "chain_of_thought", "tree_of_thoughts", "direct"],
+            "description" => "New reasoning strategy"
+          },
+          "llm_model_id" => %{
+            "type" => "string",
+            "description" => "UUID of the LLM model to use (from list_models)"
+          },
+          "builtin_server_ids" => %{
+            "type" => "array",
+            "items" => %{"type" => "string"},
+            "description" => "Built-in server IDs to enable"
+          }
+        },
+        "required" => ["agent_id"]
+      }
+    }
+  end
+
   defp list_agents_tool do
     %{
       "name" => "agent_studio__list_agents",
@@ -859,6 +961,33 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
     }
   end
 
+  defp update_team_tool do
+    %{
+      "name" => "agent_studio__update_team",
+      "description" =>
+        "Update an existing team definition. Only include fields you want to change.",
+      "inputSchema" => %{
+        "type" => "object",
+        "properties" => %{
+          "team_id" => %{"type" => "string", "description" => "Team UUID to update"},
+          "name" => %{"type" => "string", "description" => "New team name"},
+          "description" => %{"type" => "string", "description" => "New description"},
+          "topology" => %{
+            "type" => "string",
+            "enum" => ["pipeline", "parallel", "debate", "hierarchical", "round_robin"],
+            "description" => "New execution topology"
+          },
+          "aggregation_strategy" => %{
+            "type" => "string",
+            "enum" => ["last", "merge", "vote"],
+            "description" => "New aggregation strategy"
+          }
+        },
+        "required" => ["team_id"]
+      }
+    }
+  end
+
   defp list_teams_tool do
     %{
       "name" => "agent_studio__list_teams",
@@ -920,7 +1049,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
           },
           "timeout_ms" => %{
             "type" => "integer",
-            "description" => "Timeout in milliseconds (default: 1800000 = 30 min)"
+            "description" => "Timeout in milliseconds (default: 3600000 = 60 min)"
           },
           "cost_limit" => %{
             "type" => "number",
@@ -1010,7 +1139,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
           },
           "timeout_ms" => %{
             "type" => "integer",
-            "description" => "Per-run timeout in ms (default: 1800000)"
+            "description" => "Per-run timeout in ms (default: 3600000 = 60 min)"
           },
           "enabled" => %{
             "type" => "boolean",

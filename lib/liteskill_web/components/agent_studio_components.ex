@@ -50,6 +50,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
             <.link navigate={~p"/agents/list"} class="btn btn-ghost">Cancel</.link>
           </div>
         </.form>
+        <.strategy_dialog form={@form} />
         <.agent_tools_section
           :if={@editing}
           agent={@editing}
@@ -316,27 +317,6 @@ defmodule LiteskillWeb.AgentStudioComponents do
         </div>
       </div>
 
-      <dialog id="strategy-modal" class="modal">
-        <div class="modal-box max-w-2xl">
-          <h3 class="text-lg font-bold mb-4">Choose a Strategy</h3>
-          <div class="grid grid-cols-1 gap-3">
-            <.strategy_card
-              :for={s <- AgentDefinition.valid_strategies()}
-              strategy={s}
-              selected={@form[:strategy].value == s}
-            />
-          </div>
-          <div class="modal-action">
-            <form method="dialog">
-              <button class="btn btn-sm">Cancel</button>
-            </form>
-          </div>
-        </div>
-        <form method="dialog" class="modal-backdrop">
-          <button>close</button>
-        </form>
-      </dialog>
-
       <div>
         <label class="label"><span class="label-text font-medium">Backstory</span></label>
         <textarea
@@ -407,6 +387,33 @@ defmodule LiteskillWeb.AgentStudioComponents do
         </button>
       </div>
     </div>
+    """
+  end
+
+  attr :form, :map, required: true
+
+  def strategy_dialog(assigns) do
+    ~H"""
+    <dialog id="strategy-modal" class="modal">
+      <div class="modal-box max-w-2xl">
+        <h3 class="text-lg font-bold mb-4">Choose a Strategy</h3>
+        <div class="grid grid-cols-1 gap-3">
+          <.strategy_card
+            :for={s <- AgentDefinition.valid_strategies()}
+            strategy={s}
+            selected={@form[:strategy].value == s}
+          />
+        </div>
+        <div class="modal-action">
+          <form method="dialog">
+            <button class="btn btn-sm">Cancel</button>
+          </form>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+      </form>
+    </dialog>
     """
   end
 
@@ -901,13 +908,14 @@ defmodule LiteskillWeb.AgentStudioComponents do
 
       <div class="grid grid-cols-3 gap-4">
         <div>
-          <label class="label"><span class="label-text font-medium">Timeout (ms)</span></label>
+          <label class="label"><span class="label-text font-medium">Timeout (minutes)</span></label>
           <input
             type="number"
-            name={@form[:timeout_ms].name}
-            value={@form[:timeout_ms].value}
+            name={@form[:timeout_minutes].name}
+            value={@form[:timeout_minutes].value}
             class="input input-bordered w-full"
-            min="1000"
+            min="1"
+            step="1"
           />
         </div>
         <div>
