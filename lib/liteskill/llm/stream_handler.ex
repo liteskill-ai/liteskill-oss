@@ -421,28 +421,26 @@ defmodule Liteskill.LLM.StreamHandler do
   defp normalize_error(%{status: _} = error) when not is_struct(error), do: error
 
   defp normalize_error(error) when is_struct(error) do
-    cond do
-      Map.has_key?(error, :status) and is_integer(Map.get(error, :status)) ->
-        body =
-          cond do
-            # ReqLLM.Error.API.Request has response_body with the actual error
-            Map.has_key?(error, :response_body) and is_map(Map.get(error, :response_body)) ->
-              Map.get(error, :response_body)
+    if Map.has_key?(error, :status) and is_integer(Map.get(error, :status)) do
+      body =
+        cond do
+          # ReqLLM.Error.API.Request has response_body with the actual error
+          Map.has_key?(error, :response_body) and is_map(Map.get(error, :response_body)) ->
+            Map.get(error, :response_body)
 
-            Map.has_key?(error, :body) ->
-              Map.get(error, :body)
+          Map.has_key?(error, :body) ->
+            Map.get(error, :body)
 
-            Map.has_key?(error, :reason) ->
-              Map.get(error, :reason)
+          Map.has_key?(error, :reason) ->
+            Map.get(error, :reason)
 
-            true ->
-              "LLM request failed"
-          end
+          true ->
+            "LLM request failed"
+        end
 
-        %{status: Map.get(error, :status), body: body}
-
-      true ->
-        error
+      %{status: Map.get(error, :status), body: body}
+    else
+      error
     end
   end
 

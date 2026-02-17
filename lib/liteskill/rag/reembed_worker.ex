@@ -22,9 +22,7 @@ defmodule Liteskill.Rag.ReembedWorker do
     user_id = Map.fetch!(args, "user_id")
     batch = Map.get(args, "batch", 0)
 
-    if not Settings.embedding_enabled?() do
-      {:cancel, "embedding_disabled"}
-    else
+    if Settings.embedding_enabled?() do
       documents = Rag.list_documents_for_reembedding(@batch_size, 0)
 
       if documents == [] do
@@ -55,6 +53,8 @@ defmodule Liteskill.Rag.ReembedWorker do
             err
         end
       end
+    else
+      {:cancel, "embedding_disabled"}
     end
   end
 

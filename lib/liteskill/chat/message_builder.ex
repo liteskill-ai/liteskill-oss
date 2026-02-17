@@ -158,12 +158,10 @@ defmodule Liteskill.Chat.MessageBuilder do
   defp format_tool_output(nil), do: ""
 
   defp format_tool_output(%{"content" => content}) when is_list(content) do
-    content
-    |> Enum.map(fn
+    Enum.map_join(content, "\n", fn
       %{"text" => text} -> text
       other -> Jason.encode!(other)
     end)
-    |> Enum.join("\n")
   end
 
   defp format_tool_output(output) when is_map(output), do: Jason.encode!(output)

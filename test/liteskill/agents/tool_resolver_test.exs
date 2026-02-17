@@ -48,7 +48,7 @@ defmodule Liteskill.Agents.ToolResolverTest do
       {tools, servers} =
         ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
 
-      assert length(tools) > 0
+      assert tools != []
 
       tool_names = Enum.map(tools, &get_in(&1, ["toolSpec", "name"]))
       assert Enum.any?(tool_names, &String.starts_with?(&1, "reports__"))
@@ -106,7 +106,7 @@ defmodule Liteskill.Agents.ToolResolverTest do
         ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
 
       # Only reports tools should be resolved, nonexistent is skipped
-      assert length(tools) > 0
+      assert tools != []
 
       tool_names = Enum.map(tools, &get_in(&1, ["toolSpec", "name"]))
       assert Enum.all?(tool_names, &String.starts_with?(&1, "reports__"))

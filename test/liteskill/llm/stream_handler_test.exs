@@ -869,7 +869,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     end
 
     test "extracts HTTP status with non-standard body type" do
-      assert StreamHandler.extract_error_message(%{status: 500, body: 12345}) == "HTTP 500"
+      assert StreamHandler.extract_error_message(%{status: 500, body: 12_345}) == "HTTP 500"
     end
 
     test "handles Mint.TransportError" do

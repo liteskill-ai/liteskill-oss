@@ -78,10 +78,10 @@ defmodule LiteskillWeb.AdminLive do
   end
 
   def apply_admin_action(socket, action, user) do
-    if !Liteskill.Rbac.has_any_admin_permission?(user.id) do
-      Phoenix.LiveView.push_navigate(socket, to: ~p"/profile")
-    else
+    if Liteskill.Rbac.has_any_admin_permission?(user.id) do
       load_tab_data(socket, action)
+    else
+      Phoenix.LiveView.push_navigate(socket, to: ~p"/profile")
     end
   end
 
@@ -2585,26 +2585,7 @@ defmodule LiteskillWeb.AdminLive do
             if err do
               {acc, err}
             else
-              case DataSources.get_source_by_type(user_id, source.source_type) do
-                %{id: id} ->
-                  {[Map.put(source, :db_id, id) | acc], nil}
-
-                nil ->
-                  case DataSources.create_source(
-                         %{
-                           name: source.name,
-                           source_type: source.source_type,
-                           description: ""
-                         },
-                         user_id
-                       ) do
-                    {:ok, db_source} ->
-                      {[Map.put(source, :db_id, db_source.id) | acc], nil}
-
-                    {:error, reason} ->
-                      {acc, action_error("create source #{source.name}", reason)}
-                  end
-              end
+              ensure_source_exists(source, user_id, acc)
             end
           end)
 
@@ -3434,6 +3415,25 @@ defmodule LiteskillWeb.AdminLive do
         end
       end
     end)
+  end
+
+  defp ensure_source_exists(source, user_id, acc) do
+    case DataSources.get_source_by_type(user_id, source.source_type) do
+      %{id: id} ->
+        {[Map.put(source, :db_id, id) | acc], nil}
+
+      nil ->
+        case DataSources.create_source(
+               %{name: source.name, source_type: source.source_type, description: ""},
+               user_id
+             ) do
+          {:ok, db_source} ->
+            {[Map.put(source, :db_id, db_source.id) | acc], nil}
+
+          {:error, reason} ->
+            {acc, action_error("create source #{source.name}", reason)}
+        end
+    end
   end
 
   @doc false

@@ -115,50 +115,54 @@ defmodule Liteskill.DataSources.SyncWorker do
       # Fetch full content from connector
       case connector.fetch_content(source, entry.external_id, opts) do
         {:ok, fetched} ->
-          content_size = byte_size(fetched.content || "")
-
-          # coveralls-ignore-start
-          if content_size > @max_content_bytes do
-            Logger.warning(
-              "SyncWorker: skipping oversized document #{entry.external_id} " <>
-                "(#{content_size} bytes > #{@max_content_bytes} limit)"
-            )
-
-            :unchanged
-          else
-            # coveralls-ignore-stop
-            attrs = %{
-              title: entry.title,
-              content_type: normalize_content_type(fetched.content_type),
-              metadata: entry.metadata,
-              content: fetched.content,
-              content_hash: fetched.content_hash
-            }
-
-            case DataSources.upsert_document_by_external_id(
-                   source.id,
-                   entry.external_id,
-                   attrs,
-                   user_id
-                 ) do
-              {:ok, status, doc} when status in [:created, :updated] ->
-                if doc.content && doc.content != "" do
-                  enqueue_document_sync(doc.id, source.name, user_id, "upsert", plug)
-                end
-
-                :changed
-
-              # coveralls-ignore-start
-              {:ok, :unchanged, _doc} ->
-                :unchanged
-
-              {:error, _reason} ->
-                :error
-                # coveralls-ignore-stop
-            end
-          end
+          upsert_fetched_content(source, entry, fetched, user_id, plug)
 
         # coveralls-ignore-start
+        {:error, _reason} ->
+          :error
+          # coveralls-ignore-stop
+      end
+    end
+  end
+
+  defp upsert_fetched_content(source, entry, fetched, user_id, plug) do
+    content_size = byte_size(fetched.content || "")
+
+    # coveralls-ignore-start
+    if content_size > @max_content_bytes do
+      Logger.warning(
+        "SyncWorker: skipping oversized document #{entry.external_id} " <>
+          "(#{content_size} bytes > #{@max_content_bytes} limit)"
+      )
+
+      :unchanged
+    else
+      # coveralls-ignore-stop
+      attrs = %{
+        title: entry.title,
+        content_type: normalize_content_type(fetched.content_type),
+        metadata: entry.metadata,
+        content: fetched.content,
+        content_hash: fetched.content_hash
+      }
+
+      case DataSources.upsert_document_by_external_id(
+             source.id,
+             entry.external_id,
+             attrs,
+             user_id
+           ) do
+        {:ok, status, doc} when status in [:created, :updated] ->
+          if doc.content && doc.content != "" do
+            enqueue_document_sync(doc.id, source.name, user_id, "upsert", plug)
+          end
+
+          :changed
+
+        # coveralls-ignore-start
+        {:ok, :unchanged, _doc} ->
+          :unchanged
+
         {:error, _reason} ->
           :error
           # coveralls-ignore-stop

@@ -302,7 +302,7 @@ defmodule Liteskill.RbacTest do
     test "list_user_roles/1", %{user: user, role: role} do
       {:ok, _} = Rbac.assign_role_to_user(user.id, role.id)
       roles = Rbac.list_user_roles(user.id)
-      assert length(roles) >= 1
+      assert roles != []
     end
 
     test "protects root admin from losing Instance Admin" do
@@ -348,7 +348,7 @@ defmodule Liteskill.RbacTest do
     test "list_group_roles/1", %{group: group, role: role} do
       {:ok, _} = Rbac.assign_role_to_group(group.id, role.id)
       roles = Rbac.list_group_roles(group.id)
-      assert length(roles) >= 1
+      assert roles != []
     end
   end
 

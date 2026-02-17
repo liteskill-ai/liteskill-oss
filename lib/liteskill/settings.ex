@@ -13,10 +13,9 @@ defmodule Liteskill.Settings do
   import Ecto.Query
 
   @cache_key {__MODULE__, :settings}
-  @cache_enabled Application.compile_env(:liteskill, :settings_cache, true)
 
   def get do
-    if @cache_enabled do
+    if cache_enabled?() do
       # coveralls-ignore-start
       case :persistent_term.get(@cache_key, nil) do
         nil -> load_and_cache()
@@ -55,7 +54,7 @@ defmodule Liteskill.Settings do
       {:ok, settings} ->
         settings = Repo.preload(settings, :embedding_model, force: true)
         # coveralls-ignore-next-line
-        if @cache_enabled, do: :persistent_term.put(@cache_key, settings)
+        if cache_enabled?(), do: :persistent_term.put(@cache_key, settings)
         {:ok, settings}
 
       # coveralls-ignore-start
@@ -102,4 +101,6 @@ defmodule Liteskill.Settings do
   end
 
   # coveralls-ignore-stop
+
+  defp cache_enabled?, do: Application.get_env(:liteskill, :settings_cache, true)
 end

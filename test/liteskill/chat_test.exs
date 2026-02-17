@@ -391,7 +391,7 @@ defmodule Liteskill.ChatTest do
       {:ok, _} = Chat.send_message(conv.id, user.id, "Second")
 
       {:ok, state} = Chat.replay_from(conv.id, user.id, 2)
-      assert length(state.messages) >= 1
+      assert state.messages != []
     end
 
     test "returns not_found for another user", %{user: user, other_user: other} do
@@ -457,7 +457,7 @@ defmodule Liteskill.ChatTest do
       assert fork.status == "active"
 
       {:ok, fork_state} = Chat.replay_conversation(fork.id, user.id)
-      assert length(fork_state.messages) >= 1
+      assert fork_state.messages != []
     end
 
     test "forks at a later position to preserve more messages", %{user: user} do

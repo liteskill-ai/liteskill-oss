@@ -27,12 +27,10 @@ defmodule Liteskill.LLM.ToolUtils do
   conversation messages or LLM context.
   """
   def format_tool_output({:ok, %{"content" => content}}) when is_list(content) do
-    content
-    |> Enum.map(fn
+    Enum.map_join(content, "\n", fn
       %{"text" => text} -> text
       other -> Jason.encode!(other)
     end)
-    |> Enum.join("\n")
   end
 
   def format_tool_output({:ok, data}) when is_map(data), do: Jason.encode!(data)

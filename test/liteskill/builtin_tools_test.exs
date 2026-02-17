@@ -11,7 +11,7 @@ defmodule Liteskill.BuiltinToolsTest do
   test "all_tools/0 returns flat tool list" do
     tools = BuiltinTools.all_tools()
     assert is_list(tools)
-    assert length(tools) > 0
+    assert tools != []
 
     first = hd(tools)
     assert Map.has_key?(first, :id)
@@ -23,7 +23,7 @@ defmodule Liteskill.BuiltinToolsTest do
 
   test "virtual_servers/0 returns virtual server maps with all fields" do
     servers = BuiltinTools.virtual_servers()
-    assert length(servers) > 0
+    assert servers != []
 
     server = hd(servers)
     assert server.id == "builtin:reports"

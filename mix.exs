@@ -14,7 +14,12 @@ defmodule Liteskill.MixProject do
       deps: deps(),
       compilers: [:boundary, :phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader],
-      test_coverage: [tool: ExCoveralls]
+      test_coverage: [tool: ExCoveralls],
+      dialyzer: [
+        list_unused_filters: true,
+        plt_add_apps: [:ex_unit],
+        excluded_paths: ["test/support"]
+      ]
     ]
   end
 
@@ -85,6 +90,9 @@ defmodule Liteskill.MixProject do
       {:jose, "~> 1.11"},
       {:jido, "~> 2.0.0-rc"},
       {:boundary, "~> 0.10", runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:tidewave, "~> 0.5", only: :dev}
     ]
@@ -119,6 +127,9 @@ defmodule Liteskill.MixProject do
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format",
+        "credo --strict",
+        "sobelow --config --exit low",
+        "dialyzer",
         "test",
         "cmd mdbook build docs/"
       ]

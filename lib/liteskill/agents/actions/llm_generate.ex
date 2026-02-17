@@ -33,9 +33,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
   def run(_params, context) do
     state = context.state
 
-    unless state[:llm_model] do
-      {:error, "No LLM model configured for agent '#{state[:agent_name]}'"}
-    else
+    if state[:llm_model] do
       {system_prompt, llm_context} =
         case state[:resume_messages] do
           # coveralls-ignore-start
@@ -69,6 +67,8 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
              messages: messages
            }}
       end
+    else
+      {:error, "No LLM model configured for agent '#{state[:agent_name]}'"}
     end
   end
 
@@ -455,37 +455,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
           "assistant" ->
             case msg["tool_calls"] do
               tcs when is_list(tcs) and tcs != [] ->
-                tool_calls =
-                  Enum.map(tcs, fn tc ->
-                    args =
-                      case tc["function"]["arguments"] do
-                        a when is_binary(a) ->
-                          case Jason.decode(a) do
-                            {:ok, decoded} ->
-                              decoded
-
-                            # coveralls-ignore-start
-                            {:error, err} ->
-                              Logger.warning(
-                                "Failed to decode tool call arguments during deserialization: #{inspect(err)}, raw: #{inspect(a)}"
-                              )
-
-                              %{}
-                              # coveralls-ignore-stop
-                          end
-
-                        # coveralls-ignore-start
-                        a when is_map(a) ->
-                          a
-
-                        _ ->
-                          %{}
-                          # coveralls-ignore-stop
-                      end
-
-                    %{id: tc["id"], name: tc["function"]["name"], arguments: args}
-                  end)
-
+                tool_calls = Enum.map(tcs, &deserialize_tool_call/1)
                 ReqLLM.Context.assistant(text, tool_calls: tool_calls)
 
               _ ->
@@ -509,6 +479,36 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
   defp extract_text(content) when is_binary(content), do: content
   # coveralls-ignore-next-line
   defp extract_text(_), do: ""
+
+  defp deserialize_tool_call(tc) do
+    args =
+      case tc["function"]["arguments"] do
+        a when is_binary(a) ->
+          case Jason.decode(a) do
+            {:ok, decoded} ->
+              decoded
+
+            # coveralls-ignore-start
+            {:error, err} ->
+              Logger.warning(
+                "Failed to decode tool call arguments during deserialization: #{inspect(err)}, raw: #{inspect(a)}"
+              )
+
+              %{}
+              # coveralls-ignore-stop
+          end
+
+        # coveralls-ignore-start
+        a when is_map(a) ->
+          a
+
+        _ ->
+          %{}
+          # coveralls-ignore-stop
+      end
+
+    %{id: tc["id"], name: tc["function"]["name"], arguments: args}
+  end
 
   # -- Prompt caching guard --
 

@@ -1140,7 +1140,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
       # Verify log was created
       {:ok, updated_run} = Liteskill.Runs.get_run(run.id, owner.id)
       llm_round_logs = Enum.filter(updated_run.run_logs, &(&1.step == "llm_round"))
-      assert length(llm_round_logs) >= 1
+      assert llm_round_logs != []
 
       log = hd(llm_round_logs)
       assert log.metadata["agent"] == "BroadcastAgent"

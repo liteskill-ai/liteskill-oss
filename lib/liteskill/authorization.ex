@@ -79,7 +79,7 @@ defmodule Liteskill.Authorization do
   end
 
   @doc "Returns true if user has owner role."
-  def is_owner?(entity_type, entity_id, user_id) do
+  def owner?(entity_type, entity_id, user_id) do
     case get_role(entity_type, entity_id, user_id) do
       {:ok, "owner"} -> true
       _ -> false

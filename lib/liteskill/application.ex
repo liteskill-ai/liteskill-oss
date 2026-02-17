@@ -5,10 +5,6 @@ defmodule Liteskill.Application do
 
   use Application
 
-  # coveralls-ignore-start
-  @env Application.compile_env(:liteskill, :env)
-  # coveralls-ignore-stop
-
   @impl true
   def start(_type, _args) do
     Liteskill.Crypto.validate_key!()
@@ -21,11 +17,11 @@ defmodule Liteskill.Application do
         {DNSCluster, query: Application.get_env(:liteskill, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Liteskill.PubSub},
         # coveralls-ignore-next-line
-        if(@env != :test, do: Liteskill.Rag.EmbedQueue),
+        unless(test_env?(), do: Liteskill.Rag.EmbedQueue),
         {Oban, Application.fetch_env!(:liteskill, Oban)},
         # Ensure root admin account exists on boot (skip in test — sandbox not available)
         # coveralls-ignore-start
-        if(@env != :test,
+        unless(test_env?(),
           do:
             {Task,
              fn ->
@@ -46,7 +42,7 @@ defmodule Liteskill.Application do
         Liteskill.Chat.StreamRecovery,
         # Schedule tick — checks for due schedules and enqueues runs
         # coveralls-ignore-start
-        if(@env != :test, do: Liteskill.Schedules.ScheduleTick),
+        unless(test_env?(), do: Liteskill.Schedules.ScheduleTick),
         # coveralls-ignore-stop
         # Start to serve requests, typically the last entry
         LiteskillWeb.Endpoint
@@ -67,4 +63,6 @@ defmodule Liteskill.Application do
     LiteskillWeb.Endpoint.config_change(changed, removed)
     :ok
   end
+
+  defp test_env?, do: Application.get_env(:liteskill, :env) == :test
 end

@@ -194,7 +194,7 @@ defmodule Liteskill.Rbac do
   def remove_role_from_user(user_id, role_id) do
     admin_role = Repo.one(from r in Role, where: r.name == ^@instance_admin_name)
 
-    if admin_role && role_id == admin_role.id && is_root_admin?(user_id) do
+    if admin_role && role_id == admin_role.id && root_admin?(user_id) do
       {:error, :cannot_remove_root_admin}
     else
       case Repo.one(from ur in UserRole, where: ur.user_id == ^user_id and ur.role_id == ^role_id) do
@@ -214,7 +214,7 @@ defmodule Liteskill.Rbac do
     |> Repo.all()
   end
 
-  defp is_root_admin?(user_id) do
+  defp root_admin?(user_id) do
     case Repo.get(Liteskill.Accounts.User, user_id) do
       %{email: email} ->
         email == @root_admin_email

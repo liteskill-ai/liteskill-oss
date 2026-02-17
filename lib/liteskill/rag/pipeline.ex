@@ -270,7 +270,7 @@ defmodule Liteskill.Rag.Pipeline do
   defp maybe_scope_collection(query, _user_id, :all), do: query
 
   defp window_cutoff(:hour), do: DateTime.utc_now() |> DateTime.add(-3600, :second)
-  defp window_cutoff(:day), do: DateTime.utc_now() |> DateTime.add(-86400, :second)
+  defp window_cutoff(:day), do: DateTime.utc_now() |> DateTime.add(-86_400, :second)
   defp window_cutoff(:week), do: DateTime.utc_now() |> DateTime.add(-604_800, :second)
 
   @doc false

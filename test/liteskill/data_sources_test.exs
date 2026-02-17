@@ -31,7 +31,7 @@ defmodule Liteskill.DataSourcesTest do
   describe "config_fields_for/1" do
     test "returns fields for known source type" do
       fields = DataSources.config_fields_for("github")
-      assert length(fields) > 0
+      assert fields != []
       assert Enum.all?(fields, &is_map/1)
       assert Enum.all?(fields, &Map.has_key?(&1, :key))
       assert Enum.all?(fields, &Map.has_key?(&1, :label))
@@ -54,7 +54,7 @@ defmodule Liteskill.DataSourcesTest do
     test "returns a list" do
       types = DataSources.available_source_types()
       assert is_list(types)
-      assert length(types) > 0
+      assert types != []
     end
 
     test "each entry has name and source_type" do

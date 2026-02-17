@@ -141,16 +141,16 @@ defmodule Liteskill.AuthorizationTest do
     end
   end
 
-  describe "is_owner?/3" do
+  describe "owner?/3" do
     test "true for owner", %{user: user, entity_id: eid, entity_type: etype} do
       {:ok, _} = Authorization.create_owner_acl(etype, eid, user.id)
-      assert Authorization.is_owner?(etype, eid, user.id)
+      assert Authorization.owner?(etype, eid, user.id)
     end
 
     test "false for manager", %{user: user, other: other, entity_id: eid, entity_type: etype} do
       {:ok, _} = Authorization.create_owner_acl(etype, eid, user.id)
       {:ok, _} = Authorization.grant_access(etype, eid, user.id, other.id, "manager")
-      refute Authorization.is_owner?(etype, eid, other.id)
+      refute Authorization.owner?(etype, eid, other.id)
     end
   end
 

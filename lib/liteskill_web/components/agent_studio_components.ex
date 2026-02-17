@@ -2019,12 +2019,10 @@ defmodule LiteskillWeb.AgentStudioComponents do
        do: content
 
   defp log_chat_message_content(%{"content" => content}) when is_list(content) do
-    content
-    |> Enum.map(fn
+    Enum.map_join(content, "\n", fn
       %{"text" => text} -> text
       other -> Jason.encode!(other)
     end)
-    |> Enum.join("\n")
   end
 
   defp log_chat_message_content(%{"content" => content}) when is_binary(content), do: content

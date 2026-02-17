@@ -627,7 +627,7 @@ defmodule Liteskill.UsageTest do
       results = Usage.daily_totals()
 
       assert is_list(results)
-      assert length(results) >= 1
+      assert results != []
 
       today = Enum.find(results, fn d -> d.total_tokens >= 300 end)
       assert today
@@ -648,7 +648,7 @@ defmodule Liteskill.UsageTest do
 
       results = Usage.daily_totals(user_id: user.id)
 
-      assert length(results) >= 1
+      assert results != []
       total = Enum.reduce(results, 0, fn d, acc -> acc + d.total_tokens end)
       assert total >= 100
 

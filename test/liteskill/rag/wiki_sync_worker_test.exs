@@ -71,7 +71,7 @@ defmodule Liteskill.Rag.WikiSyncWorkerTest do
 
       # Chunks created
       chunks = Repo.all(from(c in Chunk, where: c.document_id == ^rag_doc.id))
-      assert length(chunks) >= 1
+      assert chunks != []
     end
 
     test "stores wiki_space_id in RAG document metadata", %{owner: owner} do
@@ -253,7 +253,7 @@ defmodule Liteskill.Rag.WikiSyncWorkerTest do
 
       {:ok, rag_doc} = Rag.find_rag_document_by_wiki_id(wiki_doc.id, owner.id)
       chunks = Repo.all(from(c in Chunk, where: c.document_id == ^rag_doc.id))
-      assert length(chunks) >= 1
+      assert chunks != []
 
       delete_args = %{
         "wiki_document_id" => wiki_doc.id,

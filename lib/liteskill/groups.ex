@@ -39,7 +39,7 @@ defmodule Liteskill.Groups do
       is_nil(group) ->
         {:error, :not_found}
 
-      is_member?(group.id, user_id) ->
+      member?(group.id, user_id) ->
         {:ok, group}
 
       true ->
@@ -158,7 +158,7 @@ defmodule Liteskill.Groups do
     end
   end
 
-  defp is_member?(group_id, user_id) do
+  defp member?(group_id, user_id) do
     Repo.exists?(
       from gm in GroupMembership,
         where: gm.group_id == ^group_id and gm.user_id == ^user_id

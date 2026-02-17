@@ -4,11 +4,7 @@ defmodule LiteskillWeb.PasswordAuthController do
   alias Liteskill.Accounts
 
   def register(conn, params) do
-    if not Liteskill.Settings.registration_open?() do
-      conn
-      |> put_status(:forbidden)
-      |> json(%{error: "Registration is currently closed"})
-    else
+    if Liteskill.Settings.registration_open?() do
       attrs = %{
         email: params["email"],
         name: params["name"],
@@ -34,6 +30,10 @@ defmodule LiteskillWeb.PasswordAuthController do
           |> put_status(:unprocessable_entity)
           |> json(%{error: "validation failed", details: errors})
       end
+    else
+      conn
+      |> put_status(:forbidden)
+      |> json(%{error: "Registration is currently closed"})
     end
   end
 

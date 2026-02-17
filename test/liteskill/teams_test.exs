@@ -59,7 +59,7 @@ defmodule Liteskill.TeamsTest do
       assert team.user_id == owner.id
       assert team.team_members == []
 
-      assert Liteskill.Authorization.is_owner?("team_definition", team.id, owner.id)
+      assert Liteskill.Authorization.owner?("team_definition", team.id, owner.id)
     end
 
     test "rejects create without user_id" do

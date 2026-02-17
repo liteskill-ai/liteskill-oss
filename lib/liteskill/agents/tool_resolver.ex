@@ -32,47 +32,50 @@ defmodule Liteskill.Agents.ToolResolver do
     |> Enum.reduce({[], %{}}, fn agent_tool, {tools_acc, servers_acc} ->
       server = agent_tool.mcp_server
 
-      unless server do
+      if server do
+        resolve_server_tools(agent_tool, server, user_id, {tools_acc, servers_acc})
+      else
         # coveralls-ignore-next-line
         Logger.warning("AgentTool #{agent_tool.id} has no preloaded mcp_server, skipping")
         {tools_acc, servers_acc}
-      else
-        case McpClient.list_tools(server) do
-          # coveralls-ignore-start
-          {:ok, tool_list} ->
-            filtered =
-              if agent_tool.tool_name do
-                Enum.filter(tool_list, &(&1["name"] == agent_tool.tool_name))
-              else
-                tool_list
-              end
-
-            new_tools = Enum.map(filtered, &to_bedrock_spec/1)
-
-            new_servers =
-              Map.new(filtered, fn tool ->
-                resolved_server =
-                  case McpServers.get_server(server.id, user_id) do
-                    {:ok, s} -> s
-                    _ -> server
-                  end
-
-                {tool["name"], resolved_server}
-              end)
-
-            {tools_acc ++ new_tools, Map.merge(servers_acc, new_servers)}
-
-          # coveralls-ignore-stop
-          {:error, reason} ->
-            Logger.warning(
-              "Failed to fetch tools from #{server.name}: #{inspect(reason)}, skipping"
-            )
-
-            {tools_acc, servers_acc}
-        end
       end
     end)
   end
+
+  # coveralls-ignore-start
+  defp resolve_server_tools(agent_tool, server, user_id, {tools_acc, servers_acc}) do
+    case McpClient.list_tools(server) do
+      {:ok, tool_list} ->
+        filtered =
+          if agent_tool.tool_name do
+            Enum.filter(tool_list, &(&1["name"] == agent_tool.tool_name))
+          else
+            tool_list
+          end
+
+        new_tools = Enum.map(filtered, &to_bedrock_spec/1)
+
+        new_servers =
+          Map.new(filtered, fn tool ->
+            resolved_server =
+              case McpServers.get_server(server.id, user_id) do
+                {:ok, s} -> s
+                _ -> server
+              end
+
+            {tool["name"], resolved_server}
+          end)
+
+        {tools_acc ++ new_tools, Map.merge(servers_acc, new_servers)}
+
+      {:error, reason} ->
+        Logger.warning("Failed to fetch tools from #{server.name}: #{inspect(reason)}, skipping")
+
+        {tools_acc, servers_acc}
+    end
+  end
+
+  # coveralls-ignore-stop
 
   defp resolve_builtin_tools(_agent, nil), do: {[], %{}}
 

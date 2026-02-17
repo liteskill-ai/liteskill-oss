@@ -13,7 +13,7 @@ defmodule Liteskill.BuiltinSourcesTest do
   describe "virtual_sources/0" do
     test "returns virtual source maps with all expected fields" do
       sources = BuiltinSources.virtual_sources()
-      assert length(sources) >= 1
+      assert sources != []
 
       wiki = Enum.find(sources, &(&1.id == "builtin:wiki"))
       assert wiki

@@ -53,7 +53,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
 
       data = decode_content(result)
       assert is_list(data["spaces"])
-      assert length(data["spaces"]) >= 1
+      assert data["spaces"] != []
 
       space = Enum.find(data["spaces"], &(&1["title"] == "My Space"))
       assert space
@@ -834,7 +834,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
         )
 
       data = decode_content(result)
-      assert length(data["results"]) >= 1
+      assert data["results"] != []
       found = Enum.find(data["results"], &(&1["title"] == "snippet_nil_content_test_xyz"))
       assert found["snippet"] == ""
     end

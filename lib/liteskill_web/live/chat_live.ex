@@ -2824,7 +2824,7 @@ defmodule LiteskillWeb.ChatLive do
     selected = socket.assigns.conversations_selected
 
     selected =
-      if MapSet.equal?(selected, all_ids) and all_ids != MapSet.new(),
+      if MapSet.equal?(selected, all_ids) and MapSet.size(all_ids) > 0,
         do: MapSet.new(),
         else: all_ids
 

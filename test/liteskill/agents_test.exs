@@ -53,7 +53,7 @@ defmodule Liteskill.AgentsTest do
       assert agent.user_id == owner.id
       assert agent.status == "active"
 
-      assert Liteskill.Authorization.is_owner?("agent_definition", agent.id, owner.id)
+      assert Liteskill.Authorization.owner?("agent_definition", agent.id, owner.id)
     end
 
     test "rejects create without user_id" do

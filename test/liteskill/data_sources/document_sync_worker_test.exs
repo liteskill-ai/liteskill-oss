@@ -76,7 +76,7 @@ defmodule Liteskill.DataSources.DocumentSyncWorkerTest do
 
       # Chunks created
       chunks = Repo.all(from(c in Chunk, where: c.document_id == ^rag_doc.id))
-      assert length(chunks) >= 1
+      assert chunks != []
     end
 
     test "re-upsert replaces old RAG document", %{owner: owner, source: source} do
@@ -166,7 +166,7 @@ defmodule Liteskill.DataSources.DocumentSyncWorkerTest do
       assert :ok = perform_job(DocumentSyncWorker, upsert_args)
       {:ok, rag_doc} = Rag.find_rag_document_by_source_doc_id(doc.id, owner.id)
       chunks = Repo.all(from(c in Chunk, where: c.document_id == ^rag_doc.id))
-      assert length(chunks) >= 1
+      assert chunks != []
 
       delete_args = %{
         "document_id" => doc.id,

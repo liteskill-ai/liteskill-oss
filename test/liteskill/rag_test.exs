@@ -189,7 +189,7 @@ defmodule Liteskill.RagTest do
                  search_limit: 20
                )
 
-      assert length(results) >= 1
+      assert results != []
     end
 
     test "returns results from shared wiki collection", %{owner: owner, other: other} do
@@ -244,7 +244,7 @@ defmodule Liteskill.RagTest do
                  search_limit: 20
                )
 
-      assert length(results) >= 1
+      assert results != []
       assert hd(results).chunk.content == "shared wiki chunk"
     end
 
@@ -335,7 +335,7 @@ defmodule Liteskill.RagTest do
                  search_limit: 20
                )
 
-      assert length(results) >= 1
+      assert results != []
       assert Enum.all?(results, fn r -> r.relevance_score == nil end)
     end
 
@@ -1181,7 +1181,7 @@ defmodule Liteskill.RagTest do
       assert {:ok, results} =
                Rag.augment_context("hello", owner.id, plug: {Req.Test, CohereClient})
 
-      assert length(results) >= 1
+      assert results != []
       first = hd(results)
       assert first.chunk.document.title == "Test Doc"
       assert first.chunk.document.source.name == "test-source"
@@ -1416,7 +1416,7 @@ defmodule Liteskill.RagTest do
       assert {:ok, results} =
                Rag.augment_context("wiki", other.id, plug: {Req.Test, CohereClient})
 
-      assert length(results) >= 1
+      assert results != []
       assert hd(results).chunk.content == "shared wiki content"
     end
 
@@ -1534,7 +1534,7 @@ defmodule Liteskill.RagTest do
         |> where([e], e.user_id == ^owner.id)
         |> Repo.all()
 
-      assert length(requests) >= 1
+      assert requests != []
 
       embed_req = Enum.find(requests, &(&1.request_type == "embed"))
       assert embed_req != nil

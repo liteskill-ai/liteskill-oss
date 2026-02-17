@@ -65,7 +65,7 @@ defmodule Liteskill.McpServers.ClientTest do
       Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
         resp = %{
           "jsonrpc" => "2.0",
-          "error" => %{"code" => -32601, "message" => "Method not found"},
+          "error" => %{"code" => -32_601, "message" => "Method not found"},
           "id" => 1
         }
 
@@ -74,7 +74,7 @@ defmodule Liteskill.McpServers.ClientTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(resp))
       end)
 
-      assert {:error, %{"code" => -32601}} =
+      assert {:error, %{"code" => -32_601}} =
                Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
     end
 
@@ -153,7 +153,7 @@ defmodule Liteskill.McpServers.ClientTest do
       Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
         resp = %{
           "jsonrpc" => "2.0",
-          "error" => %{"code" => -32602, "message" => "Invalid params"},
+          "error" => %{"code" => -32_602, "message" => "Invalid params"},
           "id" => 1
         }
 
@@ -162,7 +162,7 @@ defmodule Liteskill.McpServers.ClientTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(resp))
       end)
 
-      assert {:error, %{"code" => -32602}} =
+      assert {:error, %{"code" => -32_602}} =
                Client.call_tool(
                  server,
                  "bad_tool",

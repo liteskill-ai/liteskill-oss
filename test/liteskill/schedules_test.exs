@@ -53,7 +53,7 @@ defmodule Liteskill.SchedulesTest do
       assert schedule.status == "active"
       assert schedule.user_id == owner.id
 
-      assert Liteskill.Authorization.is_owner?("schedule", schedule.id, owner.id)
+      assert Liteskill.Authorization.owner?("schedule", schedule.id, owner.id)
     end
 
     test "rejects create without user_id" do

@@ -55,7 +55,7 @@ defmodule Liteskill.RunsTest do
       assert run.user_id == owner.id
       assert run.run_tasks == []
 
-      assert Liteskill.Authorization.is_owner?("run", run.id, owner.id)
+      assert Liteskill.Authorization.owner?("run", run.id, owner.id)
     end
 
     test "creates run with team assignment", %{owner: owner, team: team} do
