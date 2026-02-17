@@ -1,4 +1,16 @@
 defmodule Liteskill.Runs do
+  use Boundary,
+    top_level?: true,
+    deps: [
+      Liteskill.Authorization,
+      Liteskill.Rbac,
+      Liteskill.Agents,
+      Liteskill.Teams,
+      Liteskill.Usage,
+      Liteskill.BuiltinTools
+    ],
+    exports: [Run, RunLog, RunTask, Runner, ReportBuilder, ResumeHandler]
+
   @moduledoc """
   Context for managing runs — runtime task executions.
 

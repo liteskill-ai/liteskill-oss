@@ -2,6 +2,7 @@ defmodule Liteskill.Accounts do
   @moduledoc """
   The Accounts context. Manages user records created from OIDC or password authentication.
   """
+  use Boundary, top_level?: true, deps: [], exports: [User, Invitation]
 
   alias Liteskill.Accounts.Invitation
   alias Liteskill.Accounts.User

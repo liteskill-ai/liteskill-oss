@@ -298,10 +298,12 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
   # -- Progress broadcasting --
 
   defp broadcast_progress(state, round, has_tool_calls) do
-    if state[:run_id] do
+    log_fn = state[:log_fn]
+
+    if state[:run_id] && log_fn do
       status = if has_tool_calls, do: "tool_calling", else: "generating"
 
-      Liteskill.Runs.add_log(
+      log_fn.(
         state[:run_id],
         "debug",
         "llm_round",

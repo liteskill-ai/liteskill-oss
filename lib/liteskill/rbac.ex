@@ -1,4 +1,9 @@
 defmodule Liteskill.Rbac do
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Accounts, Liteskill.Groups],
+    exports: [Permissions, Role, UserRole, GroupRole]
+
   @moduledoc """
   Role-based access control context.
 

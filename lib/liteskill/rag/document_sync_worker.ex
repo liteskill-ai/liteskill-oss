@@ -1,4 +1,4 @@
-defmodule Liteskill.DataSources.DocumentSyncWorker do
+defmodule Liteskill.Rag.DocumentSyncWorker do
   @moduledoc """
   Oban worker that syncs a single DataSources.Document to the RAG store.
 

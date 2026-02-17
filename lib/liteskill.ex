@@ -1,4 +1,6 @@
 defmodule Liteskill do
+  use Boundary, check: [in: false, out: false]
+
   @moduledoc """
   Liteskill keeps the contexts that define your domain
   and business logic.

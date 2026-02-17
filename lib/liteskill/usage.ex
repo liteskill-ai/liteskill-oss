@@ -1,4 +1,9 @@
 defmodule Liteskill.Usage do
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Groups, Liteskill.LlmModels, Liteskill.Rag],
+    exports: [UsageRecord, CostCalculator]
+
   @moduledoc """
   Context for recording and querying LLM token usage.
 

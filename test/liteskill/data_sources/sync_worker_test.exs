@@ -3,7 +3,8 @@ defmodule Liteskill.DataSources.SyncWorkerTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.DataSources
-  alias Liteskill.DataSources.{SyncWorker, DocumentSyncWorker}
+  alias Liteskill.DataSources.SyncWorker
+  alias Liteskill.Rag.DocumentSyncWorker
 
   setup do
     {:ok, owner} =

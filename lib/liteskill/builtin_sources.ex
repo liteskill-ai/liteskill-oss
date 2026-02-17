@@ -1,4 +1,6 @@
 defmodule Liteskill.BuiltinSources do
+  use Boundary, top_level?: true, deps: [], exports: [Wiki]
+
   @moduledoc """
   Behaviour and registry for built-in data sources.
 

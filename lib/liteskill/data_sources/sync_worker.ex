@@ -17,7 +17,7 @@ defmodule Liteskill.DataSources.SyncWorker do
     unique: [period: 300, fields: [:args], keys: [:source_id]]
 
   alias Liteskill.DataSources
-  alias Liteskill.DataSources.{ConnectorRegistry, DocumentSyncWorker}
+  alias Liteskill.DataSources.ConnectorRegistry
 
   require Logger
 
@@ -188,13 +188,18 @@ defmodule Liteskill.DataSources.SyncWorker do
   # coveralls-ignore-stop
 
   defp enqueue_document_sync(document_id, source_name, user_id, action, plug) do
-    DocumentSyncWorker.new(%{
+    %{
       "document_id" => document_id,
       "source_name" => source_name,
       "user_id" => user_id,
       "action" => action,
       "plug" => plug
-    })
+    }
+    |> Oban.Job.new(
+      worker: "Liteskill.Rag.DocumentSyncWorker",
+      queue: :rag_ingest,
+      max_attempts: 3
+    )
     |> Oban.insert()
   end
 end

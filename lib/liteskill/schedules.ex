@@ -1,4 +1,9 @@
 defmodule Liteskill.Schedules do
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Authorization, Liteskill.Rbac, Liteskill.Runs],
+    exports: [Schedule, ScheduleTick, ScheduleWorker]
+
   @moduledoc """
   Context for managing schedules — cron-like recurring run execution.
 

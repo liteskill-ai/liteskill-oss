@@ -1,4 +1,6 @@
 defmodule Liteskill.EventStore do
+  use Boundary, top_level?: true, deps: [], exports: [Event, Snapshot, Postgres]
+
   @moduledoc """
   Behaviour for event store implementations.
 

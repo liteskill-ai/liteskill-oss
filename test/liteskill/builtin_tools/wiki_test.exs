@@ -394,7 +394,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
       data = decode_content(result)
       r = hd(data["results"])
       assert r["status"] == "error"
-      assert r["error"] == "forbidden"
+      assert r["error"] == "you don't have permission"
     end
 
     test "returns error when title is missing", %{user: user} do

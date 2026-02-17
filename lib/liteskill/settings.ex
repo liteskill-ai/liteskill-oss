@@ -1,4 +1,6 @@
 defmodule Liteskill.Settings do
+  use Boundary, top_level?: true, deps: [], exports: [ServerSettings]
+
   @moduledoc """
   The Settings context. Manages server-wide settings using a singleton row pattern.
 

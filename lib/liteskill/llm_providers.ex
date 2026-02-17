@@ -1,4 +1,9 @@
 defmodule Liteskill.LlmProviders do
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Accounts, Liteskill.Authorization],
+    exports: [LlmProvider]
+
   @moduledoc """
   Context for managing LLM provider configurations.
 

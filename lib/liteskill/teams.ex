@@ -1,4 +1,9 @@
 defmodule Liteskill.Teams do
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Authorization, Liteskill.Rbac],
+    exports: [TeamDefinition, TeamMember]
+
   @moduledoc """
   Context for managing team definitions.
 

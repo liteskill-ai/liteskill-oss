@@ -539,24 +539,33 @@ defmodule Liteskill.AuthorizationTest do
       {:ok, conversation} =
         Liteskill.Chat.create_conversation(%{user_id: user.id, title: "Owned"})
 
-      assert :ok = Authorization.verify_ownership("conversation", conversation.id, user.id)
+      assert :ok =
+               Authorization.verify_ownership(
+                 Liteskill.Chat.Conversation,
+                 conversation.id,
+                 user.id
+               )
     end
 
     test "returns :error when user does not own a conversation", %{user: user, other: other} do
       {:ok, conversation} =
         Liteskill.Chat.create_conversation(%{user_id: user.id, title: "Not Mine"})
 
-      assert :error = Authorization.verify_ownership("conversation", conversation.id, other.id)
+      assert :error =
+               Authorization.verify_ownership(
+                 Liteskill.Chat.Conversation,
+                 conversation.id,
+                 other.id
+               )
     end
 
     test "returns :error for non-existent entity", %{user: user} do
       assert :error =
-               Authorization.verify_ownership("conversation", Ecto.UUID.generate(), user.id)
-    end
-
-    test "returns :error for unknown entity type", %{user: user} do
-      assert :error =
-               Authorization.verify_ownership("unknown_type", Ecto.UUID.generate(), user.id)
+               Authorization.verify_ownership(
+                 Liteskill.Chat.Conversation,
+                 Ecto.UUID.generate(),
+                 user.id
+               )
     end
 
     test "returns :ok when user owns an MCP server", %{user: user} do
@@ -567,7 +576,12 @@ defmodule Liteskill.AuthorizationTest do
           user_id: user.id
         })
 
-      assert :ok = Authorization.verify_ownership("mcp_server", server.id, user.id)
+      assert :ok =
+               Authorization.verify_ownership(
+                 Liteskill.McpServers.McpServer,
+                 server.id,
+                 user.id
+               )
     end
 
     test "returns :error when user does not own an MCP server", %{user: user, other: other} do
@@ -578,7 +592,12 @@ defmodule Liteskill.AuthorizationTest do
           user_id: user.id
         })
 
-      assert :error = Authorization.verify_ownership("mcp_server", server.id, other.id)
+      assert :error =
+               Authorization.verify_ownership(
+                 Liteskill.McpServers.McpServer,
+                 server.id,
+                 other.id
+               )
     end
   end
 

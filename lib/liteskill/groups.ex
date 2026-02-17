@@ -1,4 +1,6 @@
 defmodule Liteskill.Groups do
+  use Boundary, top_level?: true, deps: [], exports: [Group, GroupMembership]
+
   @moduledoc """
   The Groups context. Manages groups and their memberships.
   """
@@ -9,20 +11,18 @@ defmodule Liteskill.Groups do
   import Ecto.Query
 
   def create_group(name, creator_id) do
-    with :ok <- Liteskill.Rbac.authorize(creator_id, "groups:create") do
-      Repo.transaction(fn ->
-        group =
-          %Group{}
-          |> Group.changeset(%{name: name, created_by: creator_id})
-          |> Repo.insert!()
-
-        %GroupMembership{}
-        |> GroupMembership.changeset(%{group_id: group.id, user_id: creator_id, role: "owner"})
+    Repo.transaction(fn ->
+      group =
+        %Group{}
+        |> Group.changeset(%{name: name, created_by: creator_id})
         |> Repo.insert!()
 
-        group
-      end)
-    end
+      %GroupMembership{}
+      |> GroupMembership.changeset(%{group_id: group.id, user_id: creator_id, role: "owner"})
+      |> Repo.insert!()
+
+      group
+    end)
   end
 
   def list_groups(user_id) do

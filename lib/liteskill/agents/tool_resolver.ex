@@ -4,7 +4,6 @@ defmodule Liteskill.Agents.ToolResolver do
   into tool specs and server maps for LLM tool calling.
   """
 
-  alias Liteskill.BuiltinTools
   alias Liteskill.McpServers
   alias Liteskill.McpServers.Client, as: McpClient
 
@@ -16,10 +15,14 @@ defmodule Liteskill.Agents.ToolResolver do
   Returns `{tools, tool_servers}` where:
   - `tools` is a list of Bedrock-format tool specs
   - `tool_servers` is a map of `tool_name => server` for execution routing
+
+  `opts`:
+  - `:builtin_registry` — module implementing `all/0`
   """
-  def resolve(agent, user_id) do
+  def resolve(agent, user_id, opts \\ []) do
     {mcp_tools, mcp_servers} = resolve_mcp_tools(agent, user_id)
-    {builtin_tools, builtin_servers} = resolve_builtin_tools(agent)
+    builtin_registry = opts[:builtin_registry]
+    {builtin_tools, builtin_servers} = resolve_builtin_tools(agent, builtin_registry)
 
     {mcp_tools ++ builtin_tools, Map.merge(mcp_servers, builtin_servers)}
   end
@@ -71,13 +74,15 @@ defmodule Liteskill.Agents.ToolResolver do
     end)
   end
 
-  defp resolve_builtin_tools(agent) do
+  defp resolve_builtin_tools(_agent, nil), do: {[], %{}}
+
+  defp resolve_builtin_tools(agent, builtin_registry) do
     builtin_ids = get_in(agent.config, ["builtin_server_ids"]) || []
 
     if builtin_ids == [] do
       {[], %{}}
     else
-      all_builtins = BuiltinTools.all()
+      all_builtins = builtin_registry.all()
 
       Enum.reduce(builtin_ids, {[], %{}}, fn builtin_id, {tools_acc, servers_acc} ->
         case find_builtin_module(builtin_id, all_builtins) do

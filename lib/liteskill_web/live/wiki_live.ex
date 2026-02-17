@@ -162,8 +162,9 @@ defmodule LiteskillWeb.WikiLive do
          |> Phoenix.Component.assign(show_wiki_form: false)
          |> Phoenix.LiveView.push_navigate(to: ~p"/wiki/#{doc.id}")}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to create page")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("create page", reason))}
     end
   end
 
@@ -198,8 +199,9 @@ defmodule LiteskillWeb.WikiLive do
          )
          |> reload_wiki_page()}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to update page")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("update page", reason))}
     end
   end
 
@@ -216,8 +218,9 @@ defmodule LiteskillWeb.WikiLive do
 
         {:noreply, Phoenix.LiveView.push_navigate(socket, to: redirect_to)}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to delete page")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("delete page", reason))}
     end
   end
 
@@ -257,9 +260,13 @@ defmodule LiteskillWeb.WikiLive do
            |> Phoenix.LiveView.put_flash(:info, "Report exported to wiki")
            |> Phoenix.LiveView.push_navigate(to: ~p"/wiki/#{doc.id}")}
 
-        {:error, _} ->
+        {:error, reason} ->
           {:noreply,
-           Phoenix.LiveView.put_flash(socket, :error, "Failed to export report to wiki")}
+           Phoenix.LiveView.put_flash(
+             socket,
+             :error,
+             action_error("export report to wiki", reason)
+           )}
       end
     end
   end

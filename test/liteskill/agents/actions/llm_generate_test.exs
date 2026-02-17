@@ -1131,7 +1131,8 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
           user_id: owner.id,
           prompt: "test broadcast",
           prior_context: "",
-          run_id: run.id
+          run_id: run.id,
+          log_fn: &Liteskill.Runs.add_log/5
         })
 
       assert {:ok, _result} = LlmGenerate.run(%{}, context)

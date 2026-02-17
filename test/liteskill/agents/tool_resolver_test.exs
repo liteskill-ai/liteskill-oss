@@ -25,7 +25,9 @@ defmodule Liteskill.Agents.ToolResolverTest do
 
   describe "resolve/2 — no tools" do
     test "returns empty when agent has no tools or builtins", %{agent: agent, owner: owner} do
-      {tools, servers} = ToolResolver.resolve(agent, owner.id)
+      {tools, servers} =
+        ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
+
       assert tools == []
       assert servers == %{}
     end
@@ -43,7 +45,8 @@ defmodule Liteskill.Agents.ToolResolverTest do
 
       {:ok, agent} = Agents.get_agent(agent.id, owner.id)
 
-      {tools, servers} = ToolResolver.resolve(agent, owner.id)
+      {tools, servers} =
+        ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
 
       assert length(tools) > 0
 
@@ -81,7 +84,9 @@ defmodule Liteskill.Agents.ToolResolverTest do
 
       {:ok, agent} = Agents.get_agent(agent.id, owner.id)
 
-      {tools, servers} = ToolResolver.resolve(agent, owner.id)
+      {tools, servers} =
+        ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
+
       assert tools == []
       assert servers == %{}
     end
@@ -97,7 +102,8 @@ defmodule Liteskill.Agents.ToolResolverTest do
 
       {:ok, agent} = Agents.get_agent(agent.id, owner.id)
 
-      {tools, servers} = ToolResolver.resolve(agent, owner.id)
+      {tools, servers} =
+        ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
 
       # Only reports tools should be resolved, nonexistent is skipped
       assert length(tools) > 0
@@ -108,7 +114,9 @@ defmodule Liteskill.Agents.ToolResolverTest do
     end
 
     test "returns empty when no builtin_server_ids in config", %{agent: agent, owner: owner} do
-      {tools, servers} = ToolResolver.resolve(agent, owner.id)
+      {tools, servers} =
+        ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
+
       assert tools == []
       assert servers == %{}
     end
@@ -124,7 +132,9 @@ defmodule Liteskill.Agents.ToolResolverTest do
 
       {:ok, agent} = Agents.get_agent(agent.id, owner.id)
 
-      {tools, servers} = ToolResolver.resolve(agent, owner.id)
+      {tools, servers} =
+        ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
+
       assert tools == []
       assert servers == %{}
     end
@@ -143,7 +153,9 @@ defmodule Liteskill.Agents.ToolResolverTest do
       {:ok, agent} = Agents.get_agent(agent.id, owner.id)
 
       # Should return empty results, not crash
-      {tools, servers} = ToolResolver.resolve(agent, owner.id)
+      {tools, servers} =
+        ToolResolver.resolve(agent, owner.id, builtin_registry: Liteskill.BuiltinTools)
+
       assert tools == []
       assert servers == %{}
     end

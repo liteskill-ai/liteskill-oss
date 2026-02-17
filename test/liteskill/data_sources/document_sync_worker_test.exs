@@ -5,7 +5,7 @@ defmodule Liteskill.DataSources.DocumentSyncWorkerTest do
   alias Liteskill.Rag
   alias Liteskill.Rag.{CohereClient, Chunk}
   alias Liteskill.DataSources
-  alias Liteskill.DataSources.DocumentSyncWorker
+  alias Liteskill.Rag.DocumentSyncWorker
 
   import Ecto.Query
 

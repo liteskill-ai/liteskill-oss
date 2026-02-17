@@ -327,8 +327,8 @@ defmodule LiteskillWeb.SetupLive do
       {:ok, _} ->
         {:noreply, assign(socket, step: :data_sources)}
 
-      {:error, _} ->
-        {:noreply, assign(socket, error: "Failed to update permissions")}
+      {:error, reason} ->
+        {:noreply, assign(socket, error: action_error("update permissions", reason))}
     end
   end
 
@@ -372,8 +372,8 @@ defmodule LiteskillWeb.SetupLive do
             {:ok, db_source} ->
               {:cont, {[Map.put(source, :db_id, db_source.id) | acc], nil}}
 
-            {:error, _} ->
-              {:halt, {acc, "Failed to create source: #{source.name}"}}
+            {:error, reason} ->
+              {:halt, {acc, action_error("create source #{source.name}", reason)}}
           end
         end)
 

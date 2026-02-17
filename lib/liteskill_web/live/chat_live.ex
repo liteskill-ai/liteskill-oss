@@ -339,9 +339,9 @@ defmodule LiteskillWeb.ChatLive do
           page_title: source.name
         )
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> put_flash(:error, "Source not found")
+        |> put_flash(:error, action_error("load source", reason))
         |> push_navigate(to: ~p"/sources")
     end
   end
@@ -378,9 +378,9 @@ defmodule LiteskillWeb.ChatLive do
         page_title: doc.title
       )
     else
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> put_flash(:error, "Document not found")
+        |> put_flash(:error, action_error("load document", reason))
         |> push_navigate(to: ~p"/sources")
     end
   end
@@ -457,9 +457,9 @@ defmodule LiteskillWeb.ChatLive do
           socket
         end
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> put_flash(:error, "Conversation not found")
+        |> put_flash(:error, action_error("load conversation", reason))
         |> push_navigate(to: ~p"/")
     end
   end
@@ -2402,8 +2402,8 @@ defmodule LiteskillWeb.ChatLive do
            data_sources: sources
          )}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to save source configuration.")}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, action_error("save source configuration", reason))}
     end
   end
 
@@ -2439,8 +2439,8 @@ defmodule LiteskillWeb.ChatLive do
            configure_source_form: to_form(%{}, as: :config)
          )}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to add data source.")}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, action_error("add data source", reason))}
     end
   end
 
@@ -2468,11 +2468,11 @@ defmodule LiteskillWeb.ChatLive do
          |> assign(data_sources: sources, confirm_delete_source_id: nil)
          |> put_flash(:info, "Data source deleted.")}
 
-      {:error, _} ->
+      {:error, reason} ->
         {:noreply,
          socket
          |> assign(confirm_delete_source_id: nil)
-         |> put_flash(:error, "Failed to delete data source.")}
+         |> put_flash(:error, action_error("delete data source", reason))}
     end
   end
 
@@ -2494,8 +2494,8 @@ defmodule LiteskillWeb.ChatLive do
             {:noreply, put_flash(socket, :info, "Sync started.")}
         end
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to start sync.")}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, action_error("start sync", reason))}
     end
   end
 
@@ -2698,12 +2698,12 @@ defmodule LiteskillWeb.ChatLive do
                   {:ok, _message} ->
                     {:noreply, push_navigate(socket, to: "/c/#{conversation.id}?auto_stream=1")}
 
-                  {:error, _reason} ->
-                    {:noreply, put_flash(socket, :error, "Failed to send message")}
+                  {:error, reason} ->
+                    {:noreply, put_flash(socket, :error, action_error("send message", reason))}
                 end
 
-              {:error, _reason} ->
-                {:noreply, put_flash(socket, :error, "Failed to create conversation")}
+              {:error, reason} ->
+                {:noreply, put_flash(socket, :error, action_error("create conversation", reason))}
             end
 
           conversation ->
@@ -2724,8 +2724,8 @@ defmodule LiteskillWeb.ChatLive do
                    stream_task_pid: pid
                  )}
 
-              {:error, _reason} ->
-                {:noreply, put_flash(socket, :error, "Failed to send message")}
+              {:error, reason} ->
+                {:noreply, put_flash(socket, :error, action_error("send message", reason))}
             end
         end
     end
@@ -2757,11 +2757,11 @@ defmodule LiteskillWeb.ChatLive do
           {:noreply, push_navigate(socket, to: ~p"/")}
         end
 
-      {:error, _} ->
+      {:error, reason} ->
         {:noreply,
          socket
          |> assign(confirm_delete_id: nil)
-         |> put_flash(:error, "Failed to delete conversation")}
+         |> put_flash(:error, action_error("delete conversation", reason))}
     end
   end
 
@@ -2980,8 +2980,8 @@ defmodule LiteskillWeb.ChatLive do
              stream_task_pid: pid
            )}
 
-        {:error, _reason} ->
-          {:noreply, put_flash(socket, :error, "Failed to edit message")}
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, action_error("edit message", reason))}
       end
     end
   end
@@ -3274,8 +3274,8 @@ defmodule LiteskillWeb.ChatLive do
              )
          )}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Server not found")}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, action_error("load server", reason))}
     end
   end
 
@@ -3329,8 +3329,8 @@ defmodule LiteskillWeb.ChatLive do
         servers = McpServers.list_servers(user_id)
         {:noreply, assign(socket, mcp_servers: servers)}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to delete server")}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, action_error("delete server", reason))}
     end
   end
 
@@ -3405,12 +3405,12 @@ defmodule LiteskillWeb.ChatLive do
             servers = McpServers.list_servers(user_id)
             {:noreply, assign(socket, mcp_servers: servers)}
 
-          {:error, _} ->
-            {:noreply, put_flash(socket, :error, "Failed to update status")}
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, action_error("update server status", reason))}
         end
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Server not found")}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, action_error("load server", reason))}
     end
   end
 
@@ -3429,8 +3429,8 @@ defmodule LiteskillWeb.ChatLive do
            inspecting_tools_loading: true
          )}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Server not found")}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, action_error("load server", reason))}
     end
   end
 
@@ -3476,7 +3476,9 @@ defmodule LiteskillWeb.ChatLive do
 
     # Bootstrap owner ACL if none exist AND user actually owns the entity
     if Liteskill.Authorization.list_acls(type, id) == [] do
-      if Liteskill.Authorization.verify_ownership(type, id, user_id) == :ok do
+      schema = ownership_schema(type)
+
+      if schema && Liteskill.Authorization.verify_ownership(schema, id, user_id) == :ok do
         Liteskill.Authorization.create_owner_acl(type, id, user_id)
       end
     end
@@ -3561,7 +3563,7 @@ defmodule LiteskillWeb.ChatLive do
          )}
 
       {:error, reason} ->
-        {:noreply, assign(socket, sharing_error: humanize_sharing_error(reason))}
+        {:noreply, assign(socket, sharing_error: humanize_error(reason))}
     end
   end
 
@@ -3587,7 +3589,7 @@ defmodule LiteskillWeb.ChatLive do
          )}
 
       {:error, reason} ->
-        {:noreply, assign(socket, sharing_error: humanize_sharing_error(reason))}
+        {:noreply, assign(socket, sharing_error: humanize_error(reason))}
     end
   end
 
@@ -3606,7 +3608,7 @@ defmodule LiteskillWeb.ChatLive do
           {:noreply, assign(socket, sharing_acls: acls, sharing_error: nil)}
 
         {:error, reason} ->
-          {:noreply, assign(socket, sharing_error: humanize_sharing_error(reason))}
+          {:noreply, assign(socket, sharing_error: humanize_error(reason))}
       end
     else
       {:noreply, assign(socket, sharing_error: "Role change not applicable")}
@@ -3625,7 +3627,7 @@ defmodule LiteskillWeb.ChatLive do
         {:noreply, assign(socket, sharing_acls: acls, sharing_error: nil)}
 
       {:error, reason} ->
-        {:noreply, assign(socket, sharing_error: humanize_sharing_error(reason))}
+        {:noreply, assign(socket, sharing_error: humanize_error(reason))}
     end
   end
 
@@ -3651,7 +3653,7 @@ defmodule LiteskillWeb.ChatLive do
          )}
 
       {:error, reason} ->
-        {:noreply, assign(socket, sharing_error: humanize_sharing_error(reason))}
+        {:noreply, assign(socket, sharing_error: humanize_error(reason))}
     end
   end
 
@@ -4601,18 +4603,6 @@ defmodule LiteskillWeb.ChatLive do
     end
   end
 
-  defp humanize_sharing_error(:no_access), do: "You don't have permission to share this"
-  defp humanize_sharing_error(:forbidden), do: "You don't have permission for this action"
-  defp humanize_sharing_error(:cannot_grant_owner), do: "Cannot grant owner role"
-  defp humanize_sharing_error(:cannot_revoke_owner), do: "Cannot revoke owner access"
-  defp humanize_sharing_error(:not_found), do: "User or access entry not found"
-  defp humanize_sharing_error(:cannot_modify_owner), do: "Cannot change owner's role"
-
-  defp humanize_sharing_error(reason) when is_atom(reason),
-    do: reason |> Atom.to_string() |> String.replace("_", " ")
-
-  defp humanize_sharing_error(_), do: "An error occurred"
-
   defp safe_page(page) when is_binary(page) do
     case Integer.parse(page) do
       {n, ""} when n > 0 -> n
@@ -4622,4 +4612,16 @@ defmodule LiteskillWeb.ChatLive do
 
   defp safe_page(page) when is_integer(page) and page > 0, do: page
   defp safe_page(_), do: 1
+
+  defp ownership_schema("agent_definition"), do: Liteskill.Agents.AgentDefinition
+  defp ownership_schema("conversation"), do: Liteskill.Chat.Conversation
+  defp ownership_schema("data_source"), do: Liteskill.DataSources.Source
+  defp ownership_schema("run"), do: Liteskill.Runs.Run
+  defp ownership_schema("llm_model"), do: Liteskill.LlmModels.LlmModel
+  defp ownership_schema("llm_provider"), do: Liteskill.LlmProviders.LlmProvider
+  defp ownership_schema("mcp_server"), do: Liteskill.McpServers.McpServer
+  defp ownership_schema("schedule"), do: Liteskill.Schedules.Schedule
+  defp ownership_schema("team_definition"), do: Liteskill.Teams.TeamDefinition
+  defp ownership_schema("wiki_space"), do: Liteskill.DataSources.Document
+  defp ownership_schema(_), do: nil
 end

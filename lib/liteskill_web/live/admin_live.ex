@@ -6,6 +6,7 @@ defmodule LiteskillWeb.AdminLive do
 
   use LiteskillWeb, :html
 
+  import LiteskillWeb.ErrorHelpers
   import LiteskillWeb.FormatHelpers
 
   alias Liteskill.Accounts
@@ -2500,10 +2501,10 @@ defmodule LiteskillWeb.AdminLive do
                  setup_error: nil
                )}
 
-            {:error, _changeset} ->
+            {:error, reason} ->
               {:noreply,
                Phoenix.Component.assign(socket,
-                 setup_error: "Failed to set password. Please try again."
+                 setup_error: action_error("set password", reason)
                )}
           end
       end
@@ -2539,9 +2540,11 @@ defmodule LiteskillWeb.AdminLive do
         {:ok, _} ->
           {:noreply, Phoenix.Component.assign(socket, setup_step: :data_sources)}
 
-        {:error, _} ->
+        {:error, reason} ->
           {:noreply,
-           Phoenix.Component.assign(socket, setup_error: "Failed to update permissions")}
+           Phoenix.Component.assign(socket,
+             setup_error: action_error("update permissions", reason)
+           )}
       end
     end)
   end
@@ -2598,8 +2601,8 @@ defmodule LiteskillWeb.AdminLive do
                     {:ok, db_source} ->
                       {[Map.put(source, :db_id, db_source.id) | acc], nil}
 
-                    {:error, _} ->
-                      {acc, "Failed to create source: #{source.name}"}
+                    {:error, reason} ->
+                      {acc, action_error("create source #{source.name}", reason)}
                   end
               end
             end
@@ -2742,8 +2745,9 @@ defmodule LiteskillWeb.AdminLive do
                  group_members: Groups.admin_list_members(group.id)
                )}
 
-            {:error, _} ->
-              {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to add member")}
+            {:error, reason} ->
+              {:noreply,
+               Phoenix.LiveView.put_flash(socket, :error, action_error("add member", reason))}
           end
       end
     end)
@@ -2784,12 +2788,12 @@ defmodule LiteskillWeb.AdminLive do
              "Temporary password set. User must change it on next login."
            )}
 
-        {:error, _} ->
+        {:error, reason} ->
           {:noreply,
            Phoenix.LiveView.put_flash(
              socket,
              :error,
-             "Failed to set password. Ensure it is at least 12 characters."
+             action_error("set password", reason)
            )}
       end
     end)
@@ -2803,8 +2807,9 @@ defmodule LiteskillWeb.AdminLive do
         {:ok, settings} ->
           {:noreply, Phoenix.Component.assign(socket, server_settings: settings)}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to toggle registration")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("toggle registration", reason))}
       end
     end)
   end
@@ -2820,9 +2825,13 @@ defmodule LiteskillWeb.AdminLive do
             {:ok, settings} ->
               {:noreply, Phoenix.Component.assign(socket, server_settings: settings)}
 
-            {:error, _} ->
+            {:error, reason} ->
               {:noreply,
-               Phoenix.LiveView.put_flash(socket, :error, "Failed to update cost limit")}
+               Phoenix.LiveView.put_flash(
+                 socket,
+                 :error,
+                 action_error("update cost limit", reason)
+               )}
           end
       end
     end)
@@ -2842,8 +2851,9 @@ defmodule LiteskillWeb.AdminLive do
            )
            |> Phoenix.LiveView.put_flash(:info, "Invitation created")}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to create invitation")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("create invitation", reason))}
       end
     end)
   end
@@ -2861,8 +2871,9 @@ defmodule LiteskillWeb.AdminLive do
           {:noreply,
            Phoenix.LiveView.put_flash(socket, :error, "Cannot revoke a used invitation")}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to revoke invitation")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("revoke invitation", reason))}
       end
     end)
   end
@@ -2900,8 +2911,9 @@ defmodule LiteskillWeb.AdminLive do
         {:error, msg} when is_binary(msg) ->
           {:noreply, Phoenix.LiveView.put_flash(socket, :error, msg)}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to create provider")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("create provider", reason))}
       end
     end)
   end
@@ -2930,8 +2942,9 @@ defmodule LiteskillWeb.AdminLive do
              llm_provider_form: to_form(form_data, as: :llm_provider)
            )}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Provider not found")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("load provider", reason))}
       end
     end)
   end
@@ -2954,8 +2967,9 @@ defmodule LiteskillWeb.AdminLive do
         {:error, msg} when is_binary(msg) ->
           {:noreply, Phoenix.LiveView.put_flash(socket, :error, msg)}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to update provider")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("update provider", reason))}
       end
     end)
   end
@@ -2972,12 +2986,12 @@ defmodule LiteskillWeb.AdminLive do
            )
            |> Phoenix.LiveView.put_flash(:info, "Provider deleted")}
 
-        {:error, _} ->
+        {:error, reason} ->
           {:noreply,
            Phoenix.LiveView.put_flash(
              socket,
              :error,
-             "Failed to delete provider. Remove its models first."
+             action_error("delete provider", reason)
            )}
       end
     end)
@@ -3016,8 +3030,9 @@ defmodule LiteskillWeb.AdminLive do
         {:error, msg} when is_binary(msg) ->
           {:noreply, Phoenix.LiveView.put_flash(socket, :error, msg)}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to create model")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("create model", reason))}
       end
     end)
   end
@@ -3049,8 +3064,9 @@ defmodule LiteskillWeb.AdminLive do
              llm_model_form: to_form(form_data, as: :llm_model)
            )}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Model not found")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("load model", reason))}
       end
     end)
   end
@@ -3072,8 +3088,9 @@ defmodule LiteskillWeb.AdminLive do
         {:error, msg} when is_binary(msg) ->
           {:noreply, Phoenix.LiveView.put_flash(socket, :error, msg)}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to update model")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("update model", reason))}
       end
     end)
   end
@@ -3090,8 +3107,9 @@ defmodule LiteskillWeb.AdminLive do
            )
            |> Phoenix.LiveView.put_flash(:info, "Model deleted")}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to delete model")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("delete model", reason))}
       end
     end)
   end
@@ -3132,8 +3150,9 @@ defmodule LiteskillWeb.AdminLive do
              role_groups: Liteskill.Rbac.list_role_groups(role.id)
            )}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Role not found")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("load role", reason))}
       end
     end)
   end
@@ -3157,7 +3176,7 @@ defmodule LiteskillWeb.AdminLive do
            |> Phoenix.LiveView.put_flash(:info, "Role created")}
 
         {:error, changeset} ->
-          msg = format_changeset_error(changeset)
+          msg = format_changeset(changeset)
           {:noreply, Phoenix.LiveView.put_flash(socket, :error, msg)}
       end
     end)
@@ -3193,7 +3212,7 @@ defmodule LiteskillWeb.AdminLive do
            |> Phoenix.LiveView.put_flash(:info, "Role updated")}
 
         {:error, changeset} ->
-          msg = format_changeset_error(changeset)
+          msg = format_changeset(changeset)
           {:noreply, Phoenix.LiveView.put_flash(socket, :error, msg)}
       end
     end)
@@ -3216,12 +3235,14 @@ defmodule LiteskillWeb.AdminLive do
             {:error, :cannot_delete_system_role} ->
               {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Cannot delete system roles")}
 
-            {:error, _} ->
-              {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to delete role")}
+            {:error, reason} ->
+              {:noreply,
+               Phoenix.LiveView.put_flash(socket, :error, action_error("delete role", reason))}
           end
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Role not found")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("load role", reason))}
       end
     end)
   end
@@ -3242,8 +3263,13 @@ defmodule LiteskillWeb.AdminLive do
                  role_users: Liteskill.Rbac.list_role_users(role.id)
                )}
 
-            {:error, _} ->
-              {:noreply, Phoenix.LiveView.put_flash(socket, :error, "User already has this role")}
+            {:error, reason} ->
+              {:noreply,
+               Phoenix.LiveView.put_flash(
+                 socket,
+                 :error,
+                 action_error("assign role to user", reason)
+               )}
           end
       end
     end)
@@ -3268,8 +3294,13 @@ defmodule LiteskillWeb.AdminLive do
              "Cannot remove Instance Admin from root admin"
            )}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to remove user")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(
+             socket,
+             :error,
+             action_error("remove user from role", reason)
+           )}
       end
     end)
   end
@@ -3290,9 +3321,13 @@ defmodule LiteskillWeb.AdminLive do
                  role_groups: Liteskill.Rbac.list_role_groups(role.id)
                )}
 
-            {:error, _} ->
+            {:error, reason} ->
               {:noreply,
-               Phoenix.LiveView.put_flash(socket, :error, "Group already has this role")}
+               Phoenix.LiveView.put_flash(
+                 socket,
+                 :error,
+                 action_error("assign role to group", reason)
+               )}
           end
       end
     end)
@@ -3309,8 +3344,13 @@ defmodule LiteskillWeb.AdminLive do
              role_groups: Liteskill.Rbac.list_role_groups(role.id)
            )}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to remove group")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(
+             socket,
+             :error,
+             action_error("remove group from role", reason)
+           )}
       end
     end)
   end
@@ -3384,21 +3424,16 @@ defmodule LiteskillWeb.AdminLive do
 
             {:noreply, socket}
 
-          {:error, _} ->
+          {:error, reason} ->
             {:noreply,
-             Phoenix.LiveView.put_flash(socket, :error, "Failed to update embedding model")}
+             Phoenix.LiveView.put_flash(
+               socket,
+               :error,
+               action_error("update embedding model", reason)
+             )}
         end
       end
     end)
-  end
-
-  defp format_changeset_error(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-    |> Enum.map_join(", ", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
   end
 
   @doc false

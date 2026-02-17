@@ -14,15 +14,11 @@ defmodule LiteskillWeb.GroupController do
   def create(conn, %{"name" => name}) do
     user = conn.assigns.current_user
 
-    case Groups.create_group(name, user.id) do
-      {:ok, group} ->
-        conn
-        |> put_status(:created)
-        |> json(%{data: group_json(group)})
-
-      # coveralls-ignore-next-line
-      {:error, reason} ->
-        {:error, reason}
+    with :ok <- Liteskill.Rbac.authorize(user.id, "groups:create"),
+         {:ok, group} <- Groups.create_group(name, user.id) do
+      conn
+      |> put_status(:created)
+      |> json(%{data: group_json(group)})
     end
   end
 

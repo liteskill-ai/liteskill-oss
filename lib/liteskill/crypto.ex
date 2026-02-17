@@ -6,6 +6,7 @@ defmodule Liteskill.Crypto do
   The ciphertext format is: IV (12 bytes) || tag (16 bytes) || ciphertext,
   stored as base64 for string-column compatibility.
   """
+  use Boundary, top_level?: true, deps: [], exports: [EncryptedField, EncryptedMap]
 
   @iv_length 12
   @tag_length 16

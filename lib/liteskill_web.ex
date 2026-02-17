@@ -1,4 +1,32 @@
 defmodule LiteskillWeb do
+  use Boundary,
+    deps: [
+      Liteskill.Accounts,
+      Liteskill.Agents,
+      Liteskill.Aggregate,
+      Liteskill.Authorization,
+      Liteskill.BuiltinSources,
+      Liteskill.BuiltinTools,
+      Liteskill.Chat,
+      Liteskill.Crypto,
+      Liteskill.DataSources,
+      Liteskill.EventStore,
+      Liteskill.Groups,
+      Liteskill.LLM,
+      Liteskill.LlmModels,
+      Liteskill.LlmProviders,
+      Liteskill.McpServers,
+      Liteskill.Rag,
+      Liteskill.Rbac,
+      Liteskill.Reports,
+      Liteskill.Runs,
+      Liteskill.Schedules,
+      Liteskill.Settings,
+      Liteskill.Teams,
+      Liteskill.Usage
+    ],
+    exports: []
+
   @moduledoc """
   The entrypoint for defining your web interface, such
   as controllers, components, channels, and so on.
@@ -43,6 +71,7 @@ defmodule LiteskillWeb do
       use Gettext, backend: LiteskillWeb.Gettext
 
       import Plug.Conn
+      import LiteskillWeb.ErrorHelpers
 
       unquote(verified_routes())
     end
@@ -51,6 +80,7 @@ defmodule LiteskillWeb do
   def live_view do
     quote do
       use Phoenix.LiveView
+      import LiteskillWeb.ErrorHelpers
 
       unquote(html_helpers())
     end
@@ -71,6 +101,8 @@ defmodule LiteskillWeb do
       # Import convenience functions from controllers
       import Phoenix.Controller,
         only: [get_csrf_token: 0, view_module: 1, view_template: 1]
+
+      import LiteskillWeb.ErrorHelpers
 
       # Include general helpers for rendering HTML
       unquote(html_helpers())

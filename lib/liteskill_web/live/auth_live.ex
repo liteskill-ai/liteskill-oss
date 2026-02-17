@@ -281,8 +281,7 @@ defmodule LiteskillWeb.AuthLive do
         {:noreply, redirect(socket, to: "/auth/session?token=#{token}")}
 
       {:error, changeset} ->
-        error = format_changeset_error(changeset)
-        {:noreply, assign(socket, error: error)}
+        {:noreply, assign(socket, error: format_changeset(changeset))}
     end
   end
 
@@ -317,11 +316,10 @@ defmodule LiteskillWeb.AuthLive do
         {:noreply, assign(socket, error: "This invitation has expired.")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        error = format_changeset_error(changeset)
-        {:noreply, assign(socket, error: error)}
+        {:noreply, assign(socket, error: format_changeset(changeset))}
 
-      {:error, _} ->
-        {:noreply, assign(socket, error: "Failed to create account. Please try again.")}
+      {:error, reason} ->
+        {:noreply, assign(socket, error: action_error("create account", reason))}
     end
   end
 
@@ -332,15 +330,4 @@ defmodule LiteskillWeb.AuthLive do
   defp page_title(:login, _), do: "Welcome Back"
   defp page_title(:invite, nil), do: "Invitation"
   defp page_title(:invite, _), do: "Accept Invitation"
-
-  defp format_changeset_error(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-    |> Enum.map_join(", ", fn {field, errors} ->
-      "#{field} #{Enum.join(errors, ", ")}"
-    end)
-  end
 end

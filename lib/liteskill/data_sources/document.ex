@@ -41,7 +41,14 @@ defmodule Liteskill.DataSources.Document do
     |> validate_required([:title, :source_ref, :user_id])
     |> validate_inclusion(:content_type, ["markdown", "text", "html"])
     |> maybe_generate_slug()
-    |> unique_constraint([:source_ref, :slug], name: :documents_source_ref_slug_index)
+    |> unique_constraint([:source_ref, :parent_document_id, :slug],
+      name: :documents_source_ref_parent_slug_index,
+      message: "a page with this title already exists in this space"
+    )
+    |> unique_constraint([:source_ref, :slug],
+      name: :documents_source_ref_root_slug_index,
+      message: "a space with this title already exists"
+    )
     |> foreign_key_constraint(:user_id)
     |> foreign_key_constraint(:parent_document_id)
   end

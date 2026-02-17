@@ -404,17 +404,7 @@ defmodule Liteskill.BuiltinTools.Wiki do
   # If range exists but is malformed, fall back to full content
   defp format_article(doc, _range), do: format_article(doc, nil)
 
-  defp format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
-  # coveralls-ignore-start
-  defp format_error(reason) when is_binary(reason), do: reason
-  # coveralls-ignore-stop
-
-  # coveralls-ignore-start
-  defp format_error(%Ecto.Changeset{} = cs),
-    do: Ecto.Changeset.traverse_errors(cs, fn {msg, _} -> msg end) |> inspect()
-
-  defp format_error(reason), do: inspect(reason)
-  # coveralls-ignore-stop
+  defp format_error(reason), do: LiteskillWeb.ErrorHelpers.humanize_error(reason)
 
   # coveralls-ignore-start
   defp wrap_result({:ok, text}) when is_binary(text) do

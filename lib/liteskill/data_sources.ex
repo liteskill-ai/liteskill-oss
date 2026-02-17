@@ -1,4 +1,18 @@
 defmodule Liteskill.DataSources do
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Authorization, Liteskill.Rbac, Liteskill.BuiltinSources, Liteskill.Reports],
+    exports: [
+      Source,
+      Document,
+      SyncWorker,
+      Connector,
+      ConnectorRegistry,
+      ContentExtractor,
+      Connectors.GoogleDrive,
+      Connectors.Wiki
+    ]
+
   @moduledoc """
   Context for managing data sources and documents.
 
@@ -800,11 +814,12 @@ defmodule Liteskill.DataSources do
 
   def enqueue_wiki_sync(wiki_document_id, user_id, action)
       when action in ["upsert", "delete"] do
-    Liteskill.Rag.WikiSyncWorker.new(%{
+    %{
       "wiki_document_id" => wiki_document_id,
       "user_id" => user_id,
       "action" => action
-    })
+    }
+    |> Oban.Job.new(worker: "Liteskill.Rag.WikiSyncWorker", queue: :rag_ingest, max_attempts: 3)
     |> Oban.insert()
   end
 

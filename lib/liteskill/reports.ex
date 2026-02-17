@@ -1,4 +1,9 @@
 defmodule Liteskill.Reports do
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Accounts, Liteskill.Authorization, Liteskill.Rbac],
+    exports: [Report, ReportSection, SectionComment]
+
   @moduledoc """
   Context for managing reports and their nested sections.
 

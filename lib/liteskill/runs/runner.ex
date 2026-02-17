@@ -290,7 +290,8 @@ defmodule Liteskill.Runs.Runner do
       raise "Agent '#{agent.name}' has no LLM model configured"
     end
 
-    {tools, tool_servers} = ToolResolver.resolve(agent, user_id)
+    {tools, tool_servers} =
+      ToolResolver.resolve(agent, user_id, builtin_registry: Liteskill.BuiltinTools)
 
     log(
       run_id,
@@ -316,6 +317,7 @@ defmodule Liteskill.Runs.Runner do
       tool_servers: tool_servers,
       user_id: user_id,
       run_id: run_id,
+      log_fn: &Runs.add_log/5,
       cost_limit: Keyword.get(context, :cost_limit),
       config: agent.config || %{},
       prompt: handoff.prompt,

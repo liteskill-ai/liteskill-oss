@@ -1,4 +1,16 @@
 defmodule Liteskill.LLM do
+  use Boundary,
+    top_level?: true,
+    deps: [
+      Liteskill.Chat,
+      Liteskill.Aggregate,
+      Liteskill.EventStore,
+      Liteskill.Usage,
+      Liteskill.LlmModels,
+      Liteskill.McpServers
+    ],
+    exports: [StreamHandler, ToolUtils, RagContext]
+
   @moduledoc """
   Public API for LLM interactions.
 

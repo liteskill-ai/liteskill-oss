@@ -1,4 +1,29 @@
 defmodule Liteskill.Rag do
+  use Boundary,
+    top_level?: true,
+    deps: [
+      Liteskill.Authorization,
+      Liteskill.DataSources,
+      Liteskill.LlmModels,
+      Liteskill.LlmProviders,
+      Liteskill.Settings
+    ],
+    exports: [
+      Collection,
+      Source,
+      Document,
+      Chunk,
+      Chunker,
+      CohereClient,
+      DocumentSyncWorker,
+      EmbedQueue,
+      EmbeddingRequest,
+      IngestWorker,
+      Pipeline,
+      ReembedWorker,
+      WikiSyncWorker
+    ]
+
   @moduledoc """
   The RAG context. Manages collections, sources, documents, chunks,
   embedding generation, and semantic search.

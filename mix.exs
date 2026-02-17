@@ -12,7 +12,7 @@ defmodule Liteskill.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      compilers: [:phoenix_live_view] ++ Mix.compilers(),
+      compilers: [:boundary, :phoenix_live_view] ++ Mix.compilers(),
       listeners: [Phoenix.CodeReloader],
       test_coverage: [tool: ExCoveralls]
     ]
@@ -84,6 +84,7 @@ defmodule Liteskill.MixProject do
       {:argon2_elixir, "~> 4.1"},
       {:jose, "~> 1.11"},
       {:jido, "~> 2.0.0-rc"},
+      {:boundary, "~> 0.10", runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:tidewave, "~> 0.5", only: :dev}
     ]

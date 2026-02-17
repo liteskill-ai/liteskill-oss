@@ -1,4 +1,16 @@
 defmodule Liteskill.Agents do
+  use Boundary,
+    top_level?: true,
+    deps: [
+      Liteskill.Authorization,
+      Liteskill.Rbac,
+      Liteskill.McpServers,
+      Liteskill.LLM,
+      Liteskill.Usage,
+      Liteskill.LlmModels
+    ],
+    exports: [AgentDefinition, AgentTool, ToolResolver, JidoAgent, Actions.LlmGenerate]
+
   @moduledoc """
   Context for managing agent definitions.
 

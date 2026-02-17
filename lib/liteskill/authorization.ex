@@ -1,4 +1,6 @@
 defmodule Liteskill.Authorization do
+  use Boundary, top_level?: true, deps: [Liteskill.Groups], exports: [EntityAcl, Roles]
+
   @moduledoc """
   Centralized authorization context for all entity types.
 
@@ -287,33 +289,15 @@ defmodule Liteskill.Authorization do
 
   # --- Ownership Verification ---
 
-  @schema_map %{
-    "agent_definition" => Liteskill.Agents.AgentDefinition,
-    "conversation" => Liteskill.Chat.Conversation,
-    "data_source" => Liteskill.DataSources.Source,
-    "run" => Liteskill.Runs.Run,
-    "llm_model" => Liteskill.LlmModels.LlmModel,
-    "llm_provider" => Liteskill.LlmProviders.LlmProvider,
-    "mcp_server" => Liteskill.McpServers.McpServer,
-    "schedule" => Liteskill.Schedules.Schedule,
-    "team_definition" => Liteskill.Teams.TeamDefinition,
-    "wiki_space" => Liteskill.DataSources.Document
-  }
-
   @doc """
   Verifies that the user owns the given entity by checking the `user_id` field.
+  The caller provides the Ecto schema module to query.
   Returns `:ok` if user owns it, `:error` otherwise.
   """
-  def verify_ownership(entity_type, entity_id, user_id) do
-    case Map.get(@schema_map, entity_type) do
-      nil ->
-        :error
-
-      schema ->
-        case Repo.get(schema, entity_id) do
-          %{user_id: ^user_id} -> :ok
-          _ -> :error
-        end
+  def verify_ownership(schema, entity_id, user_id) when is_atom(schema) do
+    case Repo.get(schema, entity_id) do
+      %{user_id: ^user_id} -> :ok
+      _ -> :error
     end
   end
 

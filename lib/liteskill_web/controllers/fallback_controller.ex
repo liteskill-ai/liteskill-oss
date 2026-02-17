@@ -22,32 +22,12 @@ defmodule LiteskillWeb.FallbackController do
   def call(conn, {:error, %Ecto.Changeset{} = changeset}) do
     conn
     |> put_status(:unprocessable_entity)
-    |> json(%{error: "validation failed", details: format_changeset_errors(changeset)})
+    |> json(%{error: "validation failed", details: format_changeset(changeset)})
   end
 
-  def call(conn, {:error, reason}) when is_atom(reason) do
+  def call(conn, {:error, reason}) do
     conn
     |> put_status(:unprocessable_entity)
     |> json(%{error: humanize_error(reason)})
-  end
-
-  def call(conn, {:error, _reason}) do
-    conn
-    |> put_status(:unprocessable_entity)
-    |> json(%{error: "unprocessable entity"})
-  end
-
-  defp format_changeset_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-  end
-
-  defp humanize_error(reason) do
-    reason
-    |> Atom.to_string()
-    |> String.replace("_", " ")
   end
 end

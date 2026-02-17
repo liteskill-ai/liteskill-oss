@@ -186,9 +186,9 @@ defmodule LiteskillWeb.AgentStudioLive do
         |> reset_common()
         |> Phoenix.Component.assign(studio_agent: agent, page_title: agent.name)
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> Phoenix.LiveView.put_flash(:error, "Agent not found")
+        |> Phoenix.LiveView.put_flash(:error, action_error("load agent", reason))
         |> Phoenix.LiveView.push_navigate(to: "/agents")
     end
   end
@@ -218,9 +218,9 @@ defmodule LiteskillWeb.AgentStudioLive do
           page_title: "Edit #{agent.name}"
         )
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> Phoenix.LiveView.put_flash(:error, "Agent not found")
+        |> Phoenix.LiveView.put_flash(:error, action_error("load agent", reason))
         |> Phoenix.LiveView.push_navigate(to: "/agents")
     end
   end
@@ -259,9 +259,9 @@ defmodule LiteskillWeb.AgentStudioLive do
         |> reset_common()
         |> Phoenix.Component.assign(studio_team: team, page_title: team.name)
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> Phoenix.LiveView.put_flash(:error, "Team not found")
+        |> Phoenix.LiveView.put_flash(:error, action_error("load team", reason))
         |> Phoenix.LiveView.push_navigate(to: "/teams")
     end
   end
@@ -291,9 +291,9 @@ defmodule LiteskillWeb.AgentStudioLive do
           page_title: "Edit #{team.name}"
         )
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> Phoenix.LiveView.put_flash(:error, "Team not found")
+        |> Phoenix.LiveView.put_flash(:error, action_error("load team", reason))
         |> Phoenix.LiveView.push_navigate(to: "/teams")
     end
   end
@@ -346,9 +346,9 @@ defmodule LiteskillWeb.AgentStudioLive do
           page_title: run.name
         )
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> Phoenix.LiveView.put_flash(:error, "Run not found")
+        |> Phoenix.LiveView.put_flash(:error, action_error("load run", reason))
         |> Phoenix.LiveView.push_navigate(to: "/runs")
     end
   end
@@ -369,9 +369,9 @@ defmodule LiteskillWeb.AgentStudioLive do
         page_title: "Log: #{log.step}"
       )
     else
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> Phoenix.LiveView.put_flash(:error, "Log entry not found")
+        |> Phoenix.LiveView.put_flash(:error, action_error("load log entry", reason))
         |> Phoenix.LiveView.push_navigate(to: "/runs")
     end
   end
@@ -413,9 +413,9 @@ defmodule LiteskillWeb.AgentStudioLive do
         |> reset_common()
         |> Phoenix.Component.assign(studio_schedule: schedule, page_title: schedule.name)
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> Phoenix.LiveView.put_flash(:error, "Schedule not found")
+        |> Phoenix.LiveView.put_flash(:error, action_error("load schedule", reason))
         |> Phoenix.LiveView.push_navigate(to: "/schedules")
     end
   end
@@ -447,7 +447,7 @@ defmodule LiteskillWeb.AgentStudioLive do
       {:error, changeset} ->
         {:noreply,
          socket
-         |> Phoenix.LiveView.put_flash(:error, format_errors(changeset))
+         |> Phoenix.LiveView.put_flash(:error, format_changeset(changeset))
          |> Phoenix.Component.assign(agent_form: agent_form(params))}
     end
   end
@@ -499,8 +499,9 @@ defmodule LiteskillWeb.AgentStudioLive do
          |> Phoenix.LiveView.put_flash(:info, "Agent deleted")
          |> Phoenix.LiveView.push_navigate(to: "/agents")}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not delete agent")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("delete agent", reason))}
     end
   end
 
@@ -523,8 +524,9 @@ defmodule LiteskillWeb.AgentStudioLive do
              available_mcp_servers: available
            )}
 
-        {:error, _} ->
-          {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not add server")}
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(socket, :error, action_error("add server", reason))}
       end
     end
   end
@@ -543,8 +545,8 @@ defmodule LiteskillWeb.AgentStudioLive do
            available_mcp_servers: available
          )}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not add server")}
+      {:error, reason} ->
+        {:noreply, Phoenix.LiveView.put_flash(socket, :error, action_error("add server", reason))}
     end
   end
 
@@ -563,8 +565,9 @@ defmodule LiteskillWeb.AgentStudioLive do
            available_mcp_servers: available
          )}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not remove server")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("remove server", reason))}
     end
   end
 
@@ -582,8 +585,9 @@ defmodule LiteskillWeb.AgentStudioLive do
            available_mcp_servers: available
          )}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not remove server")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("remove server", reason))}
     end
   end
 
@@ -611,7 +615,7 @@ defmodule LiteskillWeb.AgentStudioLive do
       {:error, changeset} ->
         {:noreply,
          socket
-         |> Phoenix.LiveView.put_flash(:error, format_errors(changeset))
+         |> Phoenix.LiveView.put_flash(:error, format_changeset(changeset))
          |> Phoenix.Component.assign(team_form: team_form(params))}
     end
   end
@@ -634,8 +638,9 @@ defmodule LiteskillWeb.AgentStudioLive do
          |> Phoenix.LiveView.put_flash(:info, "Team deleted")
          |> Phoenix.LiveView.push_navigate(to: "/teams")}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not delete team")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("delete team", reason))}
     end
   end
 
@@ -657,8 +662,9 @@ defmodule LiteskillWeb.AgentStudioLive do
            available_agents: available_agents
          )}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not add agent")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("add team member", reason))}
     end
   end
 
@@ -681,8 +687,9 @@ defmodule LiteskillWeb.AgentStudioLive do
            available_agents: available_agents
          )}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not remove agent")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("remove team member", reason))}
     end
   end
 
@@ -706,7 +713,7 @@ defmodule LiteskillWeb.AgentStudioLive do
       {:error, changeset} ->
         {:noreply,
          socket
-         |> Phoenix.LiveView.put_flash(:error, format_errors(changeset))
+         |> Phoenix.LiveView.put_flash(:error, format_changeset(changeset))
          |> Phoenix.Component.assign(run_form: run_form(params))}
     end
   end
@@ -755,8 +762,8 @@ defmodule LiteskillWeb.AgentStudioLive do
        |> Phoenix.LiveView.put_flash(:info, "Rerun started.")
        |> Phoenix.LiveView.push_navigate(to: "/runs/#{new_run.id}")}
     else
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not rerun")}
+      {:error, reason} ->
+        {:noreply, Phoenix.LiveView.put_flash(socket, :error, action_error("rerun", reason))}
     end
   end
 
@@ -782,8 +789,8 @@ defmodule LiteskillWeb.AgentStudioLive do
            "Only failed or cancelled runs can be retried"
          )}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not retry run")}
+      {:error, reason} ->
+        {:noreply, Phoenix.LiveView.put_flash(socket, :error, action_error("retry run", reason))}
     end
   end
 
@@ -798,10 +805,11 @@ defmodule LiteskillWeb.AgentStudioLive do
          |> Phoenix.Component.assign(studio_run: Runs.get_run!(run.id))}
 
       {:error, :not_running} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Run is not running")}
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("cancel run", :not_running))}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not cancel run")}
+      {:error, reason} ->
+        {:noreply, Phoenix.LiveView.put_flash(socket, :error, action_error("cancel run", reason))}
     end
   end
 
@@ -823,8 +831,8 @@ defmodule LiteskillWeb.AgentStudioLive do
          |> Phoenix.LiveView.put_flash(:info, "Run deleted")
          |> Phoenix.LiveView.push_navigate(to: "/runs")}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not delete run")}
+      {:error, reason} ->
+        {:noreply, Phoenix.LiveView.put_flash(socket, :error, action_error("delete run", reason))}
     end
   end
 
@@ -843,7 +851,7 @@ defmodule LiteskillWeb.AgentStudioLive do
       {:error, changeset} ->
         {:noreply,
          socket
-         |> Phoenix.LiveView.put_flash(:error, format_errors(changeset))
+         |> Phoenix.LiveView.put_flash(:error, format_changeset(changeset))
          |> Phoenix.Component.assign(schedule_form: schedule_form(params))}
     end
   end
@@ -856,8 +864,9 @@ defmodule LiteskillWeb.AgentStudioLive do
         schedules = Schedules.list_schedules(user_id)
         {:noreply, Phoenix.Component.assign(socket, studio_schedules: schedules)}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not toggle schedule")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("toggle schedule", reason))}
     end
   end
 
@@ -879,8 +888,9 @@ defmodule LiteskillWeb.AgentStudioLive do
          |> Phoenix.LiveView.put_flash(:info, "Schedule deleted")
          |> Phoenix.LiveView.push_navigate(to: "/schedules")}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Could not delete schedule")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("delete schedule", reason))}
     end
   end
 
@@ -929,19 +939,6 @@ defmodule LiteskillWeb.AgentStudioLive do
   end
 
   defp parse_cost_limit_param(params), do: params
-
-  defp format_errors(%Ecto.Changeset{} = changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-      end)
-    end)
-    |> Enum.map_join(", ", fn {field, errors} ->
-      "#{field}: #{Enum.join(errors, ", ")}"
-    end)
-  end
-
-  defp format_errors(_), do: "An error occurred"
 
   defp compute_available_servers(user_id, agent) do
     all_servers = McpServers.list_servers(user_id)

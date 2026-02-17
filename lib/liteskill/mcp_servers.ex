@@ -1,4 +1,9 @@
 defmodule Liteskill.McpServers do
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Authorization, Liteskill.Rbac, Liteskill.BuiltinTools],
+    exports: [McpServer, Client]
+
   @moduledoc """
   The McpServers context. Manages MCP server registrations per user.
   """

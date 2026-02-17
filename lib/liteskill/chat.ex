@@ -1,4 +1,25 @@
 defmodule Liteskill.Chat do
+  use Boundary,
+    top_level?: true,
+    deps: [
+      Liteskill.Aggregate,
+      Liteskill.Authorization,
+      Liteskill.EventStore,
+      Liteskill.Rbac,
+      Liteskill.LlmModels
+    ],
+    exports: [
+      Conversation,
+      ConversationAggregate,
+      Events,
+      Message,
+      MessageBuilder,
+      MessageChunk,
+      Projector,
+      StreamRecovery,
+      ToolCall
+    ]
+
   @moduledoc """
   The Chat context. Provides write and read APIs for conversations.
 

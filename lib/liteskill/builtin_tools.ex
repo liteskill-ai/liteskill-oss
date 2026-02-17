@@ -1,4 +1,10 @@
 defmodule Liteskill.BuiltinTools do
+  use Boundary,
+    top_level?: true,
+    check: [out: false],
+    deps: [],
+    exports: [Reports, Wiki, AgentStudio]
+
   @moduledoc """
   Behaviour and registry for built-in tool suites.
 

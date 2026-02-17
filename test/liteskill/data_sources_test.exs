@@ -389,12 +389,12 @@ defmodule Liteskill.DataSourcesTest do
       assert doc.slug == "custom-slug"
     end
 
-    test "enforces unique slug per source_ref", %{owner: owner} do
+    test "enforces unique slug for root documents per source_ref", %{owner: owner} do
       attrs = %{title: "Same Title"}
 
       assert {:ok, _} = DataSources.create_document("builtin:wiki", attrs, owner.id)
       assert {:error, changeset} = DataSources.create_document("builtin:wiki", attrs, owner.id)
-      assert %{source_ref: ["has already been taken"]} = errors_on(changeset)
+      assert %{source_ref: ["a space with this title already exists"]} = errors_on(changeset)
     end
 
     test "allows same slug in different sources", %{owner: owner} do
@@ -402,6 +402,33 @@ defmodule Liteskill.DataSourcesTest do
 
       assert {:ok, _} = DataSources.create_document("builtin:wiki", attrs, owner.id)
       assert {:ok, _} = DataSources.create_document("other-source", attrs, owner.id)
+    end
+
+    test "allows same slug for child pages in different parents", %{owner: owner} do
+      {:ok, space_a} = DataSources.create_document("builtin:wiki", %{title: "Space A"}, owner.id)
+      {:ok, space_b} = DataSources.create_document("builtin:wiki", %{title: "Space B"}, owner.id)
+
+      attrs = %{title: "Getting Started"}
+
+      assert {:ok, _} =
+               DataSources.create_child_document("builtin:wiki", space_a.id, attrs, owner.id)
+
+      assert {:ok, _} =
+               DataSources.create_child_document("builtin:wiki", space_b.id, attrs, owner.id)
+    end
+
+    test "enforces unique slug for child pages within same parent", %{owner: owner} do
+      {:ok, space} = DataSources.create_document("builtin:wiki", %{title: "My Space"}, owner.id)
+      attrs = %{title: "Same Page"}
+
+      assert {:ok, _} =
+               DataSources.create_child_document("builtin:wiki", space.id, attrs, owner.id)
+
+      assert {:error, changeset} =
+               DataSources.create_child_document("builtin:wiki", space.id, attrs, owner.id)
+
+      assert %{source_ref: ["a page with this title already exists in this space"]} =
+               errors_on(changeset)
     end
 
     test "fails without required title", %{owner: owner} do

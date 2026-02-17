@@ -31,7 +31,7 @@ defmodule LiteskillWeb.FallbackControllerTest do
 
     resp = json_response(conn, 422)
     assert resp["error"] == "validation failed"
-    assert resp["details"]["title"] == ["can't be blank"]
+    assert resp["details"] == "title: can't be blank"
   end
 
   test "handles {:error, atom_reason} with humanized message", %{conn: conn} do
@@ -49,7 +49,7 @@ defmodule LiteskillWeb.FallbackControllerTest do
       |> put_req_header("accept", "application/json")
       |> FallbackController.call({:error, "some string error"})
 
-    assert json_response(conn, 422)["error"] == "unprocessable entity"
+    assert json_response(conn, 422)["error"] == "some string error"
   end
 
   test "changeset errors with interpolation", %{conn: conn} do
@@ -67,6 +67,6 @@ defmodule LiteskillWeb.FallbackControllerTest do
 
     resp = json_response(conn, 422)
     assert resp["error"] == "validation failed"
-    assert resp["details"]["password"] == ["should be at least 12 character(s)"]
+    assert resp["details"] == "password: should be at least 12 character(s)"
   end
 end

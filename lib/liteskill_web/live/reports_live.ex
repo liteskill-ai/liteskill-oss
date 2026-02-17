@@ -76,9 +76,9 @@ defmodule LiteskillWeb.ReportsLive do
           page_title: report.title
         )
 
-      {:error, _} ->
+      {:error, reason} ->
         socket
-        |> Phoenix.LiveView.put_flash(:error, "Report not found")
+        |> Phoenix.LiveView.put_flash(:error, action_error("load report", reason))
         |> Phoenix.LiveView.push_navigate(to: ~p"/reports")
     end
   end
@@ -101,8 +101,9 @@ defmodule LiteskillWeb.ReportsLive do
       {:ok, _} ->
         {:noreply, reload_reports_list(socket)}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to delete report")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("delete report", reason))}
     end
   end
 
@@ -113,8 +114,9 @@ defmodule LiteskillWeb.ReportsLive do
       {:ok, _} ->
         {:noreply, reload_reports_list(socket)}
 
-      {:error, _} ->
-        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to leave report")}
+      {:error, reason} ->
+        {:noreply,
+         Phoenix.LiveView.put_flash(socket, :error, action_error("leave report", reason))}
     end
   end
 
