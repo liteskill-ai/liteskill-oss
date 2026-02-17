@@ -809,73 +809,76 @@ defmodule LiteskillWeb.ChatLive do
           >
             <.form for={@mcp_form} phx-submit="save_mcp" class="space-y-4">
               <input :if={@editing_mcp} type="hidden" name="mcp_server[id]" value={@editing_mcp.id} />
-              <div class="form-control">
-                <label class="label"><span class="label-text">Name *</span></label>
-                <input
-                  type="text"
-                  name="mcp_server[name]"
-                  value={Phoenix.HTML.Form.input_value(@mcp_form, :name)}
-                  class="input input-bordered w-full"
-                  required
-                />
+
+              <div
+                :if={match?(%Ecto.Changeset{action: a} when a != nil, @mcp_form.source)}
+                class="alert alert-error text-sm"
+              >
+                <.icon name="hero-exclamation-circle" class="size-5 shrink-0" />
+                <div>
+                  <p class="font-semibold">Could not save server:</p>
+                  <ul class="list-disc list-inside mt-1">
+                    <li :for={
+                      {field, msgs} <-
+                        Ecto.Changeset.traverse_errors(@mcp_form.source, fn {msg, opts} ->
+                          Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
+                            opts
+                            |> Keyword.get(String.to_existing_atom(key), key)
+                            |> to_string()
+                          end)
+                        end)
+                    }>
+                      <span class="font-medium">{Phoenix.Naming.humanize(field)}:</span>
+                      {Enum.join(msgs, ", ")}
+                    </li>
+                  </ul>
+                </div>
               </div>
-              <div class="form-control">
-                <label class="label"><span class="label-text">URL *</span></label>
-                <input
-                  type="url"
-                  name="mcp_server[url]"
-                  value={Phoenix.HTML.Form.input_value(@mcp_form, :url)}
-                  class="input input-bordered w-full"
-                  required
-                />
-              </div>
-              <div class="form-control">
-                <label class="label"><span class="label-text">API Key</span></label>
-                <input
-                  type="password"
-                  name="mcp_server[api_key]"
-                  value={Phoenix.HTML.Form.input_value(@mcp_form, :api_key)}
-                  class="input input-bordered w-full"
-                  autocomplete="off"
-                />
-              </div>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Description</span></label>
-                <textarea
-                  name="mcp_server[description]"
-                  class="textarea textarea-bordered w-full"
-                  rows="2"
-                >{Phoenix.HTML.Form.input_value(@mcp_form, :description)}</textarea>
-              </div>
-              <div class="form-control">
-                <label class="label"><span class="label-text">Custom Headers (JSON)</span></label>
-                <textarea
-                  name="mcp_server[headers]"
-                  class="textarea textarea-bordered w-full font-mono text-xs"
-                  rows="3"
-                  placeholder="{}"
-                >{Phoenix.HTML.Form.input_value(@mcp_form, :headers)}</textarea>
-              </div>
-              <div class="form-control">
-                <label class="label cursor-pointer justify-start gap-3">
-                  <input
-                    type="hidden"
-                    name="mcp_server[global]"
-                    value="false"
-                  />
-                  <input
-                    type="checkbox"
-                    name="mcp_server[global]"
-                    value="true"
-                    checked={
-                      Phoenix.HTML.Form.input_value(@mcp_form, :global) == true ||
-                        Phoenix.HTML.Form.input_value(@mcp_form, :global) == "true"
-                    }
-                    class="checkbox checkbox-sm"
-                  />
-                  <span class="label-text">Share globally with all users</span>
+
+              <.input
+                field={@mcp_form[:name]}
+                label="Name *"
+                type="text"
+                class="input input-bordered w-full"
+                required
+              />
+              <.input
+                field={@mcp_form[:url]}
+                label="URL *"
+                type="url"
+                class="input input-bordered w-full"
+                required
+              />
+              <.input
+                field={@mcp_form[:api_key]}
+                label="API Key"
+                type="password"
+                class="input input-bordered w-full"
+                autocomplete="off"
+              />
+              <.input
+                field={@mcp_form[:description]}
+                label="Description"
+                type="textarea"
+                class="textarea textarea-bordered w-full"
+                rows={2}
+              />
+              <div class="fieldset mb-2">
+                <label>
+                  <span class="label mb-1">Custom Headers (JSON)</span>
+                  <textarea
+                    name={@mcp_form[:headers].name}
+                    class="textarea textarea-bordered w-full font-mono text-xs"
+                    rows="3"
+                    placeholder="{}"
+                  >{mcp_headers_value(@mcp_form[:headers].value)}</textarea>
                 </label>
               </div>
+              <.input
+                field={@mcp_form[:global]}
+                label="Share globally with all users"
+                type="checkbox"
+              />
               <div class="flex justify-end gap-2 pt-2">
                 <button type="button" phx-click="close_mcp_modal" class="btn btn-ghost btn-sm">
                   Cancel
@@ -2775,13 +2778,14 @@ defmodule LiteskillWeb.ChatLive do
          |> put_flash(:info, "Server saved")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
+        changeset = Map.put(changeset, :action, :validate)
+
         {:noreply,
          socket
-         |> assign(mcp_form: to_form(changeset, as: :mcp_server))
-         |> put_flash(:error, "Please fix the errors")}
+         |> assign(mcp_form: to_form(changeset, as: :mcp_server))}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Error: #{reason}")}
+        {:noreply, put_flash(socket, :error, action_error("save server", reason))}
     end
   end
 
@@ -2919,7 +2923,8 @@ defmodule LiteskillWeb.ChatLive do
   @admin_events ~w(admin_usage_period promote_user demote_user create_group
     admin_delete_group view_group admin_add_member admin_remove_member
     show_temp_password_form cancel_temp_password set_temp_password
-    toggle_registration create_invitation revoke_invitation
+    toggle_registration toggle_allow_private_mcp_urls update_mcp_cost_limit
+    create_invitation revoke_invitation
     new_llm_model cancel_llm_model create_llm_model edit_llm_model update_llm_model delete_llm_model
     new_llm_provider cancel_llm_provider create_llm_provider edit_llm_provider update_llm_provider delete_llm_provider
     new_role cancel_role edit_role create_role update_role delete_role
@@ -3775,6 +3780,12 @@ defmodule LiteskillWeb.ChatLive do
   end
 
   defp parse_headers(_), do: %{}
+
+  defp mcp_headers_value(val) when is_map(val) and val != %{},
+    do: Jason.encode!(val, pretty: true)
+
+  defp mcp_headers_value(val) when is_binary(val), do: val
+  defp mcp_headers_value(_), do: ""
 
   defp recover_stuck_stream(socket) do
     conversation = socket.assigns.conversation

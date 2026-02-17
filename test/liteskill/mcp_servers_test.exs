@@ -547,5 +547,65 @@ defmodule Liteskill.McpServersTest do
       refute changeset.valid?
       assert errors_on(changeset)[:url]
     end
+
+    test "allows private URLs when allow_private_urls option is true" do
+      changeset =
+        McpServer.changeset(
+          %McpServer{},
+          %{
+            name: "Local Server",
+            url: "https://localhost:3000",
+            user_id: Ecto.UUID.generate()
+          },
+          allow_private_urls: true
+        )
+
+      assert changeset.valid?
+    end
+
+    test "allows 192.168.x URLs when allow_private_urls option is true" do
+      changeset =
+        McpServer.changeset(
+          %McpServer{},
+          %{
+            name: "Internal Server",
+            url: "https://192.168.1.100/mcp",
+            user_id: Ecto.UUID.generate()
+          },
+          allow_private_urls: true
+        )
+
+      assert changeset.valid?
+    end
+
+    test "allows plain HTTP when allow_private_urls is true" do
+      changeset =
+        McpServer.changeset(
+          %McpServer{},
+          %{
+            name: "Local Dev",
+            url: "http://localhost:3000",
+            user_id: Ecto.UUID.generate()
+          },
+          allow_private_urls: true
+        )
+
+      assert changeset.valid?
+    end
+
+    test "rejects plain HTTP when allow_private_urls is false" do
+      changeset =
+        McpServer.changeset(
+          %McpServer{},
+          %{
+            name: "S",
+            url: "http://example.com/mcp",
+            user_id: Ecto.UUID.generate()
+          }
+        )
+
+      refute changeset.valid?
+      assert errors_on(changeset)[:url]
+    end
   end
 end

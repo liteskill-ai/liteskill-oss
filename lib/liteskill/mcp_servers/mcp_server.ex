@@ -23,24 +23,29 @@ defmodule Liteskill.McpServers.McpServer do
     timestamps(type: :utc_datetime)
   end
 
-  def changeset(server, attrs) do
+  def changeset(server, attrs, opts \\ []) do
     server
     |> cast(attrs, [:name, :url, :api_key, :description, :headers, :status, :global, :user_id])
     |> validate_required([:name, :url, :user_id])
     |> validate_inclusion(:status, ["active", "inactive"])
-    |> validate_url(:url)
+    |> validate_url(:url, opts)
     |> foreign_key_constraint(:user_id)
   end
 
-  defp validate_url(changeset, field) do
+  defp validate_url(changeset, field, opts) do
     validate_change(changeset, field, fn _, value ->
       case URI.parse(value) do
-        %URI{scheme: "https", host: host}
-        when is_binary(host) and host != "" ->
-          if private_host?(host) do
-            [{field, "must not point to a private or reserved address"}]
-          else
-            []
+        %URI{scheme: scheme, host: host}
+        when scheme in ["https", "http"] and is_binary(host) and host != "" ->
+          cond do
+            scheme == "http" and !opts[:allow_private_urls] ->
+              [{field, "must be a valid HTTPS URL"}]
+
+            !opts[:allow_private_urls] and private_host?(host) ->
+              [{field, "must not point to a private or reserved address"}]
+
+            true ->
+              []
           end
 
         _ ->

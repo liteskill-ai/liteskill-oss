@@ -121,6 +121,19 @@ defmodule Liteskill.SettingsTest do
     end
   end
 
+  describe "allow_private_mcp_urls?/0" do
+    test "returns false by default" do
+      assert Settings.allow_private_mcp_urls?() == false
+    end
+
+    test "returns true when enabled" do
+      Settings.get()
+      {:ok, _} = Settings.update(%{allow_private_mcp_urls: true})
+
+      assert Settings.allow_private_mcp_urls?() == true
+    end
+  end
+
   describe "bust_cache/0" do
     test "erases persistent_term entry" do
       # In test mode, cache is disabled, but bust_cache should not crash

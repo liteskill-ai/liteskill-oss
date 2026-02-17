@@ -10,6 +10,7 @@ defmodule Liteskill.Settings.ServerSettings do
     field :registration_open, :boolean, default: true
     field :singleton, :boolean, default: true
     field :default_mcp_run_cost_limit, :decimal, default: Decimal.new("1.0")
+    field :allow_private_mcp_urls, :boolean, default: false
 
     belongs_to :embedding_model, Liteskill.LlmModels.LlmModel
 
@@ -18,7 +19,12 @@ defmodule Liteskill.Settings.ServerSettings do
 
   def changeset(settings, attrs) do
     settings
-    |> cast(attrs, [:registration_open, :embedding_model_id, :default_mcp_run_cost_limit])
+    |> cast(attrs, [
+      :registration_open,
+      :embedding_model_id,
+      :default_mcp_run_cost_limit,
+      :allow_private_mcp_urls
+    ])
     |> validate_required([:registration_open])
     |> unique_constraint(:singleton)
     |> foreign_key_constraint(:embedding_model_id)

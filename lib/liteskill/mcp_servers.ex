@@ -1,7 +1,7 @@
 defmodule Liteskill.McpServers do
   use Boundary,
     top_level?: true,
-    deps: [Liteskill.Authorization, Liteskill.Rbac, Liteskill.BuiltinTools],
+    deps: [Liteskill.Authorization, Liteskill.Rbac, Liteskill.BuiltinTools, Liteskill.Settings],
     exports: [McpServer, Client]
 
   @moduledoc """
@@ -59,7 +59,7 @@ defmodule Liteskill.McpServers do
     with :ok <- Liteskill.Rbac.authorize(user_id, "mcp_servers:create") do
       Repo.transaction(fn ->
         case %McpServer{}
-             |> McpServer.changeset(attrs)
+             |> McpServer.changeset(attrs, url_validation_opts())
              |> Repo.insert() do
           {:ok, server} ->
             {:ok, _} = Authorization.create_owner_acl("mcp_server", server.id, server.user_id)
@@ -75,7 +75,7 @@ defmodule Liteskill.McpServers do
   def update_server(server, user_id, attrs) do
     with {:ok, server} <- authorize_owner(server, user_id) do
       server
-      |> McpServer.changeset(attrs)
+      |> McpServer.changeset(attrs, url_validation_opts())
       |> Repo.update()
     end
   end
@@ -93,4 +93,8 @@ defmodule Liteskill.McpServers do
   end
 
   defp authorize_owner(entity, user_id), do: Authorization.authorize_owner(entity, user_id)
+
+  defp url_validation_opts do
+    [allow_private_urls: Liteskill.Settings.allow_private_mcp_urls?()]
+  end
 end

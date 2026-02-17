@@ -82,19 +82,42 @@ defmodule Liteskill.LLM.ToolUtilsTest do
       Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
-        assert decoded["method"] == "tools/call"
-        assert decoded["params"]["name"] == "mcp_tool"
 
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.send_resp(
-          200,
-          Jason.encode!(%{
-            "jsonrpc" => "2.0",
-            "result" => %{"content" => [%{"text" => "mcp result"}]},
-            "id" => 1
-          })
-        )
+        case decoded["method"] do
+          "initialize" ->
+            resp = %{
+              "jsonrpc" => "2.0",
+              "result" => %{
+                "protocolVersion" => "2025-03-26",
+                "capabilities" => %{},
+                "serverInfo" => %{"name" => "test", "version" => "1.0"}
+              },
+              "id" => 0
+            }
+
+            conn
+            |> Plug.Conn.put_resp_header("mcp-session-id", "test-session")
+            |> Plug.Conn.put_resp_content_type("application/json")
+            |> Plug.Conn.send_resp(200, Jason.encode!(resp))
+
+          "notifications/initialized" ->
+            Plug.Conn.send_resp(conn, 200, "")
+
+          _ ->
+            assert decoded["method"] == "tools/call"
+            assert decoded["params"]["name"] == "mcp_tool"
+
+            conn
+            |> Plug.Conn.put_resp_content_type("application/json")
+            |> Plug.Conn.send_resp(
+              200,
+              Jason.encode!(%{
+                "jsonrpc" => "2.0",
+                "result" => %{"content" => [%{"text" => "mcp result"}]},
+                "id" => 1
+              })
+            )
+        end
       end)
 
       server = %{url: "https://mcp.example.com", api_key: nil, headers: %{}}

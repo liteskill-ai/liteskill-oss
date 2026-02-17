@@ -40,6 +40,10 @@ defmodule Liteskill.Settings do
     get().default_mcp_run_cost_limit || Decimal.new("1.0")
   end
 
+  def allow_private_mcp_urls? do
+    get().allow_private_mcp_urls || false
+  end
+
   def update_embedding_model(model_id) do
     update(%{embedding_model_id: model_id})
   end

@@ -608,6 +608,27 @@ defmodule LiteskillWeb.AdminLive do
 
       <div class="card bg-base-100 shadow">
         <div class="card-body">
+          <h2 class="card-title mb-4">MCP Security</h2>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="font-medium">Allow Private URLs</p>
+              <p class="text-sm text-base-content/60">
+                Allow MCP servers to use private/reserved addresses (localhost, 10.x, 192.168.x, etc.)
+                and plain HTTP URLs. Enable this for self-hosted deployments with internal MCP servers.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              class="toggle toggle-primary"
+              checked={@server_settings && @server_settings.allow_private_mcp_urls}
+              phx-click="toggle_allow_private_mcp_urls"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
           <h2 class="card-title mb-4">Database</h2>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <.info_row label="Host" value={to_string(@repo_config[:hostname] || "—")} />
@@ -2791,6 +2812,25 @@ defmodule LiteskillWeb.AdminLive do
         {:error, reason} ->
           {:noreply,
            Phoenix.LiveView.put_flash(socket, :error, action_error("toggle registration", reason))}
+      end
+    end)
+  end
+
+  def handle_event("toggle_allow_private_mcp_urls", _params, socket) do
+    require_admin(socket, fn ->
+      current = socket.assigns.server_settings.allow_private_mcp_urls || false
+
+      case Settings.update(%{allow_private_mcp_urls: !current}) do
+        {:ok, settings} ->
+          {:noreply, Phoenix.Component.assign(socket, server_settings: settings)}
+
+        {:error, reason} ->
+          {:noreply,
+           Phoenix.LiveView.put_flash(
+             socket,
+             :error,
+             action_error("toggle private URLs", reason)
+           )}
       end
     end)
   end
