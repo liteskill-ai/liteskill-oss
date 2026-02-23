@@ -76,8 +76,11 @@ defmodule Liteskill.Desktop do
         String.contains?(arch, "aarch64") or String.contains?(arch, "arm64") ->
           "aarch64"
 
+        # coveralls-ignore-start
         String.contains?(arch, "x86_64") or String.contains?(arch, "amd64") ->
           "x86_64"
+
+        # coveralls-ignore-stop
 
         # coveralls-ignore-start
         true ->
@@ -134,6 +137,7 @@ defmodule Liteskill.Desktop do
 
       # coveralls-ignore-stop
 
+      # coveralls-ignore-start
       {:unix, _} ->
         xdg =
           System.get_env(
@@ -142,6 +146,8 @@ defmodule Liteskill.Desktop do
           )
 
         Path.join(xdg, "liteskill")
+
+      # coveralls-ignore-stop
 
       # coveralls-ignore-start
       {:win32, _} ->

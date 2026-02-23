@@ -115,6 +115,7 @@ defmodule Liteskill.MixProject do
         "ecto.setup",
         "cmd npm install --prefix assets",
         "assets.setup",
+        "gen.jr_prompt",
         "assets.build"
       ],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
@@ -123,6 +124,7 @@ defmodule Liteskill.MixProject do
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind liteskill", "esbuild liteskill"],
       "assets.deploy": [
+        "gen.jr_prompt",
         "tailwind liteskill --minify",
         "esbuild liteskill --minify",
         "phx.digest"

@@ -101,6 +101,9 @@ defmodule LiteskillWeb.ChatLive do
        sidebar_sources: [],
        show_source_modal: false,
        source_modal_data: %{},
+       show_raw_output_modal: false,
+       raw_output_message_id: nil,
+       raw_output_content: "",
        stream_error: nil,
        # Source configuration modal
        show_configure_source: false,
@@ -167,6 +170,7 @@ defmodule LiteskillWeb.ChatLive do
     else
       {:noreply,
        socket
+       |> assign(show_raw_output_modal: false, raw_output_message_id: nil, raw_output_content: "")
        |> push_event("nav", %{})
        |> push_accent_color()
        |> apply_action(socket.assigns.live_action, params)}
@@ -496,6 +500,12 @@ defmodule LiteskillWeb.ChatLive do
 
   @impl true
   def render(assigns) do
+    assigns =
+      assigns
+      |> assign_new(:show_raw_output_modal, fn -> false end)
+      |> assign_new(:raw_output_message_id, fn -> nil end)
+      |> assign_new(:raw_output_content, fn -> "" end)
+
     ~H"""
     <div class="flex h-screen relative">
       <Layouts.sidebar
@@ -1774,6 +1784,11 @@ defmodule LiteskillWeb.ChatLive do
         show={@show_source_modal}
         source={@source_modal_data}
       />
+      <SourcesComponents.raw_output_modal
+        show={@show_raw_output_modal}
+        raw_output={@raw_output_content}
+        message_id={@raw_output_message_id}
+      />
 
       <ChatComponents.confirm_modal
         show={@confirm_delete_id != nil}
@@ -2216,6 +2231,40 @@ defmodule LiteskillWeb.ChatLive do
   @impl true
   def handle_event("close_source_modal", _params, socket) do
     {:noreply, assign(socket, show_source_modal: false)}
+  end
+
+  @impl true
+  def handle_event("show_raw_output_modal", %{"message-id" => message_id}, socket) do
+    message =
+      Enum.find(socket.assigns.messages, fn msg ->
+        msg.id == message_id && msg.role == "assistant"
+      end)
+
+    if message && message.content not in [nil, ""] do
+      {:noreply,
+       assign(socket,
+         show_raw_output_modal: true,
+         raw_output_message_id: message_id,
+         raw_output_content: message.content
+       )}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("close_raw_output_modal", _params, socket) do
+    {:noreply,
+     assign(socket,
+       show_raw_output_modal: false,
+       raw_output_message_id: nil,
+       raw_output_content: ""
+     )}
+  end
+
+  @impl true
+  def handle_event("raw_output_copied", _params, socket) do
+    {:noreply, put_flash(socket, :info, "Raw output copied")}
   end
 
   @impl true

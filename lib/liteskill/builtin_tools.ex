@@ -23,7 +23,8 @@ defmodule Liteskill.BuiltinTools do
     Liteskill.BuiltinTools.Reports,
     Liteskill.BuiltinTools.Wiki,
     Liteskill.BuiltinTools.AgentStudio,
-    Liteskill.BuiltinTools.DeepResearch
+    Liteskill.BuiltinTools.DeepResearch,
+    Liteskill.BuiltinTools.VisualResponse
   ]
 
   def all, do: @registry
