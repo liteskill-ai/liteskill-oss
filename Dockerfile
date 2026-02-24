@@ -63,7 +63,7 @@ COPY config/runtime.exs config/
 COPY rel rel
 
 # Build the release
-RUN mix release
+RUN mix release liteskill
 
 # Stage 2: Runtime
 FROM ${RUNNER_IMAGE}
