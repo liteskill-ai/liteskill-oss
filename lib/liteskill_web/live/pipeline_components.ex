@@ -218,15 +218,20 @@ defmodule LiteskillWeb.PipelineComponents do
           </table>
         </div>
 
-        <div :if={@jobs.total_pages > 1} class="flex justify-center gap-1 mt-3">
-          <button
-            :for={p <- 1..@jobs.total_pages}
-            class={["btn btn-xs", if(p == @jobs.page, do: "btn-primary", else: "btn-ghost")]}
-            phx-click="pipeline_jobs_page"
-            phx-value-page={p}
-          >
-            {p}
-          </button>
+        <div :if={@jobs.total_pages > 1} class="flex justify-center items-center gap-1 mt-3">
+          <%= for p <- page_window(@jobs.page, @jobs.total_pages) do %>
+            <%= if p == :ellipsis do %>
+              <span class="px-1 text-xs opacity-40">&hellip;</span>
+            <% else %>
+              <button
+                class={["btn btn-xs", if(p == @jobs.page, do: "btn-primary", else: "btn-ghost")]}
+                phx-click="pipeline_jobs_page"
+                phx-value-page={p}
+              >
+                {p}
+              </button>
+            <% end %>
+          <% end %>
         </div>
       </div>
     </div>
@@ -263,6 +268,23 @@ defmodule LiteskillWeb.PipelineComponents do
   defp format_number(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
   defp format_number(n) when n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
   defp format_number(n), do: "#{n}"
+
+  defp page_window(_current, total) when total <= 7, do: Enum.to_list(1..total)
+
+  defp page_window(current, total) do
+    neighbors = [current - 1, current, current + 1]
+
+    pages =
+      Enum.uniq([1] ++ neighbors ++ [total])
+      |> Enum.filter(&(&1 >= 1 and &1 <= total))
+      |> Enum.sort()
+
+    pages
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.reduce([hd(pages)], fn [a, b], acc ->
+      if b - a > 1, do: acc ++ [:ellipsis, b], else: acc ++ [b]
+    end)
+  end
 
   defp format_dt(nil), do: "—"
 

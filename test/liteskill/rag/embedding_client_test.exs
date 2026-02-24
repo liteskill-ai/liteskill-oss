@@ -139,10 +139,18 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
       %{provider: provider, model: model}
     end
 
-    test "returns embeddings via ReqLLM", %{owner: owner} do
+    test "sends full model ID and dimensions in request body", %{owner: owner} do
       embedding = [0.1, 0.2, 0.3]
 
       Req.Test.stub(EmbeddingClient, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+
+        # Full OpenRouter model ID preserved (not stripped to "text-embedding-3-small")
+        assert decoded["model"] == "openai/text-embedding-3-small"
+        assert decoded["input"] == ["hello"]
+        assert decoded["dimensions"] == 1024
+
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(
@@ -168,6 +176,54 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
       end)
 
       assert {:error, _} =
+               EmbeddingClient.embed(
+                 ["hello"],
+                 input_type: "search_query",
+                 user_id: owner.id,
+                 plug: {Req.Test, EmbeddingClient}
+               )
+    end
+
+    test "omits dimensions for models that do not support it", %{owner: owner} do
+      # Reconfigure to use ada-002 (fixed 1536 dimensions, no dimensions param)
+      {:ok, provider} =
+        Liteskill.LlmProviders.create_provider(%{
+          name: "Test OpenRouter Ada",
+          provider_type: "openrouter",
+          api_key: "openrouter-key",
+          user_id: owner.id
+        })
+
+      {:ok, ada_model} =
+        Liteskill.LlmModels.create_model(%{
+          name: "Embedding Ada",
+          model_id: "openai/text-embedding-ada-002",
+          model_type: "embedding",
+          instance_wide: true,
+          provider_id: provider.id,
+          user_id: owner.id
+        })
+
+      {:ok, _} = Settings.update_embedding_model(ada_model.id)
+
+      embedding = List.duplicate(0.1, 1536)
+
+      Req.Test.stub(EmbeddingClient, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+
+        assert decoded["model"] == "openai/text-embedding-ada-002"
+        refute Map.has_key?(decoded, "dimensions")
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{"data" => [%{"index" => 0, "embedding" => embedding}]})
+        )
+      end)
+
+      assert {:ok, [^embedding]} =
                EmbeddingClient.embed(
                  ["hello"],
                  input_type: "search_query",
