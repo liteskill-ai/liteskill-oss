@@ -369,7 +369,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
         if raw_tool_calls == [] do
           {:ok, text, response.context}
         else
-          tool_calls = Enum.map(raw_tool_calls, &normalize_tool_call/1)
+          tool_calls = Enum.map(raw_tool_calls, &ToolUtils.normalize_tool_call/1)
           tool_results = execute_tool_calls(tool_calls, state)
 
           # Build next context: response.context already has assistant message,
@@ -521,23 +521,6 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
         |> Enum.filter(fn part -> part.type == :text end)
         |> Enum.map_join("", fn part -> part.text || "" end)
     end
-  end
-
-  # -- Tool call normalization --
-
-  defp normalize_tool_call(tc) do
-    input =
-      case Jason.decode(tc.function.arguments) do
-        {:ok, decoded} -> decoded
-        # coveralls-ignore-next-line
-        {:error, _} -> %{"_raw" => tc.function.arguments}
-      end
-
-    %{
-      tool_use_id: tc.id,
-      name: tc.function.name,
-      input: input
-    }
   end
 
   # -- Tool execution --

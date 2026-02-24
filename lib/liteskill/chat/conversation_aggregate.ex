@@ -61,7 +61,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: :active}, {:add_user_message, params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.UserMessageAdded{
@@ -83,7 +83,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: :active}, {:start_assistant_stream, params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.AssistantStreamStarted{
@@ -98,7 +98,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: :streaming}, {:receive_chunk, params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.AssistantChunkReceived{
@@ -118,7 +118,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: :streaming}, {:complete_stream, params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.AssistantStreamCompleted{
@@ -139,7 +139,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: :streaming}, {:fail_stream, params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.AssistantStreamFailed{
@@ -158,7 +158,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: :streaming}, {:start_tool_call, params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.ToolCallStarted{
@@ -177,7 +177,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: :streaming}, {:complete_tool_call, params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.ToolCallCompleted{
@@ -203,7 +203,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: _status}, {:update_title, params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.ConversationTitleUpdated{
@@ -219,7 +219,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def handle_command(%{status: _status}, {:archive, _params}) do
-    now = DateTime.utc_now() |> DateTime.to_iso8601()
+    now = iso_now()
 
     event =
       Events.serialize(%Events.ConversationArchived{
@@ -242,7 +242,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
     message_id = params.message_id
 
     if Enum.any?(messages, &(&1.id == message_id)) do
-      now = DateTime.utc_now() |> DateTime.to_iso8601()
+      now = iso_now()
 
       event =
         Events.serialize(%Events.ConversationTruncated{
@@ -255,6 +255,8 @@ defmodule Liteskill.Chat.ConversationAggregate do
       {:error, :message_not_found}
     end
   end
+
+  defp iso_now, do: DateTime.utc_now() |> DateTime.to_iso8601()
 
   # --- Event Appliers ---
 

@@ -1,3 +1,24 @@
 [
-  ignore: "Config.CSRF,Config.CSRFRoute,Config.CSP,Traversal.FileModule,CI.System"
+  ignore: [
+    # API pipeline intentionally omits CSRF — endpoints are called programmatically
+    # via fetch/XHR with session auth, not browser form submissions.
+    "Config.CSRF",
+
+    # OIDC callback uses GET as required by the OAuth2/OIDC spec (provider redirects
+    # back via GET with auth code). Ueberauth handles this route, not user code.
+    "Config.CSRFRoute",
+
+    # CSP headers are handled at the deployment layer (reverse proxy / CDN),
+    # not in the Phoenix router pipeline.
+    "Config.CSP",
+
+    # All flagged File operations use paths derived from application config
+    # (Desktop, PostgresManager) or Phoenix's secure upload temp files (WikiLive),
+    # never from raw user input.
+    "Traversal.FileModule",
+
+    # System.cmd in PostgresManager uses validated config-derived paths and a
+    # regex-checked database name — no user-controlled command injection vector.
+    "CI.System"
+  ]
 ]

@@ -44,6 +44,8 @@ defmodule Liteskill.Application do
         LiteskillWeb.Plugs.RateLimiter.Sweeper,
         # Task supervisor for LLM streaming and other async work
         {Task.Supervisor, name: Liteskill.TaskSupervisor},
+        # Stream registry — monitors active LLM stream tasks, triggers recovery on crash
+        Liteskill.Chat.StreamRegistry,
         # LLM Gateway: per-provider circuit breaker + concurrency gates
         {Registry, keys: :unique, name: Liteskill.LlmGateway.GateRegistry},
         {DynamicSupervisor, name: Liteskill.LlmGateway.GateSupervisor, strategy: :one_for_one},

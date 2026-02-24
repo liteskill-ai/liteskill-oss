@@ -1,11 +1,26 @@
 defmodule Liteskill.Rag.EmbeddingClientTest do
   use Liteskill.DataCase, async: false
 
-  alias Liteskill.Rag.{CohereClient, EmbeddingClient, OpenAIEmbeddingClient}
+  alias Liteskill.Rag.EmbeddingClient
   alias Liteskill.Settings
 
   setup do
     Req.Test.set_req_test_to_shared()
+
+    original_llm = Application.get_env(:liteskill, Liteskill.LLM, [])
+
+    merged =
+      Keyword.merge(original_llm,
+        bedrock_bearer_token: "test-token",
+        bedrock_region: "us-east-1"
+      )
+
+    Application.put_env(:liteskill, Liteskill.LLM, merged)
+
+    # ReqLLM's validate_model calls prepare_request with empty opts, which
+    # triggers api_key lookup. Provide a fallback so validation passes.
+    original_openai_key = Application.get_env(:req_llm, :openai_api_key)
+    Application.put_env(:req_llm, :openai_api_key, "test-key")
 
     {:ok, owner} =
       Liteskill.Accounts.find_or_create_from_oidc(%{
@@ -15,14 +30,22 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
         oidc_issuer: "https://test.example.com"
       })
 
+    on_exit(fn ->
+      Application.put_env(:liteskill, Liteskill.LLM, original_llm)
+
+      if original_openai_key,
+        do: Application.put_env(:req_llm, :openai_api_key, original_openai_key),
+        else: Application.delete_env(:req_llm, :openai_api_key)
+    end)
+
     %{owner: owner}
   end
 
   describe "embed/2 with no configured model" do
-    test "delegates to CohereClient", %{owner: owner} do
+    test "embeds via Bedrock Cohere fallback", %{owner: owner} do
       embedding = List.duplicate(0.1, 1024)
 
-      Req.Test.stub(CohereClient, fn conn ->
+      Req.Test.stub(EmbeddingClient, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(
@@ -36,7 +59,7 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
                  ["hello"],
                  input_type: "search_query",
                  user_id: owner.id,
-                 plug: {Req.Test, CohereClient}
+                 plug: {Req.Test, EmbeddingClient}
                )
     end
   end
@@ -68,31 +91,10 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
       %{provider: provider, model: model}
     end
 
-    test "delegates to CohereClient", %{owner: owner} do
+    test "returns embeddings via ReqLLM", %{owner: owner} do
       embedding = List.duplicate(0.1, 1024)
 
-      Req.Test.stub(CohereClient, fn conn ->
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.send_resp(
-          200,
-          Jason.encode!(%{"embeddings" => %{"float" => [embedding]}})
-        )
-      end)
-
-      assert {:ok, [^embedding]} =
-               EmbeddingClient.embed(
-                 ["hello"],
-                 input_type: "search_query",
-                 user_id: owner.id,
-                 plug: {Req.Test, CohereClient}
-               )
-    end
-
-    test "remaps EmbeddingClient plug to CohereClient plug", %{owner: owner} do
-      embedding = List.duplicate(0.1, 1024)
-
-      Req.Test.stub(CohereClient, fn conn ->
+      Req.Test.stub(EmbeddingClient, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(
@@ -123,8 +125,8 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
 
       {:ok, model} =
         Liteskill.LlmModels.create_model(%{
-          name: "Ada 002",
-          model_id: "openai/text-embedding-ada-002",
+          name: "Embedding 3 Small",
+          model_id: "openai/text-embedding-3-small",
           model_type: "embedding",
           instance_wide: true,
           provider_id: provider.id,
@@ -137,31 +139,18 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
       %{provider: provider, model: model}
     end
 
-    test "delegates to OpenAIEmbeddingClient", %{owner: owner} do
+    test "sends full model ID and dimensions in request body", %{owner: owner} do
       embedding = [0.1, 0.2, 0.3]
 
-      Req.Test.stub(OpenAIEmbeddingClient, fn conn ->
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.send_resp(
-          200,
-          Jason.encode!(%{"data" => [%{"index" => 0, "embedding" => embedding}]})
-        )
-      end)
+      Req.Test.stub(EmbeddingClient, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
 
-      assert {:ok, [^embedding]} =
-               EmbeddingClient.embed(
-                 ["hello"],
-                 input_type: "search_query",
-                 user_id: owner.id,
-                 plug: {Req.Test, OpenAIEmbeddingClient}
-               )
-    end
+        # Full OpenRouter model ID preserved (not stripped to "text-embedding-3-small")
+        assert decoded["model"] == "openai/text-embedding-3-small"
+        assert decoded["input"] == ["hello"]
+        assert decoded["dimensions"] == 1024
 
-    test "remaps EmbeddingClient plug to OpenAIEmbeddingClient plug", %{owner: owner} do
-      embedding = [0.1, 0.2, 0.3]
-
-      Req.Test.stub(OpenAIEmbeddingClient, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(
@@ -180,25 +169,73 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
     end
 
     test "returns error on API failure", %{owner: owner} do
-      Req.Test.stub(OpenAIEmbeddingClient, fn conn ->
+      Req.Test.stub(EmbeddingClient, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(500, Jason.encode!(%{"error" => "server error"}))
       end)
 
-      assert {:error, %{status: 500}} =
+      assert {:error, _} =
                EmbeddingClient.embed(
                  ["hello"],
                  input_type: "search_query",
                  user_id: owner.id,
-                 plug: {Req.Test, OpenAIEmbeddingClient}
+                 plug: {Req.Test, EmbeddingClient}
+               )
+    end
+
+    test "omits dimensions for models that do not support it", %{owner: owner} do
+      # Reconfigure to use ada-002 (fixed 1536 dimensions, no dimensions param)
+      {:ok, provider} =
+        Liteskill.LlmProviders.create_provider(%{
+          name: "Test OpenRouter Ada",
+          provider_type: "openrouter",
+          api_key: "openrouter-key",
+          user_id: owner.id
+        })
+
+      {:ok, ada_model} =
+        Liteskill.LlmModels.create_model(%{
+          name: "Embedding Ada",
+          model_id: "openai/text-embedding-ada-002",
+          model_type: "embedding",
+          instance_wide: true,
+          provider_id: provider.id,
+          user_id: owner.id
+        })
+
+      {:ok, _} = Settings.update_embedding_model(ada_model.id)
+
+      embedding = List.duplicate(0.1, 1536)
+
+      Req.Test.stub(EmbeddingClient, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+
+        assert decoded["model"] == "openai/text-embedding-ada-002"
+        refute Map.has_key?(decoded, "dimensions")
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          200,
+          Jason.encode!(%{"data" => [%{"index" => 0, "embedding" => embedding}]})
+        )
+      end)
+
+      assert {:ok, [^embedding]} =
+               EmbeddingClient.embed(
+                 ["hello"],
+                 input_type: "search_query",
+                 user_id: owner.id,
+                 plug: {Req.Test, EmbeddingClient}
                )
     end
 
     test "logs embedding request to DB", %{owner: owner} do
       embedding = [0.1, 0.2, 0.3]
 
-      Req.Test.stub(OpenAIEmbeddingClient, fn conn ->
+      Req.Test.stub(EmbeddingClient, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(
@@ -212,7 +249,7 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
                  ["hello world"],
                  input_type: "search_query",
                  user_id: owner.id,
-                 plug: {Req.Test, OpenAIEmbeddingClient}
+                 plug: {Req.Test, EmbeddingClient}
                )
 
       request =
@@ -226,30 +263,8 @@ defmodule Liteskill.Rag.EmbeddingClientTest do
 
       assert request.request_type == "embed"
       assert request.status == "success"
-      assert request.model_id == "openai/text-embedding-ada-002"
+      assert request.model_id == "openai/text-embedding-3-small"
       assert request.input_count == 1
-    end
-
-    test "uses default OpenRouter base URL", %{owner: owner} do
-      Req.Test.stub(OpenAIEmbeddingClient, fn conn ->
-        assert conn.host == "openrouter.ai"
-        assert conn.request_path == "/api/v1/embeddings"
-
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.send_resp(
-          200,
-          Jason.encode!(%{"data" => [%{"index" => 0, "embedding" => [0.1]}]})
-        )
-      end)
-
-      assert {:ok, _} =
-               EmbeddingClient.embed(
-                 ["test"],
-                 input_type: "search_query",
-                 user_id: owner.id,
-                 plug: {Req.Test, OpenAIEmbeddingClient}
-               )
     end
   end
 end

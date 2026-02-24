@@ -3,7 +3,7 @@ defmodule Liteskill.Rag.IngestWorkerTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{IngestWorker, CohereClient, Source, Document}
+  alias Liteskill.Rag.{IngestWorker, EmbeddingClient, Source, Document}
 
   setup do
     {:ok, owner} =
@@ -33,7 +33,7 @@ defmodule Liteskill.Rag.IngestWorkerTest do
   defp stub_embed(count) do
     embeddings = List.duplicate(List.duplicate(0.1, 1024), count)
 
-    Req.Test.stub(CohereClient, fn conn ->
+    Req.Test.stub(EmbeddingClient, fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.send_resp(
@@ -144,7 +144,7 @@ defmodule Liteskill.Rag.IngestWorkerTest do
       body = Enum.map_join(1..200, " ", fn i -> "word#{i}" end)
       stub_url_fetch(body)
 
-      Req.Test.stub(CohereClient, fn conn ->
+      Req.Test.stub(EmbeddingClient, fn conn ->
         {:ok, req_body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(req_body)
         text_count = length(decoded["texts"])

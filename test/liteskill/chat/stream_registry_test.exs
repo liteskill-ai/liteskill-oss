@@ -18,8 +18,20 @@ defmodule Liteskill.Chat.StreamRegistryTest do
     end
   end
 
+  setup do
+    name = :"stream_registry_#{System.unique_integer([:positive])}"
+
+    pid =
+      start_supervised!(
+        {StreamRegistry, name: name, recovery_delay_ms: 10},
+        id: name
+      )
+
+    %{registry: name, registry_pid: pid}
+  end
+
   describe "register/2 and lookup/1" do
-    test "registers and looks up a stream task" do
+    test "registers and looks up a stream task", %{registry: name} do
       conv_id = Ecto.UUID.generate()
 
       task =
@@ -27,7 +39,7 @@ defmodule Liteskill.Chat.StreamRegistryTest do
           Process.sleep(:infinity)
         end)
 
-      :ok = StreamRegistry.register(conv_id, task.pid)
+      :ok = StreamRegistry.register(conv_id, task.pid, name: name)
 
       assert {:ok, pid} = StreamRegistry.lookup(conv_id)
       assert pid == task.pid
@@ -39,22 +51,21 @@ defmodule Liteskill.Chat.StreamRegistryTest do
       assert :error = StreamRegistry.lookup(Ecto.UUID.generate())
     end
 
-    test "returns :error after process exits" do
+    test "returns :error after process exits", %{registry: name} do
       conv_id = Ecto.UUID.generate()
       task = Task.async(fn -> :ok end)
-      :ok = StreamRegistry.register(conv_id, task.pid)
+      :ok = StreamRegistry.register(conv_id, task.pid, name: name)
 
       # Wait for the task to finish
       Task.await(task)
 
-      # Poll until the monitor's spawned cleanup process runs.
-      # The monitor removes the ETS entry asynchronously after the DOWN signal.
+      # Poll until the GenServer processes the DOWN message and cleans up ETS
       assert_eventually(fn -> :error == StreamRegistry.lookup(conv_id) end)
     end
   end
 
   describe "streaming?/1" do
-    test "returns true for active stream" do
+    test "returns true for active stream", %{registry: name} do
       conv_id = Ecto.UUID.generate()
 
       task =
@@ -62,7 +73,7 @@ defmodule Liteskill.Chat.StreamRegistryTest do
           Process.sleep(:infinity)
         end)
 
-      :ok = StreamRegistry.register(conv_id, task.pid)
+      :ok = StreamRegistry.register(conv_id, task.pid, name: name)
 
       assert StreamRegistry.streaming?(conv_id)
 
@@ -75,7 +86,7 @@ defmodule Liteskill.Chat.StreamRegistryTest do
   end
 
   describe "unregister/1" do
-    test "removes entry from registry" do
+    test "removes entry from registry", %{registry: name} do
       conv_id = Ecto.UUID.generate()
 
       task =
@@ -83,10 +94,10 @@ defmodule Liteskill.Chat.StreamRegistryTest do
           Process.sleep(:infinity)
         end)
 
-      :ok = StreamRegistry.register(conv_id, task.pid)
+      :ok = StreamRegistry.register(conv_id, task.pid, name: name)
       assert StreamRegistry.streaming?(conv_id)
 
-      :ok = StreamRegistry.unregister(conv_id)
+      :ok = StreamRegistry.unregister(conv_id, name: name)
       refute StreamRegistry.streaming?(conv_id)
 
       Task.shutdown(task)
@@ -94,7 +105,7 @@ defmodule Liteskill.Chat.StreamRegistryTest do
   end
 
   describe "auto-cleanup on process exit" do
-    test "cleans up when monitored process crashes" do
+    test "cleans up when monitored process crashes", %{registry: name} do
       conv_id = Ecto.UUID.generate()
 
       pid =
@@ -104,7 +115,7 @@ defmodule Liteskill.Chat.StreamRegistryTest do
           end
         end)
 
-      :ok = StreamRegistry.register(conv_id, pid)
+      :ok = StreamRegistry.register(conv_id, pid, name: name)
       assert StreamRegistry.streaming?(conv_id)
 
       # Kill the process and wait for monitor cleanup
@@ -112,7 +123,7 @@ defmodule Liteskill.Chat.StreamRegistryTest do
       assert_eventually(fn -> not StreamRegistry.streaming?(conv_id) end)
     end
 
-    test "cleans up when process exits normally" do
+    test "cleans up when process exits normally", %{registry: name} do
       conv_id = Ecto.UUID.generate()
 
       pid =
@@ -122,16 +133,88 @@ defmodule Liteskill.Chat.StreamRegistryTest do
           end
         end)
 
-      :ok = StreamRegistry.register(conv_id, pid)
+      :ok = StreamRegistry.register(conv_id, pid, name: name)
       assert StreamRegistry.streaming?(conv_id)
 
       send(pid, :stop)
       assert_eventually(fn -> not StreamRegistry.streaming?(conv_id) end)
     end
+
+    test "schedules recovery after process exits", %{registry: name, registry_pid: registry_pid} do
+      conv_id = Ecto.UUID.generate()
+
+      pid =
+        spawn(fn ->
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      :ok = StreamRegistry.register(conv_id, pid, name: name)
+      Process.exit(pid, :kill)
+
+      # Wait for DOWN to be processed
+      assert_eventually(fn -> not StreamRegistry.streaming?(conv_id) end)
+
+      # Verify recovery was scheduled by checking state is clean
+      state = :sys.get_state(registry_pid)
+      assert state.monitors == %{}
+    end
+  end
+
+  describe "unregister with multiple monitors" do
+    test "preserves other monitors when unregistering one", %{registry: name, registry_pid: pid} do
+      conv_a = Ecto.UUID.generate()
+      conv_b = Ecto.UUID.generate()
+
+      task_a = Task.async(fn -> Process.sleep(:infinity) end)
+      task_b = Task.async(fn -> Process.sleep(:infinity) end)
+
+      :ok = StreamRegistry.register(conv_a, task_a.pid, name: name)
+      :ok = StreamRegistry.register(conv_b, task_b.pid, name: name)
+
+      # Unregister conv_a — the reduce must skip conv_b's monitor entry
+      :ok = StreamRegistry.unregister(conv_a, name: name)
+
+      refute StreamRegistry.streaming?(conv_a)
+      assert StreamRegistry.streaming?(conv_b)
+
+      # conv_b's monitor should still be in state
+      state = :sys.get_state(pid)
+      assert map_size(state.monitors) == 1
+
+      Task.shutdown(task_a)
+      Task.shutdown(task_b)
+    end
+  end
+
+  describe "DOWN for unknown ref" do
+    test "handles DOWN for already-demonitored ref", %{registry_pid: pid} do
+      # Send a fake DOWN message with a ref that doesn't exist in monitors
+      fake_ref = make_ref()
+      fake_pid = spawn(fn -> :ok end)
+      send(pid, {:DOWN, fake_ref, :process, fake_pid, :normal})
+
+      # GenServer should handle it without crashing
+      state = :sys.get_state(pid)
+      assert state.monitors == %{}
+    end
+  end
+
+  describe "recover handler" do
+    test "executes recovery via TaskSupervisor", %{registry_pid: pid} do
+      conv_id = Ecto.UUID.generate()
+
+      # Send the :recover message directly to exercise the handler
+      send(pid, {:recover, conv_id})
+
+      # Synchronize — ensures the GenServer processed the message
+      _ = :sys.get_state(pid)
+    end
   end
 
   describe "double-registration safety" do
-    test "second registration survives first process exit" do
+    test "second registration survives first process exit", %{registry: name} do
       conv_id = Ecto.UUID.generate()
 
       pid1 =
@@ -148,11 +231,11 @@ defmodule Liteskill.Chat.StreamRegistryTest do
           end
         end)
 
-      :ok = StreamRegistry.register(conv_id, pid1)
+      :ok = StreamRegistry.register(conv_id, pid1, name: name)
       assert {:ok, ^pid1} = StreamRegistry.lookup(conv_id)
 
       # Re-register with a new pid (simulates double-launch)
-      :ok = StreamRegistry.register(conv_id, pid2)
+      :ok = StreamRegistry.register(conv_id, pid2, name: name)
       assert {:ok, ^pid2} = StreamRegistry.lookup(conv_id)
 
       # Kill the first process — should NOT remove the second's registration

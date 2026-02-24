@@ -57,4 +57,19 @@ defmodule Liteskill.LLM.ToolUtils do
   def execute_tool(nil, tool_name, _input, _opts) do
     {:error, "No server configured for tool #{tool_name}"}
   end
+
+  @doc """
+  Normalizes a ReqLLM tool call struct into the internal map format
+  used by the event store and tool execution pipeline.
+  """
+  def normalize_tool_call(tc) do
+    input =
+      case Jason.decode(tc.function.arguments) do
+        {:ok, decoded} -> decoded
+        # coveralls-ignore-next-line
+        {:error, _} -> %{"_raw" => tc.function.arguments}
+      end
+
+    %{tool_use_id: tc.id, name: tc.function.name, input: input}
+  end
 end

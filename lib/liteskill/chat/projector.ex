@@ -32,6 +32,13 @@ defmodule Liteskill.Chat.Projector do
     GenServer.cast(__MODULE__, {:project_events, stream_id, events})
   end
 
+  @doc """
+  Synchronous no-op. Returns when the Projector has drained all preceding messages.
+  """
+  def sync do
+    GenServer.call(__MODULE__, :sync, 30_000)
+  end
+
   def rebuild_projections do
     GenServer.call(__MODULE__, :rebuild, :infinity)
   end
@@ -44,6 +51,10 @@ defmodule Liteskill.Chat.Projector do
   @impl true
   def handle_call({:project_events, stream_id, events}, _from, state) do
     do_project(stream_id, events)
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:sync, _from, state) do
     {:reply, :ok, state}
   end
 

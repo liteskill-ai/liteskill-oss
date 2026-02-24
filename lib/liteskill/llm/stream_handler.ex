@@ -361,7 +361,7 @@ defmodule Liteskill.LLM.StreamHandler do
           {:ok, response} ->
             text = ReqLLM.Response.text(response) || ""
             raw_tool_calls = ReqLLM.Response.tool_calls(response) || []
-            tool_calls = Enum.map(raw_tool_calls, &normalize_tool_call/1)
+            tool_calls = Enum.map(raw_tool_calls, &ToolUtils.normalize_tool_call/1)
             usage = ReqLLM.Response.usage(response)
             {:ok, text, tool_calls, usage}
 
@@ -372,14 +372,6 @@ defmodule Liteskill.LLM.StreamHandler do
       {:error, reason} ->
         {:error, normalize_error(reason)}
     end
-  end
-
-  defp normalize_tool_call(tc) do
-    %{
-      tool_use_id: tc.id,
-      name: tc.function.name,
-      input: Jason.decode!(tc.function.arguments)
-    }
   end
 
   # coveralls-ignore-stop
@@ -487,9 +479,6 @@ defmodule Liteskill.LLM.StreamHandler do
     req_opts =
       case Keyword.get(opts, :max_tokens) do
         nil ->
-          # Default to model's max_output_tokens if configured
-          llm_model = Keyword.get(opts, :llm_model)
-
           # coveralls-ignore-start — requires LlmModel with max_output_tokens set
           case llm_model do
             %{max_output_tokens: max} when is_integer(max) ->
@@ -745,7 +734,7 @@ defmodule Liteskill.LLM.StreamHandler do
     auto_confirm = Keyword.get(opts, :auto_confirm, false)
 
     approval_topic = "tool_approval:#{stream_id}"
-    if !auto_confirm, do: Phoenix.PubSub.subscribe(Liteskill.PubSub, approval_topic)
+    unless auto_confirm, do: Phoenix.PubSub.subscribe(Liteskill.PubSub, approval_topic)
 
     Enum.each(parsed_tool_calls, fn tc ->
       command =
@@ -774,7 +763,7 @@ defmodule Liteskill.LLM.StreamHandler do
         opts
       )
 
-    if !auto_confirm, do: Phoenix.PubSub.unsubscribe(Liteskill.PubSub, approval_topic)
+    unless auto_confirm, do: Phoenix.PubSub.unsubscribe(Liteskill.PubSub, approval_topic)
 
     complete_stream_with_stop_reason(
       stream_id,
@@ -790,7 +779,7 @@ defmodule Liteskill.LLM.StreamHandler do
     assistant_content = build_assistant_content(full_content, parsed_tool_calls)
 
     tool_result_content =
-      Enum.map(Enum.zip(parsed_tool_calls, tool_results), fn {tc, result} ->
+      Enum.zip_with(parsed_tool_calls, tool_results, fn tc, result ->
         %{
           "toolResult" => %{
             "toolUseId" => tc.tool_use_id,
@@ -946,29 +935,15 @@ defmodule Liteskill.LLM.StreamHandler do
   # -- Stream completion / failure --
 
   defp complete_stream(stream_id, message_id, full_content, latency_ms, usage, opts) do
-    gateway_checkin(opts, :ok)
-
-    command =
-      {:complete_stream,
-       %{
-         message_id: message_id,
-         full_content: full_content,
-         stop_reason: "end_turn",
-         latency_ms: latency_ms,
-         input_tokens: get_in_usage(usage, :input_tokens),
-         output_tokens: get_in_usage(usage, :output_tokens)
-       }}
-
-    case Loader.execute(ConversationAggregate, stream_id, command) do
-      {:ok, _state, events} ->
-        Projector.project_events(stream_id, events)
-        maybe_record_usage(usage, message_id, latency_ms, "end_turn", opts)
-        :ok
-
-      # coveralls-ignore-next-line
-      {:error, reason} ->
-        {:error, reason}
-    end
+    complete_stream_with_stop_reason(
+      stream_id,
+      message_id,
+      full_content,
+      "end_turn",
+      latency_ms,
+      usage,
+      opts
+    )
   end
 
   defp complete_stream_with_stop_reason(

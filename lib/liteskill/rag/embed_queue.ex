@@ -8,8 +8,8 @@ defmodule Liteskill.Rag.EmbedQueue do
   - The accumulated text count reaches `batch_size` (96, Cohere's per-request limit), or
   - A `flush_ms` timer (default 2 seconds) elapses with no new arrivals.
 
-  On 429 rate-limit errors, retries with exponential backoff before returning
-  the error to callers.
+  On 429/503 errors, retries with exponential backoff using `Process.send_after`
+  so the GenServer remains responsive to new requests during backoff.
   """
 
   use GenServer
@@ -57,6 +57,7 @@ defmodule Liteskill.Rag.EmbedQueue do
     state = %{
       queue: [],
       timer_ref: nil,
+      retry: nil,
       batch_size: opts[:batch_size] || config[:batch_size] || @default_batch_size,
       flush_ms: opts[:flush_ms] || config[:flush_ms] || @default_flush_ms,
       max_retries: opts[:max_retries] || config[:max_retries] || @default_max_retries,
@@ -71,18 +72,64 @@ defmodule Liteskill.Rag.EmbedQueue do
     new_queue = state.queue ++ [{texts, from, opts}]
     total_texts = Enum.sum(Enum.map(new_queue, fn {t, _, _} -> length(t) end))
 
-    if total_texts >= state.batch_size do
+    # Don't flush while a retry is in progress — queue up and wait
+    if state.retry != nil do
       cancel_timer(state.timer_ref)
-      flush_batch(%{state | queue: new_queue, timer_ref: nil})
+      {:noreply, %{state | queue: new_queue, timer_ref: nil}}
     else
-      timer_ref = state.timer_ref || Process.send_after(self(), :flush, state.flush_ms)
-      {:noreply, %{state | queue: new_queue, timer_ref: timer_ref}}
+      if total_texts >= state.batch_size do
+        cancel_timer(state.timer_ref)
+        flush_batch(%{state | queue: new_queue, timer_ref: nil})
+      else
+        timer_ref = state.timer_ref || Process.send_after(self(), :flush, state.flush_ms)
+        {:noreply, %{state | queue: new_queue, timer_ref: timer_ref}}
+      end
     end
   end
 
   @impl true
   def handle_info(:flush, state) do
-    flush_batch(%{state | timer_ref: nil})
+    # coveralls-ignore-start — defensive: cancel_timer flushes the mailbox,
+    # so a stale :flush should never arrive during retry
+    if state.retry != nil do
+      {:noreply, %{state | timer_ref: nil}}
+      # coveralls-ignore-stop
+    else
+      flush_batch(%{state | timer_ref: nil})
+    end
+  end
+
+  def handle_info(:retry_embed, state) do
+    case state.retry do
+      # coveralls-ignore-start — defensive: retry_embed should never fire with nil retry
+      nil ->
+        {:noreply, state}
+
+      # coveralls-ignore-stop
+
+      retry ->
+        case EmbeddingClient.embed(retry.texts, retry.opts) do
+          {:ok, _} = success ->
+            reply_to_callers(retry.callers, success)
+            maybe_schedule_flush(%{state | retry: nil})
+
+          {:error, %{status: status}} when status in [429, 503] and retry.retries_left > 0 ->
+            next_backoff = min(retry.backoff_ms * 2, @max_backoff_ms)
+
+            new_retry = %{
+              retry
+              | retries_left: retry.retries_left - 1,
+                backoff_ms: next_backoff
+            }
+
+            Process.send_after(self(), :retry_embed, retry.backoff_ms)
+            {:noreply, %{state | retry: new_retry}}
+
+          {:error, _} = error ->
+            reply_to_callers(retry.callers, error)
+            maybe_schedule_flush(%{state | retry: nil})
+        end
+    end
   end
 
   # --- Private ---
@@ -95,27 +142,42 @@ defmodule Liteskill.Rag.EmbedQueue do
     # Use opts from first entry; extract plug opts for CohereClient
     {_, _, first_opts} = hd(state.queue)
     {plug_opts, embed_opts} = Keyword.split(first_opts, [:plug])
+    opts = embed_opts ++ plug_opts
 
-    result =
-      embed_with_retry(
-        all_texts,
-        embed_opts ++ plug_opts,
-        state.max_retries,
-        state.backoff_ms
-      )
-
-    # Reply to each caller with their slice of embeddings
-    case result do
+    case EmbeddingClient.embed(all_texts, opts) do
       {:ok, all_embeddings} ->
         reply_with_slices(state.queue, all_embeddings)
+        {:noreply, %{state | queue: [], timer_ref: nil}}
+
+      {:error, %{status: status}} when status in [429, 503] and state.max_retries > 0 ->
+        retry = %{
+          texts: all_texts,
+          callers: state.queue,
+          opts: opts,
+          retries_left: state.max_retries - 1,
+          backoff_ms: min(state.backoff_ms * 2, @max_backoff_ms)
+        }
+
+        Process.send_after(self(), :retry_embed, state.backoff_ms)
+        {:noreply, %{state | queue: [], retry: retry, timer_ref: nil}}
 
       {:error, reason} ->
         Enum.each(state.queue, fn {_, from, _} ->
           GenServer.reply(from, {:error, reason})
         end)
-    end
 
-    {:noreply, %{state | queue: [], timer_ref: nil}}
+        {:noreply, %{state | queue: [], timer_ref: nil}}
+    end
+  end
+
+  defp reply_to_callers(callers, {:ok, all_embeddings}) do
+    reply_with_slices(callers, all_embeddings)
+  end
+
+  defp reply_to_callers(callers, {:error, reason}) do
+    Enum.each(callers, fn {_, from, _} ->
+      GenServer.reply(from, {:error, reason})
+    end)
   end
 
   defp reply_with_slices(queue, all_embeddings) do
@@ -130,18 +192,14 @@ defmodule Liteskill.Rag.EmbedQueue do
     :ok
   end
 
-  defp embed_with_retry(texts, opts, retries_left, backoff_ms) do
-    case EmbeddingClient.embed(texts, opts) do
-      {:ok, _} = success ->
-        success
-
-      {:error, %{status: status}} when status in [429, 503] and retries_left > 0 ->
-        Process.sleep(backoff_ms)
-        next_backoff = min(backoff_ms * 2, @max_backoff_ms)
-        embed_with_retry(texts, opts, retries_left - 1, next_backoff)
-
-      {:error, _} = error ->
-        error
+  defp maybe_schedule_flush(state) do
+    if state.queue != [] do
+      cancel_timer(state.timer_ref)
+      # Schedule an immediate flush for the pending queue
+      timer_ref = Process.send_after(self(), :flush, 0)
+      {:noreply, %{state | timer_ref: timer_ref}}
+    else
+      {:noreply, state}
     end
   end
 

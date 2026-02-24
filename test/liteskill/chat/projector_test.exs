@@ -759,6 +759,29 @@ defmodule Liteskill.Chat.ProjectorTest do
     assert conv.status == "active"
   end
 
+  test "project_events_async projects via cast", %{user: user} do
+    {stream_id, _} = create_conversation(user)
+    message_id = Ecto.UUID.generate()
+
+    {:ok, events} =
+      Store.append_events(stream_id, 1, [
+        %{
+          event_type: "UserMessageAdded",
+          data: %{
+            "message_id" => message_id,
+            "content" => "Async hello!",
+            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+          }
+        }
+      ])
+
+    Projector.project_events_async(stream_id, events)
+    Projector.sync()
+
+    message = Repo.get!(Message, message_id)
+    assert message.content == "Async hello!"
+  end
+
   test "emits telemetry on projection failure", %{user: user} do
     {stream_id, _conversation_id} = create_conversation(user)
 

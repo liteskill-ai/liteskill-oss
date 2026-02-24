@@ -186,7 +186,7 @@ defmodule LiteskillWeb.ChatLive do
         {conversation, streaming} =
           if conversation.status == "streaming" && socket.assigns.stream_task_pid == nil do
             Chat.recover_stream(conversation_id, user_id)
-            _ = :sys.get_state(Liteskill.Chat.Projector)
+            Liteskill.Chat.Projector.sync()
             {:ok, recovered} = Chat.get_conversation(conversation_id, user_id)
             {recovered, false}
           else
@@ -2131,7 +2131,7 @@ defmodule LiteskillWeb.ChatLive do
       user_id = socket.assigns.current_user.id
 
       Chat.recover_stream(conversation.id, user_id)
-      _ = :sys.get_state(Liteskill.Chat.Projector)
+      Liteskill.Chat.Projector.sync()
 
       {:ok, messages} = Chat.list_messages(conversation.id, user_id)
       {:ok, fresh_conv} = Chat.get_conversation(conversation.id, user_id)

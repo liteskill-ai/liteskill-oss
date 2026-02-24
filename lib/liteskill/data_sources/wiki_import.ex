@@ -172,12 +172,12 @@ defmodule Liteskill.DataSources.WikiImport do
 
   defp create_nodes(entries, parent_id, user_id) do
     Enum.reduce_while(entries, :ok, fn node, :ok ->
-      attrs =
-        Map.merge(%{content_type: "markdown"}, %{
-          title: node.title,
-          content: node.content,
-          position: node.position
-        })
+      attrs = %{
+        content_type: "markdown",
+        title: node.title,
+        content: node.content,
+        position: node.position
+      }
 
       case DataSources.create_child_document("builtin:wiki", parent_id, attrs, user_id) do
         {:ok, doc} ->

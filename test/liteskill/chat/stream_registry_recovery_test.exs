@@ -20,6 +20,14 @@ defmodule Liteskill.Chat.StreamRegistryRecoveryTest do
   end
 
   setup do
+    name = :"stream_registry_recovery_#{System.unique_integer([:positive])}"
+
+    _pid =
+      start_supervised!(
+        {StreamRegistry, name: name, recovery_delay_ms: 10},
+        id: name
+      )
+
     {:ok, user} =
       Liteskill.Accounts.find_or_create_from_oidc(%{
         email: "registry-recovery-#{System.unique_integer([:positive])}@example.com",
@@ -28,11 +36,11 @@ defmodule Liteskill.Chat.StreamRegistryRecoveryTest do
         oidc_issuer: "https://test.example.com"
       })
 
-    %{user: user}
+    %{user: user, registry: name}
   end
 
   describe "auto-recovery on task death" do
-    test "recovers conversation when stream task dies", %{user: user} do
+    test "recovers conversation when stream task dies", %{user: user, registry: name} do
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Auto Recover"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
 
@@ -56,7 +64,7 @@ defmodule Liteskill.Chat.StreamRegistryRecoveryTest do
           end
         end)
 
-      :ok = StreamRegistry.register(conv.id, pid)
+      :ok = StreamRegistry.register(conv.id, pid, name: name)
       assert StreamRegistry.streaming?(conv.id)
 
       # Kill the task — monitor will clean up ETS
@@ -77,7 +85,10 @@ defmodule Liteskill.Chat.StreamRegistryRecoveryTest do
       assert msg.status == "failed"
     end
 
-    test "auto-recovery is idempotent when stream already completed", %{user: user} do
+    test "auto-recovery is idempotent when stream already completed", %{
+      user: user,
+      registry: name
+    } do
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Already Done"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
 
@@ -91,7 +102,7 @@ defmodule Liteskill.Chat.StreamRegistryRecoveryTest do
           end
         end)
 
-      :ok = StreamRegistry.register(conv.id, pid)
+      :ok = StreamRegistry.register(conv.id, pid, name: name)
 
       # Kill the task — auto-recovery should be a no-op since not streaming
       Process.exit(pid, :kill)

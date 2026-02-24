@@ -100,11 +100,7 @@ defmodule Liteskill.McpServers.Client do
 
       {:ok, %{status: status, body: resp_body}} when status in [429, 500, 502, 503, 504] ->
         if attempt < @mcp_max_retries do
-          backoff_ms = Keyword.get(opts, :mcp_backoff_ms, @mcp_default_backoff_ms)
-          jitter = :rand.uniform()
-          backoff = trunc(backoff_ms * Integer.pow(2, attempt) * (1 + jitter))
-          Process.sleep(backoff)
-          send_request(server, body, session_id, opts, attempt + 1)
+          backoff_and_retry(server, body, session_id, opts, attempt)
         else
           {:error, %{status: status, body: resp_body}}
         end
@@ -114,11 +110,7 @@ defmodule Liteskill.McpServers.Client do
 
       # coveralls-ignore-start — Req.Test cannot simulate Mint.TransportError
       {:error, %Mint.TransportError{} = _reason} when attempt < @mcp_max_retries ->
-        backoff_ms = Keyword.get(opts, :mcp_backoff_ms, @mcp_default_backoff_ms)
-        jitter = :rand.uniform()
-        backoff = trunc(backoff_ms * Integer.pow(2, attempt) * (1 + jitter))
-        Process.sleep(backoff)
-        send_request(server, body, session_id, opts, attempt + 1)
+        backoff_and_retry(server, body, session_id, opts, attempt)
 
       # coveralls-ignore-stop
 
@@ -126,6 +118,14 @@ defmodule Liteskill.McpServers.Client do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp backoff_and_retry(server, body, session_id, opts, attempt) do
+    backoff_ms = Keyword.get(opts, :mcp_backoff_ms, @mcp_default_backoff_ms)
+    jitter = :rand.uniform()
+    backoff = trunc(backoff_ms * Integer.pow(2, attempt) * (1 + jitter))
+    Process.sleep(backoff)
+    send_request(server, body, session_id, opts, attempt + 1)
   end
 
   defp do_post(server, body, session_id, opts) do

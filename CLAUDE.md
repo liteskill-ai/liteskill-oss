@@ -41,9 +41,10 @@ Command → Aggregate → Event → EventStore (append) → PubSub broadcast →
 - `Liteskill.McpServers` — MCP server CRUD + `Client` for JSON-RPC 2.0 `tools/list` and `tools/call`
 
 ### LLM Integration
-- `BedrockClient`: Uses Req for HTTP. `converse/3` (single-turn) and `converse_stream/4` (streaming with callback).
-- `StreamHandler`: Orchestrates streaming with event store integration, retry on 429/503, and tool calling loop (`auto_confirm: true` auto-executes via MCP; `false` pauses for UI confirmation).
-- `EventStreamParser`: Decodes AWS binary event-stream protocol.
+- All LLM transport handled by **ReqLLM** (`req_llm ~> 1.5`): `ReqLLM.stream_text/3` for streaming, `ReqLLM.generate_text/3` for single-turn, `ReqLLM.embed/3` for embeddings. Provider abstraction (Bedrock, OpenAI, Anthropic, etc.) and binary event-stream parsing are delegated entirely to ReqLLM.
+- `StreamHandler` (`Liteskill.LLM.StreamHandler`): Orchestrates streaming with event store integration, retry on 429/503, and tool calling loop (`auto_confirm: true` auto-executes via MCP; `false` pauses for UI confirmation).
+- `LlmGenerate` (`Liteskill.Agents.Actions.LlmGenerate`): Synchronous agentic loop for agent pipelines — tool calling, context pruning, cost limits.
+- `ToolUtils` (`Liteskill.LLM.ToolUtils`): Shared tool spec conversion, execution dispatch, output formatting, and tool call normalization.
 
 ### Auth & Authorization
 - Session-based auth via `LiteskillWeb.Plugs.Auth` (Plug) and `LiveAuth` (LiveView mount hook)

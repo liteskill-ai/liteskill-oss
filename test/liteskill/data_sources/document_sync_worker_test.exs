@@ -3,7 +3,7 @@ defmodule Liteskill.DataSources.DocumentSyncWorkerTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{CohereClient, Chunk}
+  alias Liteskill.Rag.{EmbeddingClient, Chunk}
   alias Liteskill.DataSources
   alias Liteskill.Rag.DocumentSyncWorker
 
@@ -27,7 +27,7 @@ defmodule Liteskill.DataSources.DocumentSyncWorkerTest do
   defp stub_embed(count) do
     embeddings = List.duplicate(List.duplicate(0.1, 1024), count)
 
-    Req.Test.stub(CohereClient, fn conn ->
+    Req.Test.stub(EmbeddingClient, fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.send_resp(

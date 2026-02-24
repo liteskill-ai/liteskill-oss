@@ -35,6 +35,8 @@ defmodule Liteskill.Chat do
 
   import Ecto.Query
 
+  @max_replay_events 10_000
+
   # --- Write API ---
 
   def create_conversation(params) do
@@ -334,7 +336,7 @@ defmodule Liteskill.Chat do
 
   def replay_from(conversation_id, user_id, from_version) do
     with {:ok, conversation} <- authorize_conversation(conversation_id, user_id) do
-      events = Store.read_stream_forward(conversation.stream_id, from_version, 10_000)
+      events = Store.read_stream_forward(conversation.stream_id, from_version, @max_replay_events)
 
       state =
         Enum.reduce(events, ConversationAggregate.init(), fn event, acc ->

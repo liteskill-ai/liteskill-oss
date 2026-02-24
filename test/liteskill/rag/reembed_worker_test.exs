@@ -3,7 +3,7 @@ defmodule Liteskill.Rag.ReembedWorkerTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Chunk, CohereClient, Document, ReembedWorker}
+  alias Liteskill.Rag.{Chunk, EmbeddingClient, Document, ReembedWorker}
   alias Liteskill.Settings
 
   setup do
@@ -27,7 +27,7 @@ defmodule Liteskill.Rag.ReembedWorkerTest do
   end
 
   defp stub_embed(embeddings) do
-    Req.Test.stub(CohereClient, fn conn ->
+    Req.Test.stub(EmbeddingClient, fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.send_resp(
@@ -38,7 +38,7 @@ defmodule Liteskill.Rag.ReembedWorkerTest do
   end
 
   defp stub_embed_error do
-    Req.Test.stub(CohereClient, fn conn ->
+    Req.Test.stub(EmbeddingClient, fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.send_resp(500, Jason.encode!(%{"message" => "Internal error"}))
@@ -138,7 +138,7 @@ defmodule Liteskill.Rag.ReembedWorkerTest do
     } do
       {doc, _chunks} = create_pending_doc(source.id, owner.id, 1)
 
-      Req.Test.stub(CohereClient, fn conn ->
+      Req.Test.stub(EmbeddingClient, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(429, Jason.encode!(%{"message" => "Rate limited"}))

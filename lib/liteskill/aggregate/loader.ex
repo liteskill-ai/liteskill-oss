@@ -10,6 +10,7 @@ defmodule Liteskill.Aggregate.Loader do
   alias Liteskill.EventStore.Postgres, as: Store
 
   @snapshot_interval 100
+  @max_replay_events 10_000
 
   @doc """
   Loads the current state of an aggregate from the event store.
@@ -31,7 +32,7 @@ defmodule Liteskill.Aggregate.Loader do
           {aggregate_module.init(), 0}
       end
 
-    events = Store.read_stream_forward(stream_id, version + 1, 10_000)
+    events = Store.read_stream_forward(stream_id, version + 1, @max_replay_events)
 
     final_state =
       Enum.reduce(events, state, fn event, acc ->

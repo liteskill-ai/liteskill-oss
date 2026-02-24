@@ -10,6 +10,8 @@ defmodule Liteskill.Accounts do
 
   import Ecto.Query
 
+  @admin_email User.admin_email()
+
   @doc """
   Ensures the root admin user exists. Called on application boot.
   Creates admin@liteskill.local if missing; forces role to "admin" if changed.
@@ -132,7 +134,7 @@ defmodule Liteskill.Accounts do
       nil ->
         {:error, :not_found}
 
-      %User{email: email} when email == "admin@liteskill.local" and role != "admin" ->
+      %User{email: email} when email == @admin_email and role != "admin" ->
         {:error, :cannot_demote_root_admin}
 
       user ->

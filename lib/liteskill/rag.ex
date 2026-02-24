@@ -20,7 +20,6 @@ defmodule Liteskill.Rag do
       EmbeddingClient,
       EmbeddingRequest,
       IngestWorker,
-      OpenAIEmbeddingClient,
       Pipeline,
       ReembedWorker,
       WikiSyncWorker

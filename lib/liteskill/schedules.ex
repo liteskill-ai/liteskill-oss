@@ -211,9 +211,11 @@ defmodule Liteskill.Schedules do
   defp field_matches?({:exact, values}, val), do: val in values
   defp field_matches?({:step, step, min, _max}, val), do: rem(val - min, step) == 0
 
+  # One year of minutes: 365 * 24 * 60
+  @max_cron_scan_minutes 525_600
+
   # coveralls-ignore-start
-  defp next_match(_dt, _cron, attempts) when attempts > 525_960 do
-    # Safety valve: don't scan more than ~1 year of minutes
+  defp next_match(_dt, _cron, attempts) when attempts > @max_cron_scan_minutes do
     nil
   end
 

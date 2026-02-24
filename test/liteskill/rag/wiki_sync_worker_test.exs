@@ -3,7 +3,7 @@ defmodule Liteskill.Rag.WikiSyncWorkerTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{WikiSyncWorker, CohereClient, Chunk}
+  alias Liteskill.Rag.{WikiSyncWorker, EmbeddingClient, Chunk}
   alias Liteskill.DataSources
 
   import Ecto.Query
@@ -23,7 +23,7 @@ defmodule Liteskill.Rag.WikiSyncWorkerTest do
   defp stub_embed(count) do
     embeddings = List.duplicate(List.duplicate(0.1, 1024), count)
 
-    Req.Test.stub(CohereClient, fn conn ->
+    Req.Test.stub(EmbeddingClient, fn conn ->
       conn
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.send_resp(
@@ -214,7 +214,7 @@ defmodule Liteskill.Rag.WikiSyncWorkerTest do
           owner.id
         )
 
-      Req.Test.stub(CohereClient, fn conn ->
+      Req.Test.stub(EmbeddingClient, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(500, Jason.encode!(%{"message" => "embed error"}))

@@ -120,9 +120,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Erlang, Elixir & PostgreSQL
+      - name: Install Erlang & Elixir
         run: |
-          brew install erlang elixir postgresql@18
+          brew install erlang elixir
           echo "$(brew --prefix erlang)/bin" >> "$GITHUB_PATH"
           echo "$(brew --prefix elixir)/bin" >> "$GITHUB_PATH"
 

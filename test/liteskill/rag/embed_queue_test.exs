@@ -16,6 +16,21 @@ defmodule Liteskill.Rag.EmbedQueueTest do
     %{queue: name, pid: pid}
   end
 
+  defp assert_retry_in_progress(pid, retries \\ 50) do
+    state = :sys.get_state(pid)
+
+    if state.retry != nil do
+      :ok
+    else
+      if retries > 0 do
+        Process.sleep(5)
+        assert_retry_in_progress(pid, retries - 1)
+      else
+        flunk("retry never became in_progress")
+      end
+    end
+  end
+
   defp stub_embed_success(embeddings) do
     Req.Test.stub(CohereClient, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -188,6 +203,69 @@ defmodule Liteskill.Rag.EmbedQueueTest do
 
       assert {:error, _} = Task.await(task1)
       assert {:error, _} = Task.await(task2)
+    end
+
+    test "queues new requests arriving during retry backoff", _ctx do
+      Req.Test.set_req_test_to_shared()
+      name = :"embed_queue_retry_queue_#{System.unique_integer([:positive])}"
+
+      pid =
+        start_supervised!(
+          {EmbedQueue,
+           name: name, flush_ms: 10, batch_size: 100, max_retries: 2, backoff_ms: 100},
+          id: name
+        )
+
+      embedding = List.duplicate(0.1, 4)
+      {:ok, counter} = Agent.start_link(fn -> 0 end)
+
+      Req.Test.stub(CohereClient, fn conn ->
+        call_num = Agent.get_and_update(counter, fn n -> {n, n + 1} end)
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        count = length(decoded["texts"])
+
+        if call_num == 0 do
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(429, Jason.encode!(%{"message" => "Rate limited"}))
+        else
+          embs = List.duplicate(embedding, count)
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(200, Jason.encode!(%{"embeddings" => %{"float" => embs}}))
+        end
+      end)
+
+      # Submit first request — flush fires after 10ms, gets 429, schedules retry in 100ms
+      task1 =
+        Task.async(fn ->
+          EmbedQueue.embed(
+            ["a"],
+            name: name,
+            input_type: "search_document",
+            plug: {Req.Test, CohereClient}
+          )
+        end)
+
+      # Poll until retry is in progress (first flush happened and got 429)
+      assert_retry_in_progress(pid)
+
+      # Submit second request while retry is pending — queues up instead of flushing
+      task2 =
+        Task.async(fn ->
+          EmbedQueue.embed(
+            ["b"],
+            name: name,
+            input_type: "search_document",
+            plug: {Req.Test, CohereClient}
+          )
+        end)
+
+      # Both should eventually succeed
+      assert {:ok, [^embedding]} = Task.await(task1, 5000)
+      assert {:ok, [^embedding]} = Task.await(task2, 5000)
     end
 
     test "retries on 503 then succeeds", %{queue: name} do
