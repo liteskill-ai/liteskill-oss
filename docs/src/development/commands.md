@@ -1,70 +1,65 @@
-# Mix Commands
+# Commands
 
-Reference for the most commonly used Mix commands in the Liteskill project.
-
-## Development Commands
+## Development
 
 | Command | Description |
 |---------|-------------|
-| `mix setup` | Install dependencies, create database, run migrations, and build assets. Run this after cloning the repository. |
-| `mix phx.server` | Start the development server on `http://localhost:4000` with code reloading and live reload enabled. |
-| `mix ecto.reset` | Drop the database, recreate it, run all migrations, and seed initial data. Useful for starting fresh. |
+| `mix setup` | Install deps, create DB, run migrations, build assets |
+| `mix phx.server` | Start dev server on localhost:4000 |
+| `mix ecto.reset` | Drop + create + migrate + seed |
+| `iex -S mix phx.server` | Start with interactive shell |
+| `mise run singleuser` | Start in single-user mode |
 
-## Testing Commands
-
-| Command | Description |
-|---------|-------------|
-| `mix test` | Run all tests. Automatically creates and migrates the test database if needed. |
-| `mix test test/path_test.exs` | Run a single test file. |
-| `mix test --failed` | Re-run only tests that failed in the previous run. |
-| `mix precommit` | Run the full precommit suite: compile with warnings-as-errors, remove unused dependency locks, check formatting, run all tests, and build the documentation book. **Always run this after completing changes.** |
-
-## Database Commands
+## Testing
 
 | Command | Description |
 |---------|-------------|
-| `mix ecto.create` | Create the database. |
-| `mix ecto.migrate` | Run pending migrations. |
-| `mix ecto.rollback` | Roll back the last migration. |
-| `mix ecto.reset` | Drop + create + migrate + seed. |
-| `mix ecto.gen.migration <name>` | Generate a new migration file. |
+| `mix test` | Run all tests (auto-creates/migrates DB) |
+| `mix test test/path_test.exs` | Run a single test file |
+| `mix test --failed` | Re-run previously failed tests |
+| `mix coveralls` | Run tests with coverage report |
+| `mix coveralls.html` | Generate HTML coverage report |
 
-## Asset Commands
-
-| Command | Description |
-|---------|-------------|
-| `mix assets.deploy` | Build and digest production assets (CSS via Tailwind, JS via esbuild). |
-| `mix assets.setup` | Install esbuild and Tailwind binaries. |
-
-## Release Commands
+## Code Quality
 
 | Command | Description |
 |---------|-------------|
-| `mix release` | Build a production release to `_build/prod/rel/liteskill/`. |
-| `mix phx.gen.secret` | Generate a random secret key base for production use. |
+| `mix precommit` | Full quality check (see below) |
+| `mix compile --warnings-as-errors` | Compile with strict warnings |
+| `mix format` | Format all Elixir files |
+| `mix credo --strict` | Static analysis |
+| `mix sobelow --config --exit low` | Security analysis |
+| `mix dialyzer` | Type checking |
+| `mix deps.unlock --unused` | Remove unused dependency locks |
 
-## Precommit Details
+## Precommit
 
-The `mix precommit` task runs the following steps in sequence:
+`mix precommit` runs the full quality pipeline:
 
-1. **`mix compile --warnings-as-errors`** -- Ensures no compiler warnings exist
-2. **`mix deps.unlock --unused`** -- Removes unused dependencies from the lock file
-3. **`mix format`** -- Formats all Elixir source files
-4. **`mix test`** -- Runs the full test suite with coverage
-5. **`mdbook build docs/`** -- Builds the mdBook documentation site
+1. `compile --warnings-as-errors`
+2. `deps.unlock --unused`
+3. `format`
+4. `credo --strict`
+5. `sobelow --config --exit low`
+6. `dialyzer`
+7. `ecto.create --quiet && ecto.migrate --quiet`
+8. `coveralls` (tests with 100% coverage check)
+9. `mdbook build docs/`
 
-If any step fails, the command exits with a non-zero status. This is the recommended command to run before pushing changes:
+Always run `mix precommit` after completing changes.
 
-```bash
-mix precommit
-```
-
-## Coverage Commands
+## Docker-Based
 
 | Command | Description |
 |---------|-------------|
-| `mix coveralls` | Run tests with coverage summary output. |
-| `mix coveralls.html` | Run tests and generate an HTML coverage report in `cover/`. |
-| `mix coveralls.detail` | Run tests with detailed per-file coverage output. |
+| `./scripts/test-with-docker.sh test` | Run tests via Docker Postgres |
+| `./scripts/test-with-docker.sh precommit` | Full precommit via Docker |
+| `docker compose up` | Start full stack (DB + app) |
+| `docker compose run --rm migrate` | Run migrations only |
 
-These commands automatically run in the `:test` environment.
+## Desktop
+
+| Command | Description |
+|---------|-------------|
+| `mise run linux-appimage` | Build Linux AppImage via Docker |
+| `mise run local-tauri` | Open Tauri dev window against localhost:4000 |

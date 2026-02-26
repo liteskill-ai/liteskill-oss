@@ -70,10 +70,6 @@ All runtime configuration is loaded from environment variables. Set them before 
 | `OIDC_ISSUER`             | OpenID Connect issuer URL                | --                                                      |
 | `OIDC_CLIENT_ID`          | OIDC client ID                           | --                                                      |
 | `OIDC_CLIENT_SECRET`      | OIDC client secret                       | --                                                      |
-| `AWS_BEARER_TOKEN_BEDROCK`| AWS Bedrock bearer token (legacy RAG embeddings only) | --                                     |
-| `AWS_REGION`              | AWS region for Bedrock (legacy RAG embeddings only)   | `us-east-1`                            |
-
-> **Note:** LLM provider credentials (API keys, regions, endpoints) are now configured through the admin UI at **Settings > Providers**. The `AWS_*` variables are only needed if you use Cohere embedding on Bedrock for RAG.
 
 ## Development
 

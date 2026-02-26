@@ -1,59 +1,31 @@
-# Introduction
+# Liteskill
 
-Liteskill is a self-hosted AI chat application built with Elixir and Phoenix 1.8.3. It gives teams a private, auditable platform for working with large language models -- without sending data to third-party SaaS products you don't control. Deploy it on your own infrastructure, connect your preferred LLM providers, and retain full ownership of every conversation, document, and audit record.
+Liteskill is an event-sourced chat application built with Phoenix 1.8 and Elixir. It provides multi-model LLM integration, MCP tool support, RAG (Retrieval-Augmented Generation), an agent studio, collaborative reports, a built-in wiki, and scheduled agent runs.
 
-## Key Features
+## Key Capabilities
 
-- **56+ LLM providers via ReqLLM** -- Configure OpenAI, Anthropic, AWS Bedrock, Google, Groq, Azure, Cerebras, xAI, DeepSeek, vLLM, OpenRouter, and dozens more through the admin UI. Custom base URL override for proxies like LiteLLM.
-- **Real-time streaming via LiveView** -- Token-by-token responses delivered over WebSocket with no polling. The UI updates as the model generates, backed by Phoenix LiveView for a seamless single-page experience.
-- **MCP tool support** -- Connect external Model Context Protocol servers so the AI can call APIs, query databases, execute code, and interact with external systems. Supports both automatic execution and manual approval workflows.
-- **Conversation forking** -- Branch any conversation at any message to explore alternate paths, compare model responses, or try different prompts without losing the original thread.
-- **Event sourcing with full audit trail** -- Every state change is recorded as an immutable event in an append-only store. You get a complete history of what happened, when, and why -- with the ability to replay or rebuild state at any point.
-- **RAG with pgvector** -- Organize knowledge into collections, embed documents with configurable models, and search with pgvector cosine similarity. Ingest URLs asynchronously via Oban background jobs with automatic chunking and embedding.
-- **Structured reports with nested sections** -- Create documents with infinitely-nesting sections, collaborative comments with replies, resolution workflows, ACL sharing, and markdown rendering. Reports serve as deliverables for agent pipeline runs.
-- **Agent Studio for multi-agent pipelines** -- Define AI agents with strategies (ReAct, chain-of-thought, tree-of-thoughts, direct), backstories, and opinions. Assemble agents into ordered teams and execute pipeline runs that produce structured report deliverables.
-- **Dual authentication (OIDC + password)** -- Supports OpenID Connect for enterprise SSO and password-based registration for standalone deployments. Both methods coexist, so you can mix authentication strategies.
-- **ACL-based access control** -- Share conversations, reports, groups, agents, teams, and runs with specific users or groups. Owner and member roles control who can view, edit, or manage access.
-- **Encrypted secrets (AES-256-GCM)** -- API keys, MCP credentials, and provider configurations are encrypted at rest. Encryption keys are managed outside the database so a database breach alone does not expose secrets.
+- **Multi-model chat** — Connect any LLM provider (AWS Bedrock, OpenRouter, OpenAI-compatible endpoints) and switch models per conversation.
+- **MCP tool calling** — Register MCP servers and let the LLM call external tools during conversation streaming, with optional user approval.
+- **RAG** — Ingest documents, generate embeddings via Cohere/OpenAI, and augment conversations with semantic search results.
+- **Agent Studio** — Define reusable AI agents with system prompts, model assignments, and scoped tool/data-source access via ACLs.
+- **Teams & Runs** — Compose agents into teams with topologies (sequential, parallel, supervisor) and execute them as runs.
+- **Reports** — Structured documents with nested sections, markdown rendering, and a comment/review workflow.
+- **Wiki** — Built-in collaborative wiki with hierarchical pages, ACL-based sharing, and automatic RAG indexing.
+- **Schedules** — Cron-based recurring execution of agent runs.
+- **Usage tracking** — Per-user, per-model, per-conversation token and cost accounting.
 
 ## Tech Stack
 
-| Component | Version / Details |
-|-----------|-------------------|
-| **Elixir** | 1.18 |
-| **Erlang/OTP** | 28 |
-| **Phoenix** | 1.8.3 |
-| **Phoenix LiveView** | 1.1.x |
-| **PostgreSQL** | 14+ with pgvector extension |
-| **Tailwind CSS** | v4 (no `tailwind.config.js` -- uses `@import "tailwindcss"` syntax) |
-| **Oban** | Background job processing for URL ingestion, agent runs, and scheduled tasks |
-| **ReqLLM** | HTTP-based LLM client supporting 56+ providers |
-| **Req** | HTTP client (used everywhere -- no httpoison, tesla, or httpc) |
-| **Bandit** | HTTP server |
-| **Ueberauth + OIDCC** | OpenID Connect authentication |
-| **Argon2** | Password hashing |
-| **Jido** | Agent orchestration framework |
+| Layer | Technology |
+|-------|-----------|
+| Language | Elixir 1.18 / Erlang/OTP 28 |
+| Web framework | Phoenix 1.8.3, Phoenix LiveView 1.1 |
+| HTTP server | Bandit |
+| Database | PostgreSQL 16 with pgvector |
+| HTTP client | Req + ReqLLM |
+| Background jobs | Oban |
+| CSS | Tailwind CSS v4 |
+| Auth | Ueberauth (OIDC) + Argon2 (password) |
+| Encryption | AES-256-GCM via `Liteskill.Crypto` |
 
-Tool versions are pinned in `mise.toml` at the repository root and managed by [mise](https://mise.jdx.dev/).
-
-## Architecture at a Glance
-
-Liteskill uses event sourcing with CQRS. The write path flows through aggregates and an append-only event store; the read path queries projection tables maintained by a GenServer projector that subscribes to PubSub:
-
-```
-Command -> Aggregate -> EventStore (append) -> PubSub -> Projector -> Projection Tables
-                                                        -> LiveView (real-time UI updates)
-```
-
-The `ConversationAggregate` enforces a state machine -- **created -> active <-> streaming -> archived** -- ensuring conversations move through well-defined states. Tool calls during streaming support both automatic execution (via MCP) and manual approval through the UI.
-
-## Who Is Liteskill For?
-
-- **Teams** that want a private, self-hosted alternative to ChatGPT or Claude with full data ownership
-- **Organizations** that need audit trails and compliance -- every interaction is recorded as an immutable event
-- **Developers** building AI workflows who need MCP tool integration, multi-agent pipelines, and RAG in a single platform
-- **Enterprises** that require SSO, group-based access control, and encrypted credential storage
-
-## License
-
-Liteskill is released under the **Apache License 2.0**. See the [LICENSE](https://github.com/liteskill/liteskill-oss/blob/main/LICENSE) file for the full text.
+Current version: **0.2.37**

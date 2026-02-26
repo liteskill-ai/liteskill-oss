@@ -1,172 +1,68 @@
-# Code Conventions
+# Conventions
 
-This page documents the coding standards and conventions used throughout the Liteskill codebase.
+## IDs and Timestamps
 
-## Database Conventions
+- **Binary UUIDs** for all primary keys
+- **`:utc_datetime`** for all timestamp fields
 
-### Primary Keys
+## Schemas
 
-All tables use **binary UUIDs** as primary keys:
+- All schemas use `field :name, :string` even for text columns
+- Foreign keys (e.g. `user_id`) are set programmatically, never included in `cast`
 
-```elixir
-@primary_key {:id, :binary_id, autogenerate: true}
-@foreign_key_type :binary_id
-```
+## HTTP
 
-### Timestamps
+- **Req library only** for all HTTP calls — never httpoison, tesla, or httpc
+- HTTP mocking via `Req.Test` with `plug:` option
 
-All schemas use `:utc_datetime` for timestamp fields:
+## Boundaries
 
-```elixir
-timestamps(type: :utc_datetime)
-```
+Every context uses the `Boundary` library to declare:
+- `top_level?: true` — Marks it as a top-level bounded context
+- `deps: [...]` — Allowed dependencies on other contexts
+- `exports: [...]` — Modules visible to other contexts
 
-This is configured globally in `config.exs`:
+The boundary compiler enforces these at compile time.
 
-```elixir
-config :liteskill,
-  generators: [timestamp_type: :utc_datetime]
-```
+## Event Sourcing
 
-### Text Fields
+- Events stored with **string keys** via `stringify_keys`
+- Deserialized back to structs via `Events.deserialize/1`
+- Stream IDs: `"conversation-<uuid>"`
+- Optimistic concurrency via unique index on `(stream_id, stream_version)`
 
-All text columns use the `:string` Ecto type, even for columns that are `text` in PostgreSQL:
+## Authorization
 
-```elixir
-field :content, :string
-field :system_prompt, :string
-```
+- All entity types share a single `entity_acls` table
+- Owner ACL auto-created on resource creation
+- Role hierarchy: `viewer` < `editor` < `manager` < `owner`
+- RBAC permissions checked via `Liteskill.Rbac.authorize/2`
 
-This simplifies the schema layer -- Ecto's `:string` type works with both `varchar` and `text` columns.
+## Tailwind CSS
 
-### Foreign Keys
+- **Tailwind v4** — No `tailwind.config.js`
+- Uses `@import "tailwindcss"` syntax in `assets/css/app.css`
 
-Foreign keys (e.g., `user_id`, `conversation_id`) are set programmatically in context functions, never in `cast`:
+## Oban Queues
 
-```elixir
-# Good -- set in context
-def create_conversation(attrs) do
-  %Conversation{}
-  |> Conversation.changeset(attrs)
-  |> Ecto.Changeset.put_change(:user_id, attrs.user_id)
-  |> Repo.insert()
-end
+| Queue | Concurrency | Purpose |
+|-------|------------|---------|
+| `default` | 10 | General background jobs |
+| `rag_ingest` | 5 | RAG document ingestion and embedding |
+| `data_sync` | 3 | External data source synchronization |
+| `agent_runs` | 3 | Agent pipeline execution |
 
-# Bad -- never cast foreign keys from user input
-def changeset(conversation, attrs) do
-  conversation
-  |> cast(attrs, [:title, :user_id])  # Don't do this
-end
-```
+## LLM Integration
 
-This prevents privilege escalation via user-supplied foreign key values.
+- All LLM transport via **ReqLLM** (`req_llm ~> 1.5`)
+- `ReqLLM.stream_text/3` for streaming, `ReqLLM.generate_text/3` for single-turn
+- `ReqLLM.embed/3` for embeddings
+- No hardcoded model IDs — all models configured in the database
 
-## Event Sourcing Conventions
+## Security
 
-### Event Serialization
-
-Events are stored with **string keys** (not atom keys) using `stringify_keys`:
-
-```elixir
-%{"type" => "MessageSent", "conversation_id" => "...", "content" => "..."}
-```
-
-Deserialization converts stored events back to structs via `Events.deserialize/1`.
-
-### Stream IDs
-
-Event streams use the format `"conversation-<uuid>"`:
-
-```elixir
-stream_id = "conversation-#{conversation_id}"
-```
-
-### Aggregate State Machine
-
-The `ConversationAggregate` follows a state machine: `:created` -> `:active` <-> `:streaming` -> `:archived`. Tool calls are handled in both `:streaming` and `:active` states.
-
-## HTTP Conventions
-
-### Req Library Only
-
-All HTTP calls must use the [Req](https://hex.pm/packages/req) library. Never use HTTPoison, Tesla, or `:httpc`:
-
-```elixir
-# Good
-Req.post!(url, json: body, plug: test_plug)
-
-# Bad
-HTTPoison.post(url, body)
-Tesla.post(url, body)
-:httpc.request(:post, {url, headers, content_type, body}, [], [])
-```
-
-This ensures consistent HTTP behavior, testing (via `Req.Test`), and middleware support across the codebase.
-
-## Phoenix Conventions
-
-### Contexts as Bounded Contexts
-
-Phoenix contexts serve as bounded contexts with clear boundaries:
-
-| Context | Responsibility |
-|---------|---------------|
-| `Liteskill.Chat` | Conversations, messages, forking, ACLs |
-| `Liteskill.Accounts` | Users, authentication, profiles |
-| `Liteskill.Groups` | Groups, memberships |
-| `Liteskill.McpServers` | MCP server CRUD, JSON-RPC client |
-| `Liteskill.LlmProviders` | LLM provider management |
-| `Liteskill.LlmModels` | LLM model management |
-| `Liteskill.DataSources` | RAG data sources |
-| `Liteskill.Agents` | Agent definitions |
-| `Liteskill.Teams` | Agent team definitions |
-| `Liteskill.Runs` | Agent run execution |
-| `Liteskill.Rbac` | Role-based access control, permissions |
-| `Liteskill.Schedules` | Scheduled runs |
-
-All `Chat` context functions require a `user_id` parameter for authorization.
-
-### Phoenix 1.8.3
-
-The project uses Phoenix 1.8.3 conventions:
-- LiveView for interactive UI
-- Function components with HEEx templates
-- Verified routes (`~p` sigil)
-- Bandit as the HTTP server adapter
-
-## CSS Conventions
-
-### Tailwind CSS v4
-
-Liteskill uses Tailwind CSS v4, which has a different configuration model than v3:
-
-- **No `tailwind.config.js`** -- Configuration is done via CSS `@import` and `@theme` directives in `assets/css/app.css`
-- Use `@import "tailwindcss"` syntax
-- daisyUI provides component classes (buttons, cards, modals, etc.)
-
-### No `@apply`
-
-Avoid using Tailwind's `@apply` directive in CSS files. Use utility classes directly in templates:
-
-```heex
-<!-- Good -->
-<div class="flex items-center gap-2 p-4 bg-base-100 rounded-lg">
-
-<!-- Avoid -->
-<div class="custom-card">
-```
-
-## Naming Conventions
-
-### Modules
-
-- Context modules: `Liteskill.<ContextName>` (e.g., `Liteskill.Chat`)
-- Schema modules: `Liteskill.<Context>.<Schema>` (e.g., `Liteskill.Chat.Conversation`)
-- Web modules: `LiteskillWeb.<Name>` (e.g., `LiteskillWeb.ChatLive`)
-- Component modules: `LiteskillWeb.<Name>Components` (e.g., `LiteskillWeb.ChatComponents`)
-
-### Files
-
-- Elixir files use `snake_case.ex`
-- Test files mirror `lib/` structure under `test/` with `_test.exs` suffix
-- Migration files use the standard `YYYYMMDDHHMMSS_description.exs` format
+- Sensitive fields encrypted at rest via `Liteskill.Crypto` (AES-256-GCM)
+- SSRF protection on MCP server URLs (configurable)
+- ETS-based rate limiting on API routes
+- CSRF protection via Phoenix plugs
+- Per-provider circuit breakers prevent cascading LLM failures

@@ -563,7 +563,9 @@ defmodule Liteskill.LLM.StreamHandler do
   def extract_error_message(%Mint.TransportError{reason: reason}),
     do: "connection error: #{reason}"
 
-  def extract_error_message(%{reason: reason}) when is_binary(reason), do: reason
+  def extract_error_message(%{reason: reason}) when is_binary(reason) do
+    extract_provider_config_message(reason) || reason
+  end
 
   def extract_error_message(reason) when is_binary(reason), do: reason
 
@@ -574,6 +576,27 @@ defmodule Liteskill.LLM.StreamHandler do
   def extract_error_message(%RuntimeError{message: msg}), do: truncate_error(msg, 500)
 
   def extract_error_message(_reason), do: "LLM request failed"
+
+  # Extract a user-friendly message from provider configuration errors
+  # e.g. "Failed to build stream request: %ReqLLM.Error.Invalid.Parameter{parameter: \":api_key option, ...OPENROUTER_API_KEY env var...\"}"
+  defp extract_provider_config_message(reason) do
+    cond do
+      reason =~ "Invalid.Parameter" && reason =~ "api_key" ->
+        case Regex.run(~r/parameter: "([^"]+)"/, reason) do
+          [_, param_hint] ->
+            "Missing API key: configure #{param_hint}"
+
+          nil ->
+            "Missing API key for the configured LLM provider. Check your provider settings."
+        end
+
+      reason =~ "Failed to build" && reason =~ "Invalid.Parameter" ->
+        "LLM provider configuration error: check your provider settings and API keys."
+
+      true ->
+        nil
+    end
+  end
 
   defp truncate_error(text, max) when byte_size(text) > max do
     String.slice(text, 0, max) <> "..."
@@ -608,6 +631,13 @@ defmodule Liteskill.LLM.StreamHandler do
       error
     end
   end
+
+  # Unwrap nested error tuples from ReqLLM (e.g. {:http_streaming_failed, {:provider_build_failed, struct}})
+  defp normalize_error({_outer, {_inner, %{} = error}}) when is_struct(error),
+    do: normalize_error(error)
+
+  defp normalize_error({_outer, %{} = error}) when is_struct(error),
+    do: normalize_error(error)
 
   defp normalize_error(error), do: error
   # coveralls-ignore-stop

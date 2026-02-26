@@ -488,6 +488,33 @@ defmodule Liteskill.McpServersTest do
       assert errors_on(changeset)[:url]
     end
 
+    test "rejects host.docker.internal URL (SSRF protection)" do
+      changeset =
+        McpServer.changeset(%McpServer{}, %{
+          name: "S",
+          url: "https://host.docker.internal:4005/mcp",
+          user_id: Ecto.UUID.generate()
+        })
+
+      refute changeset.valid?
+      assert errors_on(changeset)[:url]
+    end
+
+    test "allows host.docker.internal when allow_private_urls is true" do
+      changeset =
+        McpServer.changeset(
+          %McpServer{},
+          %{
+            name: "S",
+            url: "http://host.docker.internal:4005/mcp",
+            user_id: Ecto.UUID.generate()
+          },
+          allow_private_urls: true
+        )
+
+      assert changeset.valid?
+    end
+
     test "rejects AWS metadata URL (SSRF protection)" do
       changeset =
         McpServer.changeset(%McpServer{}, %{

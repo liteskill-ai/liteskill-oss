@@ -1,201 +1,50 @@
 # Authorization Context
 
-Module: `Liteskill.Authorization`
+`Liteskill.Authorization` provides centralized access control for all entity types via a single `entity_acls` table.
 
-Centralized authorization context for all entity types. Provides access checks, role queries, ACL management, and composable query helpers that other contexts delegate to.
+## Boundary
 
-> **Note:** This context handles **per-resource** access control (e.g., "can this user view this specific conversation?"). For **system-wide** action permissions (e.g., "can this user create conversations?"), see the [RBAC context](rbac.md).
+```elixir
+use Boundary, top_level?: true, deps: [Liteskill.Groups], exports: [EntityAcl, Roles]
+```
 
 ## Role Hierarchy
 
-```
-viewer < editor < manager < owner
-```
+`viewer` < `editor` < `manager` < `owner`
 
 | Role | Permissions |
-|---|---|
-| `viewer` | Read-only access |
-| `editor` | Can edit content (wiki_space only for now) |
-| `manager` | Edit + grant/revoke viewer/editor/manager access |
-| `owner` | Full control (delete, demote anyone, transfer ownership) |
-
-## Supported Entity Types
-
-- `agent_definition`
-- `conversation`
-- `run`
-- `llm_model`
-- `llm_provider`
-- `mcp_server`
-- `report`
-- `schedule`
-- `source`
-- `team_definition`
-- `wiki_space`
-
-## EntityAcl Schema
-
-`Liteskill.Authorization.EntityAcl`
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | `:binary_id` | Primary key |
-| `entity_type` | `:string` | One of the supported entity types |
-| `entity_id` | `:binary_id` | ID of the entity being protected |
-| `role` | `:string` | Default: `"viewer"` |
-| `user_id` | `:binary_id` | Nullable -- set for direct user ACLs |
-| `group_id` | `:binary_id` | Nullable -- set for group-based ACLs |
-
-Either `user_id` or `group_id` is set, never both.
+|------|------------|
+| **viewer** | Read-only access |
+| **editor** | Can edit content (wiki spaces only) |
+| **manager** | Edit + grant/revoke viewer/editor/manager access |
+| **owner** | Full control (delete, demote anyone, transfer ownership) |
 
 ## Access Checks
 
-### `has_access?(entity_type, entity_id, user_id)`
-
-Returns `true` if the user has any access to the entity via direct ACL or group-based ACL.
-
-```elixir
-has_access?(String.t(), binary_id, binary_id) :: boolean()
-```
-
-### `get_role(entity_type, entity_id, user_id)`
-
-Returns the highest role the user holds on the entity across all direct and group-based ACLs.
-
-```elixir
-get_role(String.t(), binary_id, binary_id)
-:: {:ok, String.t()} | {:error, :no_access}
-```
-
-### `can_manage?(entity_type, entity_id, user_id)`
-
-Returns `true` if the user has `"manager"` or `"owner"` role.
-
-```elixir
-can_manage?(String.t(), binary_id, binary_id) :: boolean()
-```
-
-### `can_edit?(entity_type, entity_id, user_id)`
-
-Returns `true` if the user has `"editor"`, `"manager"`, or `"owner"` role.
-
-```elixir
-can_edit?(String.t(), binary_id, binary_id) :: boolean()
-```
-
-### `is_owner?(entity_type, entity_id, user_id)`
-
-Returns `true` if the user has `"owner"` role.
-
-```elixir
-is_owner?(String.t(), binary_id, binary_id) :: boolean()
-```
+| Function | Description |
+|----------|-------------|
+| `has_access?(entity_type, entity_id, user_id)` | Any access (direct or group-based) |
+| `get_role(entity_type, entity_id, user_id)` | Highest role across direct + group ACLs |
+| `can_manage?(entity_type, entity_id, user_id)` | Manager or owner |
+| `can_edit?(entity_type, entity_id, user_id)` | Editor, manager, or owner |
+| `owner?(entity_type, entity_id, user_id)` | Owner only |
 
 ## ACL Management
 
-### `create_owner_acl(entity_type, entity_id, user_id)`
+| Function | Description |
+|----------|-------------|
+| `create_owner_acl(entity_type, entity_id, user_id)` | Auto-created on resource creation |
+| `grant_access(entity_type, entity_id, grantor_id, grantee_user_id, role)` | Grant user access |
+| `grant_group_access(entity_type, entity_id, grantor_id, group_id, role)` | Grant group access |
+| `update_role(entity_type, entity_id, grantor_id, target_user_id, new_role)` | Change a user's role |
+| `revoke_access(entity_type, entity_id, revoker_id, target_user_id)` | Revoke user access |
+| `leave(entity_type, entity_id, user_id)` | User leaves (owners cannot leave) |
 
-Creates the initial owner ACL when a resource is created. Called automatically by context modules during creation.
+## Query Helpers
 
-```elixir
-create_owner_acl(String.t(), binary_id, binary_id)
-:: {:ok, EntityAcl.t()} | {:error, Ecto.Changeset.t()}
-```
+- `accessible_entity_ids(entity_type, user_id)` — Subquery of entity IDs the user can access
+- `usage_accessible_entity_ids(entity_type, user_id)` — Same but excludes "owner" role
 
-### `grant_access(entity_type, entity_id, grantor_id, grantee_user_id, role)`
+## Entity Types
 
-Grants access to a user. Grantor must be owner or manager. Nobody can grant `"owner"` role -- ownership is only set at creation. For wiki spaces, managers can only grant `"viewer"` or `"editor"`.
-
-```elixir
-grant_access(String.t(), binary_id, binary_id, binary_id, String.t())
-:: {:ok, EntityAcl.t()} | {:error, :cannot_grant_owner | :forbidden | :no_access}
-```
-
-### `grant_group_access(entity_type, entity_id, grantor_id, group_id, role)`
-
-Grants access to a group. Same permission rules as `grant_access/5`.
-
-```elixir
-grant_group_access(String.t(), binary_id, binary_id, binary_id, String.t())
-:: {:ok, EntityAcl.t()} | {:error, :cannot_grant_owner | :forbidden | :no_access}
-```
-
-### `update_role(entity_type, entity_id, grantor_id, target_user_id, new_role)`
-
-Updates the role of an existing ACL entry. Grantor must be owner or manager. Cannot change to or from `"owner"`.
-
-```elixir
-update_role(String.t(), binary_id, binary_id, binary_id, String.t())
-:: {:ok, EntityAcl.t()} | {:error, :not_found | :cannot_modify_owner | :cannot_grant_owner | :forbidden}
-```
-
-### `revoke_access(entity_type, entity_id, revoker_id, target_user_id)`
-
-Revokes a user's access. Revoker must be owner or manager. Cannot revoke owners.
-
-```elixir
-revoke_access(String.t(), binary_id, binary_id, binary_id)
-:: {:ok, EntityAcl.t()} | {:error, :not_found | :cannot_revoke_owner | :forbidden | :no_access}
-```
-
-### `revoke_group_access(entity_type, entity_id, revoker_id, group_id)`
-
-Revokes a group's access. Same permission rules as `revoke_access/4`.
-
-```elixir
-revoke_group_access(String.t(), binary_id, binary_id, binary_id)
-:: {:ok, EntityAcl.t()} | {:error, :not_found | :cannot_revoke_owner | :forbidden | :no_access}
-```
-
-### `leave(entity_type, entity_id, user_id)`
-
-User voluntarily leaves an entity. Owners cannot leave.
-
-```elixir
-leave(String.t(), binary_id, binary_id)
-:: {:ok, EntityAcl.t()} | {:error, :not_found | :owner_cannot_leave}
-```
-
-### `list_acls(entity_type, entity_id)`
-
-Lists all ACLs for an entity, preloading user and group associations. Ordered by role (descending) then insertion time (ascending).
-
-```elixir
-list_acls(String.t(), binary_id) :: [EntityAcl.t()]
-```
-
-### `accessible_entity_ids(entity_type, user_id)`
-
-Returns a subquery of entity IDs the user can access for the given type. Used by other contexts to filter their list queries.
-
-```elixir
-accessible_entity_ids(String.t(), binary_id) :: Ecto.Query.t()
-```
-
-## Helper Functions
-
-### `authorize_owner(entity, user_id)`
-
-Struct-level ownership check via the `:user_id` field. Returns `{:ok, entity}` if the user owns it, `{:error, :forbidden}` otherwise.
-
-```elixir
-authorize_owner(%{user_id: binary_id}, binary_id)
-:: {:ok, struct()} | {:error, :forbidden}
-```
-
-### `create_with_owner_acl(changeset, entity_type, preloads \\ [])`
-
-Inserts a changeset inside a transaction, creates an owner ACL for the resulting entity, and preloads the given associations.
-
-```elixir
-create_with_owner_acl(Ecto.Changeset.t(), String.t(), [atom()])
-:: {:ok, struct()} | {:error, Ecto.Changeset.t()}
-```
-
-### `verify_ownership(entity_type, entity_id, user_id)`
-
-Verifies that the user owns the given entity by checking the `user_id` field on the entity record.
-
-```elixir
-verify_ownership(String.t(), binary_id, binary_id) :: :ok | :error
-```
+The ACL system is used across: `conversation`, `report`, `wiki_space`, `mcp_server`, `agent_definition`, `team_definition`, `run`, `schedule`, `source`, `llm_provider`, `llm_model`.

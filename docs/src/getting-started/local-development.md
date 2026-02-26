@@ -1,132 +1,78 @@
 # Local Development
 
-This guide walks you through setting up Liteskill for local development from a fresh clone.
-
-## 1. Clone the Repository
+## Quick Start
 
 ```bash
-git clone https://github.com/liteskill/liteskill-oss.git
-cd liteskill-oss
-```
-
-## 2. Install Tool Versions
-
-With [mise](https://mise.jdx.dev/) installed (see [Prerequisites](prerequisites.md)), install the pinned versions of Elixir, Erlang, and Node:
-
-```bash
+# Install tool versions
 mise install
+
+# Install deps, create DB, run migrations, build assets
+mix setup
+
+# Start the dev server
+mix phx.server
 ```
 
-This reads `mise.toml` and installs Elixir 1.18, Erlang 28, and Node 24. The first run may take several minutes if Erlang needs to be compiled from source.
+The app will be available at [http://localhost:4000](http://localhost:4000).
 
-Verify the versions are active:
+## Without Local Postgres
+
+If you don't have PostgreSQL installed locally, use the Docker-based scripts:
 
 ```bash
-mise exec -- elixir --version
-mise exec -- erl -noshell -eval 'io:format("~s~n", [erlang:system_info(otp_release)]), halt().'
-mise exec -- node --version
+# Run tests with a temporary Docker Postgres
+./scripts/test-with-docker.sh test
+
+# Full precommit with Docker Postgres
+./scripts/test-with-docker.sh precommit
 ```
 
-> **Tip:** If you have mise shell integration configured (via `mise activate`), you can drop the `mise exec --` prefix and run `elixir`, `mix`, etc. directly inside the project directory.
+## Single-User Mode
 
-## 3. Run the Setup Task
-
-The `mix setup` alias installs all dependencies, creates the database, runs migrations, seeds initial data, and builds frontend assets in a single command:
+For desktop or self-hosted single-user setups:
 
 ```bash
-mise exec -- mix setup
+SINGLE_USER_MODE=true mix phx.server
 ```
 
-This runs the following steps in order:
-
-1. `mix deps.get` -- Fetch Elixir dependencies
-2. `mix ecto.create` -- Create the PostgreSQL database (`liteskill_dev`)
-3. `mix ecto.migrate` -- Run all database migrations (including pgvector extension setup)
-4. `mix run priv/repo/seeds.exs` -- Seed initial data
-5. `npm install --prefix assets` -- Install Node.js dependencies for the asset pipeline
-6. `mix assets.setup` -- Install Tailwind CSS and esbuild binaries
-7. `mix assets.build` -- Compile, build Tailwind CSS, and bundle JavaScript
-
-> **Note:** If setup fails on the database step, make sure PostgreSQL is running and accepts the default credentials (`postgres`/`postgres` on `localhost:5432`). See [Prerequisites](prerequisites.md) for database configuration details.
-
-## 4. Start the Development Server
+Or use the mise task:
 
 ```bash
-mise exec -- mix phx.server
+mise run singleuser
 ```
 
-Visit [http://localhost:4000](http://localhost:4000) in your browser.
+This skips the login screen and auto-provisions an admin user.
 
-The development server includes:
+## Desktop Mode
 
-- **Live reload** -- Changes to `.ex`, `.heex`, `.js`, and `.css` files trigger automatic browser refresh
-- **Debug annotations** -- LiveView renders include source location annotations for easier debugging
-- **Web console logger** -- Server log messages are forwarded to the browser console
-- **LiveDashboard** -- Available at [http://localhost:4000/dev/dashboard](http://localhost:4000/dev/dashboard) for inspecting processes, metrics, and Ecto queries
-- **Swoosh mailbox** -- Email previews at [http://localhost:4000/dev/mailbox](http://localhost:4000/dev/mailbox)
-
-## 5. Environment Variables
-
-### Development Defaults
-
-In development mode, most configuration is hardcoded in `config/dev.exs` so you can start working without setting any environment variables. The notable defaults are:
-
-| Setting | Default | Source |
-|---------|---------|--------|
-| Database host | `localhost` | `config/dev.exs` |
-| Database name | `liteskill_dev` | `config/dev.exs` |
-| Database user/password | `postgres` / `postgres` | `config/dev.exs` |
-| HTTP port | `4000` | `config/runtime.exs` (via `PORT` env var, defaults to `4000`) |
-| Secret key base | Hardcoded dev-only value | `config/dev.exs` |
-| Encryption key | `dev-only-encryption-key-do-not-use-in-prod` | `config/dev.exs` |
-
-> **Important:** The `SECRET_KEY_BASE` and `ENCRYPTION_KEY` values in `config/dev.exs` are for local development only. Never use them in production. See the [Docker](docker.md) guide or the environment variables reference for production configuration.
-
-### Optional Environment Variables
-
-You can override any of these in development by setting environment variables before starting the server:
-
-| Variable | Description |
-|----------|-------------|
-| `PORT` | HTTP port (default: `4000`) |
-| `OIDC_ISSUER` | OpenID Connect issuer URL (enables SSO login) |
-| `OIDC_CLIENT_ID` | OIDC client ID |
-| `OIDC_CLIENT_SECRET` | OIDC client secret |
-| `AWS_BEARER_TOKEN_BEDROCK` | AWS Bedrock bearer token (needed for RAG embeddings via Cohere on Bedrock) |
-| `AWS_REGION` | AWS region for Bedrock (needed for RAG embeddings via Cohere on Bedrock) |
-
-LLM provider credentials (API keys, endpoints, regions) are configured through the admin UI after first login, not through environment variables.
-
-## 6. Common Development Commands
+Liteskill can run as a desktop application via Tauri (ex_tauri):
 
 ```bash
-# Run the full pre-commit suite (compile with warnings-as-errors, format, test, build docs)
-mise exec -- mix precommit
-
-# Run all tests
-mise exec -- mix test
-
-# Run a single test file
-mise exec -- mix test test/liteskill/chat_test.exs
-
-# Re-run previously failed tests
-mise exec -- mix test --failed
-
-# Reset the database (drop, create, migrate, seed)
-mise exec -- mix ecto.reset
-
-# Open an interactive Elixir shell with the application loaded
-mise exec -- iex -S mix
+LITESKILL_DESKTOP=true mix phx.server
 ```
 
-## 7. What Happens on Boot
+In desktop mode:
 
-When the application starts (whether via `mix phx.server` or `iex -S mix`), the following happens automatically:
+- A bundled PostgreSQL instance is started automatically
+- An encryption key and secret key base are auto-generated and stored in `desktop_config.json`
+- Single-user mode is enabled automatically
+- Data is stored in platform-specific directories:
+  - macOS: `~/Library/Application Support/Liteskill`
+  - Linux: `$XDG_DATA_HOME/liteskill` (default: `~/.local/share/liteskill`)
+  - Windows: `%APPDATA%/Liteskill`
 
-1. The **admin user** (`admin@liteskill.local`) is created if it does not already exist. This user is guaranteed to have the `admin` role.
-2. **RBAC system roles** are seeded (`Instance Admin` and `Default`), and existing admin users are assigned the `Instance Admin` role.
-3. The **Projector** GenServer starts and subscribes to PubSub for event store changes.
-4. The **Oban** job processor starts for background tasks (URL ingestion, agent runs, etc.).
-5. The **HTTP server** begins listening on the configured port.
+## Docker Compose
 
-The admin user created on boot has no password set initially. See [First Run](first-run.md) for the setup wizard that guides you through initial configuration.
+For production-like local development:
+
+```bash
+export SECRET_KEY_BASE=$(openssl rand -base64 64)
+export ENCRYPTION_KEY=$(openssl rand -base64 32)
+docker compose up
+```
+
+The `docker-compose.yml` includes:
+
+- **db** — `pgvector/pgvector:pg16` with persistent volume and health checks
+- **app** — The Liteskill release, using `network_mode: host` for direct database access
+- **migrate** — One-shot migration runner (activated with `docker compose run migrate`)

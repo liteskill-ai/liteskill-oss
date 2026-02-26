@@ -58,6 +58,7 @@ defmodule Liteskill.McpServers.McpServer do
     lower = String.downcase(host)
 
     lower == "localhost" or
+      lower == "host.docker.internal" or
       String.starts_with?(lower, "127.") or
       String.starts_with?(lower, "10.") or
       String.starts_with?(lower, "192.168.") or

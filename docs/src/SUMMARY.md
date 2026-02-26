@@ -2,16 +2,17 @@
 
 [Introduction](introduction.md)
 
----
+# Hello World Tutorial
+
+- [Initial Setup](hello-world-tutorial/quick-start.md)
+- [Adding your first MCP Server](hello-world-tutorial/add-a-mcp-server.md)
+- [Configuring a RAG data source](hello-world-tutorial/add-a-data-source.md)
 
 # Getting Started
 
 - [Prerequisites](getting-started/prerequisites.md)
 - [Local Development](getting-started/local-development.md)
-- [Docker](getting-started/docker.md)
 - [First Run](getting-started/first-run.md)
-
----
 
 # Architecture
 
@@ -19,8 +20,6 @@
 - [Event Sourcing](architecture/event-sourcing.md)
 - [Supervision Tree](architecture/supervision-tree.md)
 - [Database](architecture/database.md)
-
----
 
 # Features
 
@@ -33,50 +32,31 @@
 - [Wiki](features/wiki.md)
 - [Schedules](features/schedules.md)
 
----
-
-# Contexts & Modules
+# Contexts
 
 - [Chat](contexts/chat.md)
 - [Accounts](contexts/accounts.md)
 - [Authorization](contexts/authorization.md)
-- [RBAC](contexts/rbac.md)
 - [Groups](contexts/groups.md)
 - [LLM](contexts/llm.md)
 - [MCP Servers](contexts/mcp-servers.md)
 - [RAG](contexts/rag.md)
 - [Reports](contexts/reports.md)
-- [Agents, Teams & Runs](contexts/agents.md)
-- [Usage Tracking](contexts/usage.md)
+- [Agents](contexts/agents.md)
+- [Usage](contexts/usage.md)
 - [Data Sources](contexts/data-sources.md)
 
----
-
-# Web Layer
+# Web
 
 - [Router](web/router.md)
 - [LiveView](web/liveview.md)
-- [REST API](web/api.md)
+- [API](web/api.md)
 - [Authentication](web/authentication.md)
-- [Rate Limiting](web/rate-limiting.md)
-
----
 
 # Configuration
 
 - [Environment Variables](configuration/environment-variables.md)
-- [Runtime Config](configuration/runtime-config.md)
 - [Encryption](configuration/encryption.md)
-
----
-
-# Deployment
-
-- [Docker Compose](deployment/docker-compose.md)
-- [Production Release](deployment/production-release.md)
-- [Image Tags](deployment/image-tags.md)
-
----
 
 # Development
 

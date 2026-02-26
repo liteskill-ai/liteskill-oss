@@ -1,160 +1,63 @@
 # MCP Tools
 
-Liteskill integrates with external tool servers using the Model Context Protocol (MCP), enabling AI models to call APIs, query databases, execute code, and interact with external services during conversations.
+Liteskill integrates with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers to give LLMs access to external tools.
 
-## What is MCP?
+## How It Works
 
-The Model Context Protocol (MCP) is an open standard for connecting AI models to external tools and data sources. It uses JSON-RPC 2.0 over HTTP to provide a uniform interface for tool discovery and execution. An MCP server exposes a set of tools -- each with a name, description, and input schema -- that an AI model can invoke during a conversation.
+1. Register an MCP server with its HTTP URL
+2. Liteskill discovers available tools via `tools/list`
+3. During conversation streaming, the LLM can request tool calls
+4. Liteskill executes tool calls via `tools/call` and feeds results back
 
-Liteskill acts as an MCP client, connecting to one or more MCP servers and making their tools available to the AI during chat sessions and agent runs.
+## MCP Client
 
-## Connecting MCP Servers
+`Liteskill.McpServers.Client` implements the MCP JSON-RPC 2.0 Streamable HTTP transport:
 
-MCP servers are registered through the Settings UI or programmatically via `McpServers.create_server/1`.
+1. **Initialize** — Sends `initialize` request, receives session ID
+2. **Initialized** — Sends `notifications/initialized` notification
+3. **Request** — Sends `tools/list` or `tools/call` with the session ID
 
-### Server Configuration
+The client supports:
 
-| Field | Description |
-|---|---|
-| `name` | Display name for the server (e.g., "Database Tools", "GitHub Actions") |
-| `url` | The server's HTTP endpoint -- HTTPS required |
-| `api_key` | Optional bearer token for authentication -- encrypted at rest |
-| `headers` | Optional custom headers as a JSON map -- encrypted at rest |
-| `description` | Human-readable description of what the server provides |
-| `status` | `active` or `inactive` |
-| `global` | If `true`, available to all users on the instance |
+- Automatic retry with exponential backoff on 429/5xx errors (up to 2 retries)
+- Session ID tracking via `mcp-session-id` header
+- Custom headers per server
+- API key authentication (sent as `Authorization: Bearer <key>`)
+- SSE response parsing
 
-### Global vs User-Scoped Servers
+## Server Management
 
-- **Global servers (`global: true`)**: Visible to all users. Typically configured by administrators for shared organizational tools.
-- **User-scoped servers (`global: false`)**: Only visible to the creating user, unless explicitly shared via ACLs.
+- Users can create, update, and delete their own MCP servers
+- Global servers (set by admin) are available to all users
+- Servers can be shared via ACLs
 
-Server visibility follows the same access pattern as other entities:
+## Tool Selections
 
-1. The user created the server (`user_id` matches)
-2. The server is marked `global`
-3. The user has been granted access via an entity ACL
+Users select which MCP servers are active for their conversations:
 
-## Tool Discovery
+- Selections are persisted per user via `UserToolSelection`
+- Selected servers' tools are included in LLM requests
+- Stale selections (for deleted servers) are automatically pruned
 
-When a user selects MCP servers for a conversation, Liteskill discovers available tools via the JSON-RPC 2.0 `tools/list` method:
+## Built-in Servers
 
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "tools/list",
-  "id": 1
-}
+Virtual servers prefixed with `builtin:` are defined in code (`Liteskill.BuiltinTools`) and merged into the server list. They cannot be modified or deleted. These provide tools for built-in features like reports and wiki.
+
+## SSRF Protection
+
+Server URLs are validated to prevent Server-Side Request Forgery (SSRF). By default:
+
+- Only **HTTPS** URLs are accepted
+- Private and reserved addresses are blocked (`localhost`, `127.*`, `10.*`, `172.16-31.*`, `192.168.*`, `169.254.*`, IPv6 loopback, and `host.docker.internal`)
+
+To allow private URLs (e.g. for self-hosted MCP servers), enable **Allow private MCP URLs** in server settings.
+
+## Docker Networking
+
+The Liteskill app container uses `network_mode: host`, which means it shares the host's network stack directly. MCP servers running on the host machine are reachable at `localhost`:
+
+```
+http://localhost:4005
 ```
 
-The server responds with a list of tool definitions, each containing:
-
-- **name** -- Unique identifier for the tool (e.g., `query_database`, `create_issue`)
-- **description** -- Human-readable explanation of what the tool does
-- **inputSchema** -- JSON Schema defining the expected input parameters
-
-These tool definitions are converted to the format expected by the LLM provider (toolSpec format) and included in the LLM request so the model knows what tools are available.
-
-## Tool Execution
-
-When the AI model decides to use a tool, Liteskill executes it via the JSON-RPC 2.0 `tools/call` method:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "tools/call",
-  "params": {
-    "name": "query_database",
-    "arguments": {
-      "query": "SELECT count(*) FROM users"
-    }
-  },
-  "id": 1
-}
-```
-
-The server processes the request and returns the result in its response body. Liteskill records the tool call as events in the event store (`ToolCallStarted` and `ToolCallCompleted`) and feeds the result back to the LLM for the next response.
-
-## Auto-Confirm Mode
-
-When auto-confirm is enabled for a conversation, tool calls execute automatically without user intervention:
-
-1. The LLM returns one or more tool use requests
-2. Each tool call is validated against the allowed tools list
-3. Valid tools are executed immediately via their MCP server
-4. Results are recorded as events and fed back to the LLM
-5. The LLM generates its next response incorporating the tool results
-
-This loop continues for up to 10 rounds (configurable) before stopping. Auto-confirm mode is ideal for trusted tools where user review is unnecessary.
-
-## Manual Approval Mode
-
-When auto-confirm is disabled (the default), the UI pauses at each tool call for user review:
-
-1. The LLM returns tool use requests
-2. `ToolCallStarted` events are emitted and displayed in the conversation UI
-3. The stream handler subscribes to a PubSub topic and waits for user decisions
-4. The UI presents each pending tool call with its name, input arguments, and approve/deny buttons
-5. The user reviews each tool call and approves or denies it
-6. Approved tools execute normally; denied tools return an error to the LLM
-7. If no decision is made within **300 seconds** (5 minutes), all pending tool calls are automatically denied
-
-Manual approval mode provides a safety layer for tools that perform actions with real-world consequences, such as modifying databases, sending emails, or deploying code.
-
-## Security
-
-MCP server connections enforce several security measures:
-
-### HTTPS Required
-
-All MCP server URLs must use HTTPS. HTTP URLs are rejected during validation.
-
-### Private/Reserved IP Blocking
-
-URLs pointing to private or reserved IP ranges are blocked to prevent Server-Side Request Forgery (SSRF):
-
-- `localhost`, `127.x.x.x`
-- `10.x.x.x` (RFC 1918)
-- `172.16.x.x` - `172.31.x.x` (RFC 1918)
-- `192.168.x.x` (RFC 1918)
-- `169.254.x.x` (link-local)
-- `0.x.x.x`
-- IPv6 loopback (`::1`) and private ranges (`fc`, `fd`, `fe80`)
-
-### Sensitive Header Blocking
-
-Custom headers are filtered to prevent injection of security-sensitive values. The following header names are blocked:
-
-- `authorization` (set automatically from the `api_key` field)
-- `host`
-- `content-type` and `content-length` (set by the client)
-- `transfer-encoding` and `connection`
-- `cookie` and `set-cookie`
-- `x-forwarded-for`, `x-forwarded-host`, `x-forwarded-proto`
-- `proxy-authorization`
-
-Headers containing control characters (`\r`, `\n`, `\0`) in either key or value are also rejected.
-
-## Built-in Tools
-
-In addition to external MCP servers, Liteskill includes built-in tool suites that run in-process without HTTP calls. Built-in tools appear alongside MCP servers in the tool picker.
-
-### Reports Tool
-
-The Reports built-in tool provides AI agents with the ability to create and manage structured reports. It exposes tools for:
-
-- Creating reports
-- Reading report content and structure
-- Modifying report sections (upsert, delete, move)
-- Adding and resolving comments
-
-This tool is used by the Agent Studio runner to produce report deliverables from pipeline executions.
-
-## ACL Sharing
-
-MCP servers support the same ACL sharing system used by other Liteskill entities:
-
-- **Owner**: Full control, including editing and deletion
-- **Shared access**: Read-only tool discovery and execution
-
-Share MCP servers with specific users or make them global for the entire instance.
+This requires **Allow private MCP URLs** enabled in server settings, since `localhost` resolves to a private address.

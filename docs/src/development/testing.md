@@ -1,131 +1,49 @@
 # Testing
 
-Liteskill maintains 100% code coverage as enforced by ExCoveralls. This page documents testing conventions, patterns, and tools.
-
 ## Running Tests
 
 ```bash
-# Run all tests
+# All tests
 mix test
 
-# Run a single test file
+# Single file
 mix test test/path_test.exs
 
-# Re-run only previously failed tests
+# Re-run failures
 mix test --failed
-
-# Run precommit checks (compile + format + test + build docs)
-mix precommit
 ```
 
-The test database is automatically created and migrated when running `mix test`.
+## Coverage
 
-## Coverage Requirements
+100% test coverage is required, enforced by ExCoveralls. Files excluded from coverage are listed in `coveralls.json`.
 
-**100% coverage is required.** The project uses [ExCoveralls](https://hex.pm/packages/excoveralls) to enforce this.
-
-### Excluding Unreachable Code
-
-For genuinely unreachable branches (defensive patterns, error clauses that cannot be triggered in practice), use coverage ignore markers:
-
-```elixir
-# coveralls-ignore-start
-def unreachable_clause do
-  # ...
-end
-# coveralls-ignore-stop
-```
-
-Or for single lines:
-
-```elixir
-# coveralls-ignore-next-line
-_ -> :error
-```
-
-### Skip Files
-
-The `coveralls.json` file at the project root lists files excluded from coverage analysis. This includes UI modules (LiveViews, components, layouts), the router, and other files where testing through the browser would be required:
-
-```json
-{
-  "coverage_options": {
-    "minimum_coverage": 100,
-    "treat_no_relevant_lines_as_covered": true
-  },
-  "skip_files": [
-    "lib/liteskill_web/components/core_components.ex",
-    "lib/liteskill_web/live/chat_live.ex",
-    "lib/liteskill_web/live/chat_components.ex",
-    ...
-  ]
-}
-```
+Use `# coveralls-ignore-start` / `# coveralls-ignore-stop` for genuinely unreachable branches (e.g. desktop-only code paths, production-only error handling).
 
 ## Test Configuration
 
 ### DataCase
 
-For tests that interact with the database:
-
 ```elixir
 use Liteskill.DataCase, async: false
 ```
 
-`DataCase` uses a shared Ecto sandbox (not async) to ensure all tests can see data written by the projector and other processes.
+All database tests use a shared Ecto sandbox (`async: false`).
 
 ### Unit Tests
 
-For pure logic tests that do not need the database (aggregates, events, parsers):
+Pure unit tests (aggregates, events, parsers) use:
 
 ```elixir
 use ExUnit.Case, async: true
 ```
 
-These can run in parallel for faster test execution.
+### Argon2
 
-### Argon2 Configuration
-
-Test config uses fast Argon2 parameters to keep password hashing nearly instant:
-
-```elixir
-# config/test.exs
-config :argon2_elixir, t_cost: 1, m_cost: 8
-```
+Test config uses `t_cost: 1, m_cost: 8` for fast password hashing.
 
 ## HTTP Mocking with Req.Test
 
-HTTP calls that use the [Req](https://hex.pm/packages/req) library directly (MCP client, Cohere embeddings) are mocked using `Req.Test` stubs by passing the `plug` option:
-
-```elixir
-Req.Test.stub(Liteskill.Rag.CohereClient, fn conn ->
-  Req.Test.json(conn, %{"embeddings" => %{"float" => [[0.1, 0.2]]}})
-end)
-```
-
-The corresponding production code passes the plug option:
-
-```elixir
-Req.new(plug: {Req.Test, Liteskill.Rag.CohereClient})
-```
-
-### LLM Call Mocking
-
-LLM calls go through ReqLLM and are tested using function overrides rather than Req.Test stubs. The `StreamHandler` accepts a `:stream_fn` option, and `LLM.complete/2` accepts a `:generate_fn` option:
-
-```elixir
-# Mock a streaming LLM call
-stream_fn = fn _model_id, _messages, on_chunk, _opts ->
-  on_chunk.("Hello!")
-  {:ok, "Hello!", []}
-end
-
-StreamHandler.handle_stream(stream_id, messages, stream_fn: stream_fn)
-```
-
-### MCP Client Testing
-
-For MCP server HTTP mocking:
+Use `plug: {Req.Test, ModuleName}` to mock HTTP calls:
 
 ```elixir
 Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
@@ -133,99 +51,60 @@ Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
 end)
 ```
 
-## Projector Considerations
+**Important**: Req.Test does NOT trigger `into:` callbacks. Use the `plug:` option when constructing Req requests in production code to enable test substitution.
 
-The `Liteskill.Chat.Projector` runs as a GenServer in the main supervision tree. It subscribes to PubSub and updates projection tables (conversations, messages, etc.).
+## Projector
 
-**Never use `start_supervised!` for the projector in tests.** It is already running in the application supervision tree.
+The `Chat.Projector` runs in the **main supervision tree** — never `start_supervised!` it in tests. It's already running.
 
-### Process Synchronization
+## Process Synchronization
 
-Chat context write functions (e.g., `Chat.create_conversation/1`, `Chat.send_message/3`) include a `Process.sleep(50)` to allow the projector time to process events.
-
-In tests, when you need to ensure the projector has finished processing, prefer using `:sys.get_state/1` to synchronize:
+Chat context write functions include `Process.sleep(50)` for projection consistency. In tests, prefer synchronization over additional sleeps:
 
 ```elixir
-# After a write operation, synchronize with the projector
+# Prefer this
 _ = :sys.get_state(Liteskill.Chat.Projector)
 
-# Now read operations will see the projected data
-conversation = Chat.get_conversation(id, user_id)
+# Or use Projector.sync/0
+:ok = Liteskill.Chat.Projector.sync()
 ```
-
-This is more reliable than additional sleeps and avoids flaky tests.
 
 ## Stateful Stubs
 
-For tests that need different responses across multiple calls (e.g., retry behavior), use an `Agent` to maintain state:
+Use `Agent` for varying responses across retries:
 
 ```elixir
-{:ok, agent} = Agent.start_link(fn -> [:error, :ok] end)
+{:ok, counter} = Agent.start_link(fn -> 0 end)
 
-stream_fn = fn _model_id, _messages, on_chunk, _opts ->
-  response = Agent.get_and_update(agent, fn [head | tail] -> {head, tail} end)
-
-  case response do
-    :error -> {:error, %{status: 429}}
-    :ok ->
-      on_chunk.("Hi")
-      {:ok, "Hi", []}
+Req.Test.stub(ModuleName, fn conn ->
+  call = Agent.get_and_update(counter, &{&1, &1 + 1})
+  case call do
+    0 -> Plug.Conn.send_resp(conn, 429, "rate limited")
+    _ -> Req.Test.json(conn, %{"result" => "ok"})
   end
-end
+end)
 ```
 
-### Retry Tests
+Set `backoff_ms: 1` for retry tests to avoid slow test runs.
 
-When testing retry behavior, set a minimal backoff to keep tests fast:
+## MCP Client Testing
 
 ```elixir
-StreamHandler.handle_stream(stream_id, messages,
-  stream_fn: retry_stream_fn,
-  backoff_ms: 1
-)
+Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+  Req.Test.json(conn, %{
+    "jsonrpc" => "2.0",
+    "id" => 1,
+    "result" => %{"tools" => []}
+  })
+end)
 ```
 
-## Oban Testing
+## Docker-Based Testing
 
-Oban is configured in manual testing mode:
+```bash
+# Run tests with a temporary Docker Postgres
+./scripts/test-with-docker.sh test
 
-```elixir
-# config/test.exs
-config :liteskill, Oban, testing: :manual
-```
-
-This prevents jobs from running automatically. Use `Oban.Testing` helpers to assert jobs were enqueued and execute them explicitly:
-
-```elixir
-assert_enqueued(worker: Liteskill.Rag.IngestWorker)
-```
-
-## Settings Cache
-
-The persistent_term-based settings cache is disabled in tests because it is incompatible with the Ecto sandbox:
-
-```elixir
-# config/test.exs
-config :liteskill, :settings_cache, false
-```
-
-## Test File Organization
-
-Tests mirror the `lib/` directory structure:
-
-```
-test/
-  liteskill/
-    chat/              # Chat context tests
-    accounts/          # Accounts context tests
-    crypto/            # Encryption tests
-    aggregate/         # Event sourcing aggregate tests
-    ...
-  liteskill_web/
-    controllers/       # API controller tests
-    plugs/             # Plug tests (auth, rate limiter)
-    ...
-  support/
-    data_case.ex       # DataCase helper
-    fixtures.ex        # Test data factories
+# Full precommit with Docker Postgres
+./scripts/test-with-docker.sh precommit
 ```

@@ -1,148 +1,39 @@
 # Groups Context
 
-Module: `Liteskill.Groups`
+`Liteskill.Groups` manages user groups and memberships, used for group-based ACL authorization.
 
-The Groups context manages groups and their memberships. Groups are used for group-based ACL authorization across entity types.
-
-## Schemas
-
-### Group
-
-`Liteskill.Groups.Group`
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | `:binary_id` | Primary key |
-| `name` | `:string` | Required |
-| `created_by` | `:binary_id` | FK to User, set programmatically |
-
-### GroupMembership
-
-`Liteskill.Groups.GroupMembership`
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | `:binary_id` | Primary key |
-| `role` | `:string` | `"owner"` or `"member"` |
-| `group_id` | `:binary_id` | FK to Group |
-| `user_id` | `:binary_id` | FK to User |
-
-## User-Facing API
-
-### `create_group(name, creator_id)`
-
-Creates a group and automatically adds the creator as an owner member.
+## Boundary
 
 ```elixir
-create_group(String.t(), binary_id)
-:: {:ok, Group.t()} | {:error, term()}
+use Boundary, top_level?: true, deps: [], exports: [Group, GroupMembership]
 ```
 
-### `list_groups(user_id)`
+## Group Management
 
-Lists groups the user is a member of.
+| Function | Description |
+|----------|-------------|
+| `create_group(name, creator_id)` | Creates a group; creator becomes owner member |
+| `list_groups(user_id)` | Lists groups the user belongs to |
+| `get_group(id, user_id)` | Gets a group (requires membership) |
+| `delete_group(group_id, user_id)` | Deletes a group (creator only) |
 
-```elixir
-list_groups(binary_id) :: [Group.t()]
-```
+## Membership Management
 
-### `get_group(id, user_id)`
+| Function | Description |
+|----------|-------------|
+| `add_member(group_id, requester_id, target_user_id, role)` | Adds a member (creator only) |
+| `remove_member(group_id, requester_id, target_user_id)` | Removes a member (creator only, cannot remove owner) |
+| `leave_group(group_id, user_id)` | User leaves (creator cannot leave) |
 
-Gets a group if the user is a member of it.
+## Admin Functions
 
-```elixir
-get_group(binary_id, binary_id)
-:: {:ok, Group.t()} | {:error, :not_found}
-```
+Admin functions bypass creator/membership checks:
 
-### `add_member(group_id, requester_id, target_user_id, role \\ "member")`
+- `list_all_groups/0` — Lists all groups with memberships and creator preloaded
+- `admin_get_group/1`, `admin_get_group_by_name/1`
+- `admin_list_members/1`, `admin_add_member/3`, `admin_remove_member/2`
+- `admin_delete_group/1`
 
-Adds a member to a group. Requires the requester to be the group creator.
+## Usage with ACLs
 
-```elixir
-add_member(binary_id, binary_id, binary_id, String.t())
-:: {:ok, GroupMembership.t()} | {:error, :not_found | :forbidden}
-```
-
-### `remove_member(group_id, requester_id, target_user_id)`
-
-Removes a member from a group. Requires the requester to be the group creator. Cannot remove the owner.
-
-```elixir
-remove_member(binary_id, binary_id, binary_id)
-:: {:ok, GroupMembership.t()} | {:error, :not_found | :forbidden | :cannot_remove_owner}
-```
-
-### `leave_group(group_id, user_id)`
-
-User leaves a group voluntarily. The group owner (creator) cannot leave.
-
-```elixir
-leave_group(binary_id, binary_id)
-:: {:ok, GroupMembership.t()} | {:error, :not_found | :creator_cannot_leave}
-```
-
-### `delete_group(group_id, user_id)`
-
-Deletes a group. Only the group creator can delete it.
-
-```elixir
-delete_group(binary_id, binary_id)
-:: {:ok, Group.t()} | {:error, :not_found | :forbidden}
-```
-
-## Admin API
-
-These functions bypass creator and membership checks. Intended for admin use only.
-
-### `list_all_groups()`
-
-Lists all groups ordered by name, preloading memberships and creator.
-
-```elixir
-list_all_groups() :: [Group.t()]
-```
-
-### `admin_get_group(id)`
-
-Gets a group by ID without membership checks.
-
-```elixir
-admin_get_group(binary_id)
-:: {:ok, Group.t()} | {:error, :not_found}
-```
-
-### `admin_list_members(group_id)`
-
-Lists all memberships for a group, preloading user associations.
-
-```elixir
-admin_list_members(binary_id) :: [GroupMembership.t()]
-```
-
-### `admin_add_member(group_id, user_id, role \\ "member")`
-
-Adds a member without authorization checks.
-
-```elixir
-admin_add_member(binary_id, binary_id, String.t())
-:: {:ok, GroupMembership.t()} | {:error, Ecto.Changeset.t()}
-```
-
-### `admin_remove_member(group_id, user_id)`
-
-Removes a member without authorization checks.
-
-```elixir
-admin_remove_member(binary_id, binary_id)
-:: {:ok, GroupMembership.t()} | {:error, :not_found}
-```
-
-### `admin_delete_group(group_id)`
-
-Deletes a group without authorization checks.
-
-```elixir
-admin_delete_group(binary_id)
-:: {:ok, Group.t()} | {:error, :not_found}
-```
+Groups are used in the Authorization context for group-based access. When a group is granted access to an entity (e.g. a conversation), all members of that group inherit that access via a join with `group_memberships`.
