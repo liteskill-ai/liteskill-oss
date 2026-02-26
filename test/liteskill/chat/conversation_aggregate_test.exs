@@ -514,6 +514,63 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
     end
   end
 
+  describe "ToolCallCompleted preserves other tool calls" do
+    test "completing one tool call preserves others" do
+      state = ConversationAggregate.init()
+
+      state =
+        apply_commands(state, [
+          {:create_conversation, create_params()},
+          {:add_user_message, %{message_id: "msg-1", content: "test"}},
+          {:start_assistant_stream, %{message_id: "msg-2", model_id: "claude"}}
+        ])
+
+      # Manually add two tool calls to the stream state
+      state =
+        apply_events(state, [
+          %{
+            event_type: "ToolCallStarted",
+            data: %{
+              message_id: "msg-2",
+              tool_use_id: "tc-1",
+              tool_name: "search",
+              input: %{"q" => "a"}
+            }
+          },
+          %{
+            event_type: "ToolCallStarted",
+            data: %{
+              message_id: "msg-2",
+              tool_use_id: "tc-2",
+              tool_name: "fetch",
+              input: %{"url" => "b"}
+            }
+          }
+        ])
+
+      assert length(state.current_stream.tool_calls) == 2
+
+      # Complete tc-1, verify tc-2 is unchanged
+      state =
+        apply_events(state, [
+          %{
+            event_type: "ToolCallCompleted",
+            data: %{
+              message_id: "msg-2",
+              tool_use_id: "tc-1",
+              output: "result-1"
+            }
+          }
+        ])
+
+      tc1 = Enum.find(state.current_stream.tool_calls, &(&1.tool_use_id == "tc-1"))
+      tc2 = Enum.find(state.current_stream.tool_calls, &(&1.tool_use_id == "tc-2"))
+
+      assert tc1.status == :completed
+      assert tc2.status == :started
+    end
+  end
+
   defp create_params do
     %{conversation_id: "conv-1", user_id: "user-1", title: "Test", model_id: "claude"}
   end

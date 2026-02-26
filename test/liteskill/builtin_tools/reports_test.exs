@@ -422,6 +422,15 @@ defmodule Liteskill.BuiltinTools.ReportsTest do
     end
   end
 
+  describe "RBAC error paths" do
+    test "create with nil user_id returns forbidden" do
+      {:ok, result} =
+        ReportsTool.call_tool("reports__create", %{"title" => "x"}, user_id: nil)
+
+      assert decode_content(result)["error"] =~ "forbidden"
+    end
+  end
+
   defp decode_content(%{"content" => [%{"text" => json}]}) do
     Jason.decode!(json)
   end

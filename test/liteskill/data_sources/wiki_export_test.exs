@@ -188,4 +188,28 @@ defmodule Liteskill.DataSources.WikiExportTest do
       assert "parent/children/child.md" in paths
     end
   end
+
+  describe "yaml_escape via encode_frontmatter" do
+    test "escapes titles with special YAML characters" do
+      entries =
+        WikiExport.build_entries(
+          [
+            %{
+              document: %{
+                slug: "special",
+                title: "Title: With Colon",
+                position: 0,
+                content: "body"
+              },
+              children: []
+            }
+          ],
+          ""
+        )
+
+      {_path, content} = hd(entries)
+      # The title should be quoted because it contains a colon
+      assert content =~ ~s("Title: With Colon")
+    end
+  end
 end

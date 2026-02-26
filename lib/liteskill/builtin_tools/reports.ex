@@ -184,10 +184,8 @@ defmodule Liteskill.BuiltinTools.Reports do
       {:ok, report} ->
         {:ok, %{"id" => report.id, "title" => report.title}}
 
-      # coveralls-ignore-start
       {:error, reason} ->
         {:error, reason}
-        # coveralls-ignore-stop
     end
   end
 

@@ -175,10 +175,8 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
       {:error, %Ecto.Changeset{} = cs} ->
         {:error, format_changeset(cs)}
 
-      # coveralls-ignore-start
       {:error, reason} ->
         {:error, reason}
-        # coveralls-ignore-stop
     end
   end
 
@@ -279,10 +277,8 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
       {:error, %Ecto.Changeset{} = cs} ->
         {:error, format_changeset(cs)}
 
-      # coveralls-ignore-start
       {:error, reason} ->
         {:error, reason}
-        # coveralls-ignore-stop
     end
   end
 
@@ -396,10 +392,8 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
       {:error, %Ecto.Changeset{} = cs} ->
         {:error, format_changeset(cs)}
 
-      # coveralls-ignore-start
       {:error, reason} ->
         {:error, reason}
-        # coveralls-ignore-stop
     end
   end
 
@@ -477,10 +471,8 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
       {:error, %Ecto.Changeset{} = cs} ->
         {:error, format_changeset(cs)}
 
-      # coveralls-ignore-start
       {:error, reason} ->
         {:error, reason}
-        # coveralls-ignore-stop
     end
   end
 
@@ -712,13 +704,6 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   # ---------------------------------------------------------------------------
   # Result wrapper (same contract as Reports / Wiki)
   # ---------------------------------------------------------------------------
-
-  # coveralls-ignore-start
-  defp wrap_result({:ok, data}) when is_binary(data) do
-    {:ok, %{"content" => [%{"type" => "text", "text" => data}]}}
-  end
-
-  # coveralls-ignore-stop
 
   defp wrap_result({:ok, data}) do
     {:ok, %{"content" => [%{"type" => "text", "text" => Jason.encode!(data)}]}}

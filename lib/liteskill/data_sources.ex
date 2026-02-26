@@ -478,13 +478,11 @@ defmodule Liteskill.DataSources do
       # Deleting a wiki space requires owner
       %Document{source_ref: "builtin:wiki", parent_document_id: nil} = doc ->
         case Authorization.get_role("wiki_space", doc.id, user_id) do
-          # coveralls-ignore-start
           {:ok, "owner"} ->
             result = Repo.delete(doc)
             with {:ok, _} <- result, do: enqueue_wiki_sync(doc.id, doc.user_id, "delete")
             result
 
-          # coveralls-ignore-stop
           {:ok, _} ->
             {:error, :forbidden}
 

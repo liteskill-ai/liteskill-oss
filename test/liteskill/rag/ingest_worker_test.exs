@@ -279,4 +279,18 @@ defmodule Liteskill.Rag.IngestWorkerTest do
                Rag.ingest_url(Ecto.UUID.generate(), "https://example.com", owner.id, plug: true)
     end
   end
+
+  describe "unsupported HTTP method" do
+    test "raises for unsupported method", %{owner: owner, collection: collection} do
+      stub_url_fetch("content")
+      stub_embed(1)
+
+      args = base_args(collection.id, owner.id, url: "https://example.com")
+      args = Map.put(args, "method", "PROPFIND")
+
+      assert_raise ArgumentError, ~r/unsupported HTTP method/, fn ->
+        perform_job(Liteskill.Rag.IngestWorker, args)
+      end
+    end
+  end
 end

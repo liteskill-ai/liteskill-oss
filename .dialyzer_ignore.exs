@@ -34,10 +34,6 @@
   {"lib/liteskill/agents/jido_agent.ex", :invalid_contract},
 
   # -- 5. Defensive guard clauses (is_binary on always-map values) --
-  {"lib/liteskill/builtin_tools/agent_studio.ex", :guard_fail},
-  {"lib/liteskill/builtin_tools/deep_research.ex", :guard_fail},
-  {"lib/liteskill/builtin_tools/deep_research.ex", :pattern_match_cov},
-  {"lib/liteskill/builtin_tools/wiki.ex", :guard_fail},
   {"lib/liteskill/data_sources/connectors/google_drive.ex", :pattern_match},
   {"lib/liteskill/rag/ingest_worker.ex", :pattern_match_cov}
 ]

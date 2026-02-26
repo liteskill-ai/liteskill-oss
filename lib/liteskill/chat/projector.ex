@@ -76,7 +76,6 @@ defmodule Liteskill.Chat.Projector do
       try do
         project_event(event)
       rescue
-        # coveralls-ignore-start
         e ->
           Logger.error(
             "Projector failed: stream=#{stream_id} event=#{event.event_type} version=#{event.stream_version} error=#{Exception.message(e)}"
@@ -92,8 +91,6 @@ defmodule Liteskill.Chat.Projector do
               error: Exception.message(e)
             }
           )
-
-          # coveralls-ignore-stop
       end
     end)
   end
@@ -344,12 +341,9 @@ defmodule Liteskill.Chat.Projector do
     with_conversation(stream_id, fn conversation ->
       case Repo.get(Message, data["message_id"]) do
         nil ->
-          # coveralls-ignore-start
           Logger.warning(
             "Projector: truncation target message #{data["message_id"]} not found, skipping"
           )
-
-        # coveralls-ignore-stop
 
         target_message ->
           {:ok, _} =

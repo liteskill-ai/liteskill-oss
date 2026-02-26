@@ -88,4 +88,15 @@ defmodule Liteskill.RagNewFunctionsTest do
       assert preloaded.distance == 0.5
     end
   end
+
+  describe "augment_context_for_agent/4" do
+    test "returns empty list when no collections match source IDs", %{owner: owner} do
+      nonexistent_id = Ecto.UUID.generate()
+
+      assert {:ok, []} =
+               Liteskill.Rag.augment_context_for_agent("query", [nonexistent_id], owner.id,
+                 plug: true
+               )
+    end
+  end
 end

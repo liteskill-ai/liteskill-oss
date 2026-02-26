@@ -160,4 +160,17 @@ defmodule Liteskill.Agents.ToolResolverTest do
       assert servers == %{}
     end
   end
+
+  describe "resolve_builtin_tools with nil registry" do
+    test "returns empty builtins when no builtin_registry is passed", %{
+      owner: owner,
+      agent: agent
+    } do
+      {tools, servers} = ToolResolver.resolve(agent, owner.id)
+
+      # No builtin tools should be returned since no registry was provided
+      assert tools == []
+      assert servers == %{}
+    end
+  end
 end

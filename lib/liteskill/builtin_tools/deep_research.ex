@@ -125,11 +125,6 @@ defmodule Liteskill.BuiltinTools.DeepResearch do
         chunks = Enum.map(results, & &1.chunk)
         preloaded = Repo.preload(chunks, document: [source: :collection])
         Enum.zip_with(results, preloaded, fn r, c -> %{r | chunk: c} end)
-
-      # coveralls-ignore-start
-      _ ->
-        []
-        # coveralls-ignore-stop
     end
   end
 
@@ -169,34 +164,11 @@ defmodule Liteskill.BuiltinTools.DeepResearch do
     }
   end
 
-  # coveralls-ignore-start
-  defp wrap_result({:ok, text}) when is_binary(text) do
-    {:ok, %{"content" => [%{"type" => "text", "text" => text}]}}
-  end
-
-  # coveralls-ignore-stop
-
   defp wrap_result({:ok, data}) do
     {:ok, %{"content" => [%{"type" => "text", "text" => Jason.encode!(data)}]}}
   end
 
-  defp wrap_result({:error, reason}) do
-    # coveralls-ignore-start
-    text =
-      case reason do
-        atom when is_atom(atom) ->
-          Atom.to_string(atom)
-
-        # coveralls-ignore-stop
-        str when is_binary(str) ->
-          str
-
-        # coveralls-ignore-start
-        _ ->
-          "unknown error"
-          # coveralls-ignore-stop
-      end
-
-    {:ok, %{"content" => [%{"type" => "text", "text" => Jason.encode!(%{"error" => text})}]}}
+  defp wrap_result({:error, reason}) when is_binary(reason) do
+    {:ok, %{"content" => [%{"type" => "text", "text" => Jason.encode!(%{"error" => reason})}]}}
   end
 end

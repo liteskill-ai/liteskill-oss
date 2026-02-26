@@ -163,6 +163,42 @@ defmodule Liteskill.DataSources.SyncWorkerTest do
     end
   end
 
+  describe "connector error paths" do
+    test "records error status when list_entries fails", %{owner: owner} do
+      # Create a google_drive source with invalid service_account_json
+      # so that the connector's get_access_token fails, causing list_entries to error
+      {:ok, source} =
+        DataSources.create_source(
+          %{name: "Error Drive", source_type: "google_drive"},
+          owner.id
+        )
+
+      {:ok, source} =
+        DataSources.update_source(
+          source.id,
+          %{
+            metadata: %{
+              "service_account_json" => "not valid json",
+              "folder_id" => "test-folder"
+            }
+          },
+          owner.id
+        )
+
+      args = %{
+        "source_id" => source.id,
+        "user_id" => owner.id,
+        "plug" => true
+      }
+
+      assert {:error, :invalid_service_account} = perform_job(SyncWorker, args)
+
+      {:ok, updated} = DataSources.get_source(source.id, owner.id)
+      assert updated.sync_status == "error"
+      assert updated.last_sync_error =~ "invalid_service_account"
+    end
+  end
+
   describe "sanitize_error/1" do
     test "slices binary reasons to 500 chars" do
       short = "something went wrong"

@@ -140,13 +140,10 @@ defmodule Liteskill.Chat.StreamRegistry do
       try do
         Liteskill.Chat.recover_stream_by_id(conv_id)
       rescue
-        # coveralls-ignore-start
         e ->
           Logger.warning(
             "StreamRegistry auto-recovery failed for #{conv_id}: #{Exception.message(e)}"
           )
-
-          # coveralls-ignore-stop
       end
     end)
 

@@ -171,6 +171,18 @@ defmodule Liteskill.SettingsTest do
     end
   end
 
+  describe "update/1 error paths" do
+    test "returns error for invalid changeset" do
+      # Ensure settings exists
+      _settings = Liteskill.Settings.get()
+
+      # Try to update with embedding_model_id pointing to nonexistent model
+      result = Liteskill.Settings.update(%{embedding_model_id: Ecto.UUID.generate()})
+
+      assert {:error, _} = result
+    end
+  end
+
   defp create_embedding_model do
     {:ok, user} =
       Liteskill.Accounts.find_or_create_from_oidc(%{

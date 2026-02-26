@@ -322,7 +322,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
     req_opts = Keyword.put(req_opts, :system_prompt, system_prompt)
 
     # Default to model's max_output_tokens if configured and no explicit max_tokens
-    # coveralls-ignore-start — requires LlmModel with max_output_tokens set
+    # coveralls-ignore-start
     req_opts =
       if Keyword.has_key?(req_opts, :max_tokens) do
         req_opts
@@ -505,7 +505,6 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
     |> Enum.reverse()
     |> Enum.find(fn msg -> msg.role == :assistant end)
     |> case do
-      # coveralls-ignore-next-line
       nil ->
         ""
 
@@ -587,7 +586,6 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
   end
 
   defp extract_text(content) when is_binary(content), do: content
-  # coveralls-ignore-next-line
   defp extract_text(_), do: ""
 
   defp deserialize_tool_call(tc) do
@@ -598,23 +596,19 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
             {:ok, decoded} ->
               decoded
 
-            # coveralls-ignore-start
             {:error, err} ->
               Logger.warning(
                 "Failed to decode tool call arguments during deserialization: #{inspect(err)}, raw: #{inspect(a)}"
               )
 
               %{}
-              # coveralls-ignore-stop
           end
 
-        # coveralls-ignore-start
         a when is_map(a) ->
           a
 
         _ ->
           %{}
-          # coveralls-ignore-stop
       end
 
     %{id: tc["id"], name: tc["function"]["name"], arguments: args}

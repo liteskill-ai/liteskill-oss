@@ -368,6 +368,44 @@ defmodule Liteskill.DataSources.Connectors.GoogleDriveTest do
       assert {:error, %{status: 401}} =
                GoogleDrive.list_entries(source, nil, user_id: owner.id, plug: true)
     end
+
+    test "normalizes Google Sheets and Slides MIME types in entries", %{
+      source: source,
+      owner: owner
+    } do
+      files_body = %{
+        "files" => [
+          %{
+            "id" => "sheet-1",
+            "name" => "Budget Spreadsheet",
+            "mimeType" => "application/vnd.google-apps.spreadsheet",
+            "modifiedTime" => "2026-01-20T09:00:00.000Z"
+          },
+          %{
+            "id" => "slides-1",
+            "name" => "Quarterly Deck",
+            "mimeType" => "application/vnd.google-apps.presentation",
+            "modifiedTime" => "2026-01-21T14:00:00.000Z"
+          }
+        ]
+      }
+
+      stub_google_api(%{token: :ok, files: {:ok, files_body}})
+
+      {:ok, result} = GoogleDrive.list_entries(source, nil, user_id: owner.id, plug: true)
+
+      assert length(result.entries) == 2
+
+      sheet_entry = Enum.find(result.entries, &(&1.external_id == "sheet-1"))
+      assert sheet_entry.title == "Budget Spreadsheet"
+      assert sheet_entry.content_type == "text/csv"
+      assert sheet_entry.content_hash == "2026-01-20T09:00:00.000Z"
+
+      slides_entry = Enum.find(result.entries, &(&1.external_id == "slides-1"))
+      assert slides_entry.title == "Quarterly Deck"
+      assert slides_entry.content_type == "text/plain"
+      assert slides_entry.content_hash == "2026-01-21T14:00:00.000Z"
+    end
   end
 
   describe "fetch_content/3" do

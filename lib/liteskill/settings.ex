@@ -65,14 +65,11 @@ defmodule Liteskill.Settings do
     case result do
       {:ok, settings} ->
         settings = Repo.preload(settings, :embedding_model, force: true)
-        # coveralls-ignore-next-line
         if cache_enabled?(), do: :persistent_term.put(@cache_key, settings)
         {:ok, settings}
 
-      # coveralls-ignore-start
       error ->
         error
-        # coveralls-ignore-stop
     end
   end
 

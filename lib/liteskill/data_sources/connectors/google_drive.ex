@@ -348,10 +348,8 @@ defmodule Liteskill.DataSources.Connectors.GoogleDrive do
   end
 
   defp normalize_content_type(@google_doc), do: "text/plain"
-  # coveralls-ignore-start
   defp normalize_content_type(@google_sheet), do: "text/csv"
   defp normalize_content_type(@google_slides), do: "text/plain"
-  # coveralls-ignore-stop
   defp normalize_content_type(mime) when is_binary(mime), do: mime
   # coveralls-ignore-next-line
   defp normalize_content_type(_), do: "application/octet-stream"

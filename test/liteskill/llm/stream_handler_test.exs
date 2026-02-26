@@ -1606,4 +1606,189 @@ defmodule Liteskill.LLM.StreamHandlerTest do
                )
     end
   end
+
+  describe "retryable_error_label/1" do
+    test "returns transient error for unexpected string" do
+      assert StreamHandler.retryable_error_label("unexpected string") == "transient error"
+    end
+  end
+
+  describe "max_output_tokens fallback" do
+    test "uses model max_output_tokens when no max_tokens in opts", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
+
+      # Create model with max_output_tokens
+      {:ok, provider} =
+        Liteskill.LlmProviders.create_provider(%{
+          name: "Fallback Provider #{System.unique_integer([:positive])}",
+          provider_type: "anthropic",
+          api_key: "test-key",
+          user_id: user.id
+        })
+
+      {:ok, model} =
+        Liteskill.LlmModels.create_model(%{
+          name: "Fallback Model #{System.unique_integer([:positive])}",
+          model_id: "test-model",
+          provider_id: provider.id,
+          user_id: user.id,
+          max_output_tokens: 4096,
+          instance_wide: true
+        })
+
+      captured_opts = Agent.start_link(fn -> nil end) |> elem(1)
+
+      stream_fn = fn _model, _messages, _on_chunk, opts ->
+        Agent.update(captured_opts, fn _ -> opts end)
+        {:ok, "done", []}
+      end
+
+      llm_model = Liteskill.LlmModels.get_model!(model.id)
+
+      StreamHandler.handle_stream(
+        conv.stream_id,
+        [%{role: :user, content: "test"}],
+        llm_model: llm_model,
+        stream_fn: stream_fn,
+        skip_gateway: true,
+        user_id: user.id,
+        conversation_id: conv.id
+      )
+
+      opts = Agent.get(captured_opts, & &1)
+      assert opts[:max_tokens] == 4096
+    end
+  end
+
+  describe "check_context_size" do
+    test "returns error when messages exceed context window", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
+
+      {:ok, provider} =
+        Liteskill.LlmProviders.create_provider(%{
+          name: "Context Provider #{System.unique_integer([:positive])}",
+          provider_type: "anthropic",
+          api_key: "test-key",
+          user_id: user.id
+        })
+
+      {:ok, model} =
+        Liteskill.LlmModels.create_model(%{
+          name: "Context Model #{System.unique_integer([:positive])}",
+          model_id: "test-model-ctx",
+          provider_id: provider.id,
+          user_id: user.id,
+          context_window: 100,
+          instance_wide: true
+        })
+
+      llm_model = Liteskill.LlmModels.get_model!(model.id)
+
+      # Create messages that exceed 95% of 100 tokens (i.e. > 95 tokens ~ 380 bytes)
+      large_content = String.duplicate("x", 500)
+
+      result =
+        StreamHandler.handle_stream(
+          conv.stream_id,
+          [%{role: :user, content: large_content}],
+          llm_model: llm_model,
+          stream_fn: fn _, _, _ -> {:ok, []} end,
+          skip_gateway: true,
+          user_id: user.id,
+          conversation_id: conv.id
+        )
+
+      assert {:error, {"context_too_large", _}} = result
+    end
+
+    test "passes when model has no context_window", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
+
+      {:ok, provider} =
+        Liteskill.LlmProviders.create_provider(%{
+          name: "NoCtx Provider #{System.unique_integer([:positive])}",
+          provider_type: "anthropic",
+          api_key: "test-key",
+          user_id: user.id
+        })
+
+      {:ok, model} =
+        Liteskill.LlmModels.create_model(%{
+          name: "NoCtx Model #{System.unique_integer([:positive])}",
+          model_id: "test-model-noctx",
+          provider_id: provider.id,
+          user_id: user.id,
+          instance_wide: true
+        })
+
+      llm_model = Liteskill.LlmModels.get_model!(model.id)
+
+      stream_fn = fn _model, _messages, on_chunk, _opts ->
+        on_chunk.("ok")
+        {:ok, "ok", []}
+      end
+
+      assert :ok =
+               StreamHandler.handle_stream(
+                 conv.stream_id,
+                 [%{role: :user, content: String.duplicate("x", 500)}],
+                 llm_model: llm_model,
+                 stream_fn: stream_fn,
+                 skip_gateway: true,
+                 user_id: user.id,
+                 conversation_id: conv.id
+               )
+    end
+
+    test "handles list and map content in messages", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
+
+      {:ok, provider} =
+        Liteskill.LlmProviders.create_provider(%{
+          name: "ListMap Provider #{System.unique_integer([:positive])}",
+          provider_type: "anthropic",
+          api_key: "test-key",
+          user_id: user.id
+        })
+
+      {:ok, model} =
+        Liteskill.LlmModels.create_model(%{
+          name: "ListMap Model #{System.unique_integer([:positive])}",
+          model_id: "test-model-listmap",
+          provider_id: provider.id,
+          user_id: user.id,
+          context_window: 100_000,
+          instance_wide: true
+        })
+
+      llm_model = Liteskill.LlmModels.get_model!(model.id)
+
+      stream_fn = fn _model, _messages, on_chunk, _opts ->
+        on_chunk.("ok")
+        {:ok, "ok", []}
+      end
+
+      # Messages with list and map content types
+      messages = [
+        %{role: :user, content: [%{type: "text", text: "hello"}]},
+        %{role: :user, content: %{type: "text", text: "world"}},
+        %{role: :user, content: 12_345}
+      ]
+
+      assert :ok =
+               StreamHandler.handle_stream(
+                 conv.stream_id,
+                 messages,
+                 llm_model: llm_model,
+                 stream_fn: stream_fn,
+                 skip_gateway: true,
+                 user_id: user.id,
+                 conversation_id: conv.id
+               )
+    end
+  end
 end

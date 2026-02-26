@@ -66,7 +66,6 @@ defmodule Liteskill.LLM.ToolUtils do
     input =
       case Jason.decode(tc.function.arguments) do
         {:ok, decoded} -> decoded
-        # coveralls-ignore-next-line
         {:error, _} -> %{"_raw" => tc.function.arguments}
       end
 

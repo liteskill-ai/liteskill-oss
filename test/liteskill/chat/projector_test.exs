@@ -862,6 +862,46 @@ defmodule Liteskill.Chat.ProjectorTest do
     :telemetry.detach("test-projector-conv-not-found-#{inspect(ref)}")
   end
 
+  describe "error handling" do
+    test "rescues and logs when project_event raises", %{user: user} do
+      {stream_id, _conversation_id} = create_conversation(user)
+
+      # Feed a malformed AssistantChunkReceived event where chunk_index is nil
+      # This should cause Repo.insert! to raise due to NOT NULL constraint
+      bad_event = %Liteskill.EventStore.Event{
+        event_type: "AssistantChunkReceived",
+        data: %{
+          "message_id" => Ecto.UUID.generate(),
+          "content" => "test",
+          "chunk_index" => nil
+        },
+        stream_id: stream_id,
+        stream_version: 999,
+        metadata: %{}
+      }
+
+      # Should not raise - the projector rescues the error
+      assert :ok = Projector.project_events(stream_id, [bad_event])
+    end
+
+    test "handles ConversationTruncated with nonexistent message_id", %{user: user} do
+      {stream_id, _conversation_id} = create_conversation(user)
+
+      truncation_event = %Liteskill.EventStore.Event{
+        event_type: "ConversationTruncated",
+        data: %{
+          "message_id" => Ecto.UUID.generate()
+        },
+        stream_id: stream_id,
+        stream_version: 999,
+        metadata: %{}
+      }
+
+      # Should not raise even with nonexistent message_id
+      assert :ok = Projector.project_events(stream_id, [truncation_event])
+    end
+  end
+
   defp create_conversation(user) do
     conversation_id = Ecto.UUID.generate()
     stream_id = "conversation-#{conversation_id}"

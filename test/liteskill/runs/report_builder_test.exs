@@ -315,4 +315,16 @@ defmodule Liteskill.Runs.ReportBuilderTest do
       assert :ok = ReportBuilder.write_sections(report_id, sections, context)
     end
   end
+
+  describe "write_sections/3 error paths" do
+    test "returns :ok even for nonexistent report_id (error wrapped by tool)", %{owner: owner} do
+      context = [user_id: owner.id]
+      sections = [ReportBuilder.section("Overview", "Content")]
+
+      # ReportsTools.call_tool wraps errors into {:ok, %{"content" => _}},
+      # so write_sections returns :ok even for invalid report_ids.
+      result = ReportBuilder.write_sections(Ecto.UUID.generate(), sections, context)
+      assert result == :ok
+    end
+  end
 end

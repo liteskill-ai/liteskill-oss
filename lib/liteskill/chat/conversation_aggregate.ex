@@ -376,7 +376,6 @@ defmodule Liteskill.Chat.ConversationAggregate do
             if tc.tool_use_id == data["tool_use_id"] do
               %{tc | status: :completed}
             else
-              # coveralls-ignore-next-line
               tc
             end
           end)

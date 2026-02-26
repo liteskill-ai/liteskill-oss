@@ -984,4 +984,62 @@ defmodule Liteskill.ChatTest do
       assert new_msg.tool_config == tool_config
     end
   end
+
+  describe "recover_stream_by_id when not streaming" do
+    test "recover_stream_by_id when aggregate is not streaming", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _} = Chat.send_message(conv.id, user.id, "Hello")
+
+      # Aggregate is in :active state, not :streaming
+      # recover_stream_by_id should handle this gracefully
+      assert :ok = Chat.recover_stream_by_id(conv.id)
+    end
+  end
+
+  describe "fork with assistant stream events" do
+    test "forks conversation with assistant stream events", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "Hello")
+
+      # Update title so the fork includes a TitleUpdated event (exercises catch-all remap)
+      {:ok, _} = Chat.update_title(conv.id, user.id, "Updated Title")
+
+      # Simulate full assistant stream by appending events directly
+      stream_id = conv.stream_id
+      msg_id = Ecto.UUID.generate()
+
+      events = [
+        %{
+          event_type: "AssistantStreamStarted",
+          data: %{"message_id" => msg_id, "model_id" => "claude"}
+        },
+        %{
+          event_type: "AssistantChunkReceived",
+          data: %{"message_id" => msg_id, "content" => "Hello ", "chunk_index" => 0}
+        },
+        %{
+          event_type: "AssistantStreamCompleted",
+          data: %{
+            "message_id" => msg_id,
+            "content" => "Hello world",
+            "model_id" => "claude",
+            "usage" => %{"input_tokens" => 10, "output_tokens" => 5}
+          }
+        }
+      ]
+
+      # Append to event store and project
+      {:ok, stored} = Liteskill.EventStore.Postgres.append_events(stream_id, 3, events)
+      Liteskill.Chat.Projector.project_events(stream_id, stored)
+
+      # Fork at position 2 (after user message + assistant stream complete = 2 messages)
+      {:ok, forked} = Chat.fork_conversation(conv.id, user.id, 2)
+
+      assert forked.parent_conversation_id == conv.id
+
+      # Verify forked conversation has messages
+      {:ok, forked_conv} = Chat.get_conversation(forked.id, user.id)
+      assert length(forked_conv.messages) >= 2
+    end
+  end
 end

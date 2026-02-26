@@ -1111,6 +1111,44 @@ defmodule Liteskill.BuiltinTools.AgentStudioTest do
     end
   end
 
+  describe "RBAC error paths" do
+    test "create_agent with nil user_id returns forbidden" do
+      {:ok, result} =
+        AgentStudioTool.call_tool("agent_studio__create_agent", %{"name" => "x"}, user_id: nil)
+
+      assert decode_content(result)["error"] =~ "forbidden"
+    end
+
+    test "create_team with nil user_id returns forbidden" do
+      {:ok, result} =
+        AgentStudioTool.call_tool("agent_studio__create_team", %{"name" => "x"}, user_id: nil)
+
+      assert decode_content(result)["error"] =~ "forbidden"
+    end
+
+    test "start_run with nil user_id returns forbidden" do
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__start_run",
+          %{"prompt" => "x"},
+          user_id: nil
+        )
+
+      assert decode_content(result)["error"] =~ "forbidden"
+    end
+
+    test "create_schedule with nil user_id returns forbidden" do
+      {:ok, result} =
+        AgentStudioTool.call_tool(
+          "agent_studio__create_schedule",
+          %{"cron_expression" => "0 * * * *", "team_id" => "fake", "prompt" => "x"},
+          user_id: nil
+        )
+
+      assert decode_content(result)["error"] =~ "forbidden"
+    end
+  end
+
   defp decode_content(%{"content" => [%{"text" => json}]}) do
     Jason.decode!(json)
   end

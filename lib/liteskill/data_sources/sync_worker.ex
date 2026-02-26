@@ -43,11 +43,9 @@ defmodule Liteskill.DataSources.SyncWorker do
           DataSources.update_sync_status(source, "complete")
           :ok
 
-        # coveralls-ignore-start
         {:error, reason} ->
           DataSources.update_sync_status(source, "error", sanitize_error(reason))
           {:error, reason}
-          # coveralls-ignore-stop
       end
     end
   end
@@ -64,10 +62,8 @@ defmodule Liteskill.DataSources.SyncWorker do
           {:ok, next_cursor, new_count}
         end
 
-      # coveralls-ignore-start
       {:error, reason} ->
         {:error, reason}
-        # coveralls-ignore-stop
     end
   end
 

@@ -268,4 +268,29 @@ defmodule Liteskill.LlmGateway.ProviderGateTest do
     # retry_after_until should not have been extended
     assert status_after.retry_after_until == initial_retry_after
   end
+
+  describe "prune_window" do
+    test "prunes old entries from error window" do
+      provider_id = unique_provider_id()
+      start_gate(provider_id)
+
+      # Inject old timestamps into the error window to simulate aged-out entries
+      :sys.replace_state(
+        {:via, Registry, {Liteskill.LlmGateway.GateRegistry, provider_id}},
+        fn state ->
+          old_ts = System.monotonic_time(:millisecond) - 120_000
+          old_entries = :queue.from_list([{old_ts, true}, {old_ts, false}])
+          %{state | error_window: old_entries}
+        end
+      )
+
+      # Perform a checkout + checkin which triggers record_result -> prune_window
+      {:ok, ref} = ProviderGate.checkout(provider_id)
+      ProviderGate.checkin(provider_id, ref, :ok)
+
+      # Verify the old entries were pruned (1 remains from the checkin itself)
+      {:ok, status} = ProviderGate.status(provider_id)
+      assert status.error_count == 1
+    end
+  end
 end

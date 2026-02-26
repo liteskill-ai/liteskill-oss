@@ -83,7 +83,6 @@ defmodule Liteskill.DataSources.WikiExport do
   defp join_path("", name), do: name
   defp join_path(base, name), do: "#{base}/#{name}"
 
-  # coveralls-ignore-start
   defp yaml_escape(value) when is_binary(value) do
     if String.contains?(value, [
          ":",
@@ -116,6 +115,6 @@ defmodule Liteskill.DataSources.WikiExport do
     end
   end
 
+  # coveralls-ignore-next-line
   defp yaml_escape(value), do: to_string(value)
-  # coveralls-ignore-stop
 end

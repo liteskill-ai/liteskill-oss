@@ -1398,6 +1398,17 @@ defmodule Liteskill.DataSourcesTest do
       assert {:error, :forbidden} = DataSources.delete_document(space.id, other.id)
       assert {:ok, _} = DataSources.delete_document(space.id, owner.id)
     end
+
+    test "ACL owner (non-creator) can delete the wiki space", %{owner: owner, other: other} do
+      {:ok, space} =
+        DataSources.create_document("builtin:wiki", %{title: "ACL Owner Space"}, owner.id)
+
+      # Directly create an owner ACL for `other` (grant_access disallows granting owner role)
+      {:ok, _} = Authorization.create_owner_acl("wiki_space", space.id, other.id)
+
+      # `other` is not the document's user_id but has "owner" ACL role
+      assert {:ok, _} = DataSources.delete_document(space.id, other.id)
+    end
   end
 
   describe "non-wiki document access" do

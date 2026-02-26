@@ -1039,4 +1039,45 @@ defmodule Liteskill.LlmModelsTest do
       assert reloaded.model_config == config
     end
   end
+
+  describe "validate_provider_ownership edge cases" do
+    test "allows nil provider_id to pass validation (changeset catches it)", %{admin: admin} do
+      # nil provider_id is allowed by validate_provider_ownership; changeset validation catches it
+      result =
+        LlmModels.create_model(%{
+          name: "No Provider",
+          model_id: "no-provider-model",
+          user_id: admin.id,
+          instance_wide: true
+        })
+
+      assert {:error, %Ecto.Changeset{}} = result
+    end
+
+    test "allows nil user_id to pass provider validation", %{provider: provider} do
+      # nil user_id passes validate_provider_ownership but fails RBAC
+      result =
+        LlmModels.create_model(%{
+          name: "No User",
+          model_id: "no-user-model",
+          provider_id: provider.id,
+          instance_wide: true
+        })
+
+      assert {:error, _} = result
+    end
+
+    test "nonexistent provider_id passes validation but fails FK constraint", %{admin: admin} do
+      result =
+        LlmModels.create_model(%{
+          name: "Bad Provider",
+          model_id: "bad-provider-model",
+          provider_id: Ecto.UUID.generate(),
+          user_id: admin.id,
+          instance_wide: true
+        })
+
+      assert {:error, _} = result
+    end
+  end
 end

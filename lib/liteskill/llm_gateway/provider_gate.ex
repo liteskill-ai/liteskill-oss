@@ -308,12 +308,10 @@ defmodule Liteskill.LlmGateway.ProviderGate do
     cutoff = now - @error_window_ms
 
     case :queue.peek(queue) do
-      # coveralls-ignore-start — entries never age out in tests (60s window)
       {:value, {ts, _}} when ts < cutoff ->
         {_, q} = :queue.out(queue)
         prune_window(q, now)
 
-      # coveralls-ignore-stop
       _ ->
         queue
     end

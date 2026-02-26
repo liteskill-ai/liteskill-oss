@@ -147,6 +147,15 @@ defmodule LiteskillWeb.ConversationControllerTest do
       conn = post(conn, ~p"/api/conversations/#{Ecto.UUID.generate()}/fork", %{at_position: "1"})
       assert json_response(conn, 404)
     end
+
+    test "handles non-integer at_position gracefully", %{conn: conn, user: user} do
+      {:ok, conv} = Liteskill.Chat.create_conversation(%{user_id: user.id, title: "Fork Test"})
+      {:ok, _} = Liteskill.Chat.send_message(conv.id, user.id, "Message 1")
+
+      conn = post(conn, ~p"/api/conversations/#{conv.id}/fork", %{at_position: "abc"})
+      assert %{"data" => fork} = json_response(conn, 201)
+      assert fork["parent_conversation_id"] == conv.id
+    end
   end
 
   describe "grant_access" do

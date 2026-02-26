@@ -345,12 +345,9 @@ defmodule Liteskill.BuiltinTools.Wiki do
     %{"action" => action, "status" => "error", "error" => "unknown action"}
   end
 
-  # coveralls-ignore-start
   defp execute_action(_action, _user_id) do
     %{"action" => "unknown", "status" => "error", "error" => "missing action field"}
   end
-
-  # coveralls-ignore-stop
 
   # --- Helpers ---
 
@@ -405,13 +402,6 @@ defmodule Liteskill.BuiltinTools.Wiki do
   defp format_article(doc, _range), do: format_article(doc, nil)
 
   defp format_error(reason), do: LiteskillWeb.ErrorHelpers.humanize_error(reason)
-
-  # coveralls-ignore-start
-  defp wrap_result({:ok, text}) when is_binary(text) do
-    {:ok, %{"content" => [%{"type" => "text", "text" => text}]}}
-  end
-
-  # coveralls-ignore-stop
 
   defp wrap_result({:ok, data}) do
     {:ok, %{"content" => [%{"type" => "text", "text" => Jason.encode!(data)}]}}

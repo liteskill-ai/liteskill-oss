@@ -59,12 +59,9 @@ defmodule Liteskill.Rag.IngestWorker do
   }
 
   defp fetch_url(url, method, headers, plug) do
-    # coveralls-ignore-start
     method_atom =
       Map.get(@allowed_methods, String.downcase(method)) ||
         raise ArgumentError, "unsupported HTTP method: #{method}"
-
-    # coveralls-ignore-stop
 
     header_list =
       Enum.map(headers, fn {k, v} -> {String.downcase(to_string(k)), to_string(v)} end)

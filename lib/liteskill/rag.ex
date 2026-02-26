@@ -437,13 +437,13 @@ defmodule Liteskill.Rag do
   Used by agent execution to inject relevant context from ACL'd datasources.
   Returns `{:ok, results}` where results are `%{chunk: chunk, distance: float}` maps.
   """
-  # coveralls-ignore-start
   def augment_context_for_agent(query, source_ids, user_id, opts \\ []) do
     collections = find_collections_for_sources(source_ids, user_id)
 
     if collections == [] do
       {:ok, []}
     else
+      # coveralls-ignore-start
       {plug_opts, _rest} = Keyword.split(opts, [:plug])
 
       results =
@@ -455,6 +455,7 @@ defmodule Liteskill.Rag do
         end)
 
       {:ok, results |> Enum.sort_by(& &1.distance) |> Enum.take(20)}
+      # coveralls-ignore-stop
     end
   end
 
@@ -470,8 +471,6 @@ defmodule Liteskill.Rag do
     |> where([c], c.user_id == ^user_id and c.name in ^source_names)
     |> Repo.all()
   end
-
-  # coveralls-ignore-stop
 
   # --- Wiki Sync Helpers ---
 
@@ -765,8 +764,6 @@ defmodule Liteskill.Rag do
     |> Repo.all()
   end
 
-  # coveralls-ignore-next-line
-  defp content_hash(nil), do: nil
   defp content_hash(content), do: :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
 
   defp maybe_hash_content(%{content: content} = attrs) when is_binary(content) do

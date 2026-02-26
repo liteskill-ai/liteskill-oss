@@ -331,22 +331,16 @@ defmodule Liteskill.LlmModels do
     provider_id = attrs[:provider_id] || attrs["provider_id"]
 
     cond do
-      # coveralls-ignore-start - defensive: changeset catches missing provider_id/user_id
       is_nil(provider_id) ->
         :ok
 
       is_nil(user_id) ->
         :ok
 
-      # coveralls-ignore-stop
-
       true ->
         case Repo.get(LlmProvider, provider_id) do
-          # coveralls-ignore-start - defensive: FK constraint catches this
           nil ->
             :ok
-
-          # coveralls-ignore-stop
 
           %{user_id: ^user_id} ->
             :ok

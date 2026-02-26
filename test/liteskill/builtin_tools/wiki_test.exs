@@ -952,6 +952,31 @@ defmodule Liteskill.BuiltinTools.WikiTest do
     end
   end
 
+  describe "execute_action error paths" do
+    test "returns error for action map without action key", %{user: user} do
+      # Create a space first
+      {:ok, _} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{
+            "actions" => [%{"action" => "create_space", "title" => "Err Space"}]
+          },
+          user_id: user.id
+        )
+
+      {:ok, result} =
+        WikiTool.call_tool(
+          "wiki__write",
+          %{"actions" => [%{"title" => "No Action Key"}]},
+          user_id: user.id
+        )
+
+      data = decode_content(result)
+      error_result = Enum.find(data["results"], & &1["error"])
+      assert error_result["error"] =~ "missing action field"
+    end
+  end
+
   defp decode_content(%{"content" => [%{"text" => json}]}) do
     Jason.decode!(json)
   end

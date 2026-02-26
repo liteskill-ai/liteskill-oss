@@ -130,4 +130,15 @@ defmodule Liteskill.LLM.ToolUtilsTest do
       assert {:ok, %{"content" => [%{"text" => "mcp result"}]}} = result
     end
   end
+
+  describe "normalize_tool_call/1" do
+    test "handles JSON decode failure by storing raw arguments" do
+      tc = %{id: "tc_1", function: %{name: "search", arguments: "bad json{"}}
+      result = ToolUtils.normalize_tool_call(tc)
+
+      assert result.tool_use_id == "tc_1"
+      assert result.name == "search"
+      assert result.input == %{"_raw" => "bad json{"}
+    end
+  end
 end

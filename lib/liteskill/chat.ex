@@ -86,10 +86,6 @@ defmodule Liteskill.Chat do
         {:ok, _} = Authorization.create_owner_acl("conversation", conversation.id, params.user_id)
 
         {:ok, conversation}
-
-      # coveralls-ignore-next-line
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
@@ -156,10 +152,6 @@ defmodule Liteskill.Chat do
           {:ok, _} = Authorization.create_owner_acl("conversation", new_conv.id, user_id)
 
           {:ok, new_conv}
-
-        # coveralls-ignore-next-line
-        {:error, reason} ->
-          {:error, reason}
       end
     end
   end
@@ -544,7 +536,6 @@ defmodule Liteskill.Chat do
     {Map.put(data, "message_id", new_id), Map.put(id_map, old_id, new_id)}
   end
 
-  # coveralls-ignore-start - only exercised when forking conversations with assistant streaming events
   defp remap_event_data(%{event_type: type, data: data}, _new_conv_id, id_map)
        when type in [
               "AssistantChunkReceived",
@@ -560,6 +551,4 @@ defmodule Liteskill.Chat do
   defp remap_event_data(%{data: data}, _new_conv_id, id_map) do
     {data, id_map}
   end
-
-  # coveralls-ignore-stop
 end

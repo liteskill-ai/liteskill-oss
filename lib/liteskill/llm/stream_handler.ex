@@ -133,6 +133,8 @@ defmodule Liteskill.LLM.StreamHandler do
     end
   end
 
+  # coveralls-ignore-stop
+
   defp check_context_size(messages, %{context_window: cw})
        when is_integer(cw) and cw > 0 do
     estimated_bytes =
@@ -160,6 +162,7 @@ defmodule Liteskill.LLM.StreamHandler do
   defp content_byte_size(content) when is_map(content), do: byte_size(Jason.encode!(content))
   defp content_byte_size(_), do: 0
 
+  # coveralls-ignore-start
   defp extract_provider_id(opts) do
     case Keyword.get(opts, :llm_model) do
       %{provider_id: pid} when is_binary(pid) -> pid
@@ -459,7 +462,6 @@ defmodule Liteskill.LLM.StreamHandler do
     req_opts =
       case Keyword.get(opts, :max_tokens) do
         nil ->
-          # coveralls-ignore-start — requires LlmModel with max_output_tokens set
           case llm_model do
             %{max_output_tokens: max} when is_integer(max) ->
               Keyword.put(req_opts, :max_tokens, max)
@@ -467,8 +469,6 @@ defmodule Liteskill.LLM.StreamHandler do
             _ ->
               req_opts
           end
-
-        # coveralls-ignore-stop
 
         max ->
           Keyword.put(req_opts, :max_tokens, max)
@@ -514,7 +514,6 @@ defmodule Liteskill.LLM.StreamHandler do
   def retryable_error_label(%{reason: reason}), do: "#{reason}"
   def retryable_error_label(reason) when is_atom(reason), do: "#{reason}"
   def retryable_error_label({:timeout, _}), do: "timeout"
-  # coveralls-ignore-next-line
   def retryable_error_label(_), do: "transient error"
 
   @doc false

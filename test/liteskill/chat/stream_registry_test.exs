@@ -262,4 +262,31 @@ defmodule Liteskill.Chat.StreamRegistryTest do
       send(pid2, :stop)
     end
   end
+
+  describe "auto-recovery failure" do
+    test "logs warning when recovery fails for non-existent conversation", %{registry: name} do
+      conv_id = Ecto.UUID.generate()
+
+      # Register with a pid that will die
+      task =
+        Task.async(fn ->
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      :ok = StreamRegistry.register(conv_id, task.pid, name: name)
+
+      # Kill the task to trigger recovery
+      send(task.pid, :stop)
+      Task.await(task)
+
+      # The recovery will be attempted and fail (non-existent conversation)
+      # Just verify it doesn't crash the registry
+      Process.sleep(100)
+
+      # Registry should still be functional
+      assert :error = StreamRegistry.lookup(conv_id)
+    end
+  end
 end

@@ -35,7 +35,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
       Application.delete_env(:req_llm, :anthropic_api_key)
     end)
 
-    %{owner: owner, model: model}
+    %{owner: owner, provider: provider, model: model}
   end
 
   defp stub_llm_response(text) do
@@ -1310,6 +1310,174 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
 
       assert {:ok, result} = LlmGenerate.run(%{}, context)
       assert result.output == "no limit"
+    end
+  end
+
+  describe "max_output_tokens fallback" do
+    test "uses model max_output_tokens when no max_tokens in opts", %{
+      owner: owner,
+      provider: provider
+    } do
+      {:ok, model} =
+        LlmModels.create_model(%{
+          name: "MaxOut Model #{System.unique_integer([:positive])}",
+          model_id: "max-out-model",
+          provider_id: provider.id,
+          user_id: owner.id,
+          max_output_tokens: 2048,
+          instance_wide: true
+        })
+
+      captured_body = Agent.start_link(fn -> nil end) |> elem(1)
+
+      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        Agent.update(captured_body, fn _ -> Jason.decode!(body) end)
+
+        response = %{
+          "id" => "msg_test_#{System.unique_integer([:positive])}",
+          "type" => "message",
+          "role" => "assistant",
+          "content" => [%{"type" => "text", "text" => "response"}],
+          "model" => "max-out-model",
+          "stop_reason" => "end_turn",
+          "usage" => %{"input_tokens" => 10, "output_tokens" => 5}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(200, Jason.encode!(response))
+      end)
+
+      Application.put_env(:liteskill, :test_req_opts,
+        req_http_options: [plug: {Req.Test, __MODULE__}]
+      )
+
+      Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
+
+      context =
+        make_context(%{
+          agent_name: "MaxOutAgent",
+          system_prompt: "test",
+          backstory: "",
+          opinions: %{},
+          role: "worker",
+          strategy: "direct",
+          llm_model: LlmModels.get_model!(model.id),
+          tools: [],
+          tool_servers: %{},
+          user_id: owner.id,
+          prompt: "test",
+          prior_context: "",
+          cost_limit: nil
+        })
+
+      assert {:ok, _result} = LlmGenerate.run(%{}, context)
+
+      body = Agent.get(captured_body, & &1)
+      assert body["max_tokens"] == 2048
+    end
+  end
+
+  describe "max_iterations" do
+    test "returns max iterations message when max_iterations is 0", %{owner: owner, model: model} do
+      context =
+        make_context(%{
+          agent_name: "ZeroIterAgent",
+          system_prompt: "test",
+          backstory: "",
+          opinions: %{},
+          role: "worker",
+          strategy: "direct",
+          llm_model: LlmModels.get_model!(model.id),
+          tools: [],
+          tool_servers: %{},
+          user_id: owner.id,
+          prompt: "test",
+          prior_context: "",
+          cost_limit: nil,
+          config: %{"max_iterations" => 0}
+        })
+
+      assert {:ok, result} = LlmGenerate.run(%{}, context)
+      assert result.output =~ "[Max iterations (0) reached]"
+    end
+  end
+
+  describe "deserialize_context/1 edge cases" do
+    test "handles message with nil content" do
+      messages = [
+        %{"role" => "user", "content" => nil}
+      ]
+
+      {_system_prompt, context} = LlmGenerate.deserialize_context(messages)
+      assert context.messages != []
+    end
+
+    test "handles tool call with invalid JSON arguments" do
+      messages = [
+        %{"role" => "user", "content" => "test"},
+        %{
+          "role" => "assistant",
+          "content" => "ok",
+          "tool_calls" => [
+            %{
+              "id" => "tc_1",
+              "function" => %{
+                "name" => "search",
+                "arguments" => "invalid json{"
+              }
+            }
+          ]
+        }
+      ]
+
+      {_system_prompt, context} = LlmGenerate.deserialize_context(messages)
+      assert context.messages != []
+    end
+
+    test "handles tool call with map arguments" do
+      messages = [
+        %{"role" => "user", "content" => "test"},
+        %{
+          "role" => "assistant",
+          "content" => "ok",
+          "tool_calls" => [
+            %{
+              "id" => "tc_1",
+              "function" => %{
+                "name" => "search",
+                "arguments" => %{"query" => "test"}
+              }
+            }
+          ]
+        }
+      ]
+
+      {_system_prompt, context} = LlmGenerate.deserialize_context(messages)
+      assert context.messages != []
+    end
+
+    test "handles tool call with nil arguments" do
+      messages = [
+        %{"role" => "user", "content" => "test"},
+        %{
+          "role" => "assistant",
+          "content" => "ok",
+          "tool_calls" => [
+            %{
+              "id" => "tc_2",
+              "function" => %{
+                "name" => "search",
+                "arguments" => nil
+              }
+            }
+          ]
+        }
+      ]
+
+      {_system_prompt, context} = LlmGenerate.deserialize_context(messages)
+      assert context.messages != []
     end
   end
 end

@@ -71,10 +71,8 @@ defmodule LiteskillWeb.ConversationController do
         {n, ""} when n > 0 ->
           n
 
-        # coveralls-ignore-start
         _ ->
           1
-          # coveralls-ignore-stop
       end
 
     case Chat.fork_conversation(conversation_id, user.id, at_position) do
@@ -139,8 +137,4 @@ defmodule LiteskillWeb.ConversationController do
       _ -> {:ok, default}
     end
   end
-
-  # coveralls-ignore-start
-  defp parse_positive_integer(_value, default, _max), do: {:ok, default}
-  # coveralls-ignore-stop
 end
