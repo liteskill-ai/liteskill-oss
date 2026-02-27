@@ -220,7 +220,8 @@ defmodule LiteskillWeb.AgentStudioLive do
             form={@agent_form}
             editing={@editing_agent}
             available_models={@available_llm_models}
-            available_mcp_servers={assigns[:available_mcp_servers] || []}
+            all_mcp_servers={assigns[:all_mcp_servers] || []}
+            assigned_server_ids={assigns[:assigned_server_ids] || MapSet.new()}
             sidebar_open={@sidebar_open}
           />
         <% end %>
@@ -373,13 +374,15 @@ defmodule LiteskillWeb.AgentStudioLive do
 
     case Agents.get_agent(agent_id, user_id) do
       {:ok, agent} ->
-        available_mcp_servers = compute_available_servers(user_id, agent)
+        all_mcp_servers = McpServers.list_servers(user_id)
+        assigned_server_ids = compute_assigned_server_ids(agent)
 
         socket
         |> reset_common()
         |> assign(
           editing_agent: agent,
-          available_mcp_servers: available_mcp_servers,
+          all_mcp_servers: all_mcp_servers,
+          assigned_server_ids: assigned_server_ids,
           agent_form:
             agent_form(%{
               "name" => agent.name || "",
@@ -702,89 +705,52 @@ defmodule LiteskillWeb.AgentStudioLive do
   end
 
   @impl true
-  def handle_event("add_agent_tool", %{"server_id" => "builtin:" <> _ = id}, socket) do
+  def handle_event("toggle_agent_tool", %{"server-id" => "builtin:" <> _ = id}, socket) do
     agent = socket.assigns.editing_agent
     existing = get_in(agent.config, ["builtin_server_ids"]) || []
 
-    if id in existing do
-      {:noreply, socket}
-    else
-      config = Map.put(agent.config || %{}, "builtin_server_ids", existing ++ [id])
+    updated =
+      if id in existing, do: List.delete(existing, id), else: existing ++ [id]
 
-      case Agents.update_agent(agent.id, socket.assigns.current_user.id, %{config: config}) do
-        {:ok, agent} ->
-          available = compute_available_servers(socket.assigns.current_user.id, agent)
-
-          {:noreply,
-           assign(socket,
-             editing_agent: agent,
-             available_mcp_servers: available
-           )}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, action_error("add server", reason))}
-      end
-    end
-  end
-
-  @impl true
-  def handle_event("add_agent_tool", %{"server_id" => server_id}, socket) do
-    agent = socket.assigns.editing_agent
-
-    case Agents.grant_tool_access(agent.id, server_id, socket.assigns.current_user.id) do
-      {:ok, _} ->
-        {:ok, agent} = Agents.get_agent(agent.id, socket.assigns.current_user.id)
-        available = compute_available_servers(socket.assigns.current_user.id, agent)
-
-        {:noreply,
-         assign(socket,
-           editing_agent: agent,
-           available_mcp_servers: available
-         )}
-
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, action_error("add server", reason))}
-    end
-  end
-
-  @impl true
-  def handle_event("remove_agent_tool", %{"server_id" => "builtin:" <> _ = id}, socket) do
-    agent = socket.assigns.editing_agent
-    existing = get_in(agent.config, ["builtin_server_ids"]) || []
-    config = Map.put(agent.config || %{}, "builtin_server_ids", List.delete(existing, id))
+    config = Map.put(agent.config || %{}, "builtin_server_ids", updated)
 
     case Agents.update_agent(agent.id, socket.assigns.current_user.id, %{config: config}) do
       {:ok, agent} ->
-        available = compute_available_servers(socket.assigns.current_user.id, agent)
-
         {:noreply,
          assign(socket,
            editing_agent: agent,
-           available_mcp_servers: available
+           assigned_server_ids: compute_assigned_server_ids(agent)
          )}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, action_error("remove server", reason))}
+        {:noreply, put_flash(socket, :error, action_error("toggle server", reason))}
     end
   end
 
   @impl true
-  def handle_event("remove_agent_tool", %{"server_id" => server_id}, socket) do
+  def handle_event("toggle_agent_tool", %{"server-id" => server_id}, socket) do
     agent = socket.assigns.editing_agent
+    assigned = socket.assigns.assigned_server_ids
 
-    case Agents.revoke_tool_access(agent.id, server_id, socket.assigns.current_user.id) do
+    result =
+      if MapSet.member?(assigned, server_id) do
+        Agents.revoke_tool_access(agent.id, server_id, socket.assigns.current_user.id)
+      else
+        Agents.grant_tool_access(agent.id, server_id, socket.assigns.current_user.id)
+      end
+
+    case result do
       {:ok, _} ->
         {:ok, agent} = Agents.get_agent(agent.id, socket.assigns.current_user.id)
-        available = compute_available_servers(socket.assigns.current_user.id, agent)
 
         {:noreply,
          assign(socket,
            editing_agent: agent,
-           available_mcp_servers: available
+           assigned_server_ids: compute_assigned_server_ids(agent)
          )}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, action_error("remove server", reason))}
+        {:noreply, put_flash(socket, :error, action_error("toggle server", reason))}
     end
   end
 
@@ -1161,18 +1127,10 @@ defmodule LiteskillWeb.AgentStudioLive do
 
   defp parse_cost_limit_param(params), do: params
 
-  defp compute_available_servers(user_id, agent) do
-    all_servers = McpServers.list_servers(user_id)
-    assigned_db_ids = MapSet.new(Agents.list_tool_server_ids(agent.id))
-    assigned_builtin_ids = MapSet.new(get_in(agent.config, ["builtin_server_ids"]) || [])
-
-    Enum.reject(all_servers, fn server ->
-      if Map.has_key?(server, :builtin) do
-        MapSet.member?(assigned_builtin_ids, server.id)
-      else
-        MapSet.member?(assigned_db_ids, server.id)
-      end
-    end)
+  defp compute_assigned_server_ids(agent) do
+    db_ids = Agents.list_tool_server_ids(agent.id)
+    builtin_ids = get_in(agent.config, ["builtin_server_ids"]) || []
+    MapSet.new(db_ids ++ builtin_ids)
   end
 
   # --- Run PubSub ---

@@ -17,7 +17,8 @@ defmodule LiteskillWeb.AgentStudioComponents do
   attr :form, :map, required: true
   attr :editing, :any, default: nil
   attr :available_models, :list, default: []
-  attr :available_mcp_servers, :list, default: []
+  attr :all_mcp_servers, :list, default: []
+  attr :assigned_server_ids, :any, default: nil
   attr :sidebar_open, :boolean, default: true
 
   def agent_form_page(assigns) do
@@ -43,6 +44,11 @@ defmodule LiteskillWeb.AgentStudioComponents do
       <div class="max-w-3xl">
         <.form for={@form} phx-submit="save_agent" phx-change="validate_agent" class="space-y-6">
           <.agent_form_fields form={@form} editing={@editing} available_models={@available_models} />
+          <.agent_tools_section
+            :if={@editing}
+            all_mcp_servers={@all_mcp_servers}
+            assigned_server_ids={@assigned_server_ids}
+          />
           <div class="flex items-center gap-3 pt-4 border-t border-base-200">
             <button type="submit" class="btn btn-primary">
               {if @editing, do: "Update Agent", else: "Create Agent"}
@@ -51,11 +57,6 @@ defmodule LiteskillWeb.AgentStudioComponents do
           </div>
         </.form>
         <.strategy_dialog form={@form} />
-        <.agent_tools_section
-          :if={@editing}
-          agent={@editing}
-          available_mcp_servers={@available_mcp_servers}
-        />
       </div>
     </div>
     """
@@ -634,79 +635,48 @@ defmodule LiteskillWeb.AgentStudioComponents do
     """
   end
 
-  attr :agent, :map, required: true
-  attr :available_mcp_servers, :list, default: []
+  attr :all_mcp_servers, :list, default: []
+  attr :assigned_server_ids, :any, required: true
 
   def agent_tools_section(assigns) do
-    builtin_ids = get_in(assigns.agent.config, ["builtin_server_ids"]) || []
-
-    builtin_servers =
-      Liteskill.BuiltinTools.virtual_servers()
-      |> Enum.filter(&(&1.id in builtin_ids))
-
-    assigns =
-      assign(assigns, :assigned_servers, build_assigned_servers(assigns.agent, builtin_servers))
-
     ~H"""
     <div class="mt-8 pt-6 border-t border-base-200">
       <h2 class="text-lg font-semibold mb-4">MCP Servers</h2>
 
-      <div :if={@assigned_servers != []} class="space-y-2 mb-4">
-        <div
-          :for={server <- @assigned_servers}
-          class="flex items-center justify-between bg-base-200 rounded-lg p-3"
-        >
-          <div class="flex items-center gap-3">
-            <.icon name="hero-server-micro" class="size-4 text-base-content/50" />
-            <span class="font-medium">{server.name}</span>
-            <span :if={server.builtin} class="badge badge-ghost badge-xs">builtin</span>
-            <span
-              :if={server.description}
-              class="text-xs text-base-content/50 truncate max-w-xs"
-            >
-              {server.description}
-            </span>
-          </div>
-          <button
-            type="button"
-            phx-click="remove_agent_tool"
-            phx-value-server_id={server.id}
-            class="btn btn-ghost btn-xs text-error"
-          >
-            <.icon name="hero-x-mark-micro" class="size-4" />
-          </button>
-        </div>
+      <div :if={@all_mcp_servers == []} class="text-sm text-base-content/50">
+        No tool servers available.
       </div>
 
-      <p :if={@assigned_servers == []} class="text-sm text-base-content/50 mb-4">
-        No MCP servers assigned. Add servers below to give this agent access to tools.
-      </p>
-
-      <form
-        :if={@available_mcp_servers != []}
-        phx-submit="add_agent_tool"
-        class="flex items-end gap-2"
-      >
-        <div class="flex-1">
-          <label class="label"><span class="label-text font-medium">Add Server</span></label>
-          <select name="server_id" class="select select-bordered w-full" required>
-            <option value="">Select a server...</option>
-            <option :for={server <- @available_mcp_servers} value={server.id}>
-              {server.name}{if Map.has_key?(server, :builtin), do: " (builtin)", else: ""}
-            </option>
-          </select>
+      <div :if={@all_mcp_servers != []} class="space-y-1 max-h-[25rem] overflow-y-auto">
+        <div
+          :for={server <- @all_mcp_servers}
+          class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-base-200"
+        >
+          <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+            <input
+              type="checkbox"
+              phx-click="toggle_agent_tool"
+              phx-value-server-id={server.id}
+              checked={MapSet.member?(@assigned_server_ids, server.id)}
+              class="checkbox checkbox-sm checkbox-primary"
+            />
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium truncate flex items-center gap-1">
+                {server.name}
+                <span
+                  :if={Map.get(server, :builtin, false)}
+                  class="badge badge-xs badge-ghost"
+                >
+                  builtin
+                </span>
+              </div>
+              <div :if={server.description} class="text-xs text-base-content/60 truncate">
+                {server.description}
+              </div>
+            </div>
+          </label>
         </div>
-        <button type="submit" class="btn btn-primary">
-          <.icon name="hero-plus-micro" class="size-4" /> Add
-        </button>
-      </form>
-
-      <p
-        :if={@available_mcp_servers == [] && @assigned_servers != []}
-        class="text-sm text-base-content/50"
-      >
-        All available servers are already assigned to this agent.
-      </p>
+      </div>
     </div>
     """
   end
@@ -2052,24 +2022,4 @@ defmodule LiteskillWeb.AgentStudioComponents do
   end
 
   defp format_tool_call_args(_), do: ""
-
-  defp build_assigned_servers(agent, builtin_servers) do
-    db_entries =
-      Liteskill.Agents.list_accessible_servers(agent.id)
-      |> Enum.map(fn server ->
-        %{
-          id: server.id,
-          name: server.name,
-          description: server.description,
-          builtin: false
-        }
-      end)
-
-    builtin_entries =
-      Enum.map(builtin_servers, fn s ->
-        %{id: s.id, name: s.name, description: s.description, builtin: true}
-      end)
-
-    db_entries ++ builtin_entries
-  end
 end
