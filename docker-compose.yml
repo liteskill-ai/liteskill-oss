@@ -20,6 +20,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    network_mode: host
 
   app:
     build: .
@@ -42,6 +43,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    network_mode: host
     environment:
       <<: *app-env
     profiles:
