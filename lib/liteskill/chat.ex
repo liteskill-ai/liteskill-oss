@@ -86,6 +86,11 @@ defmodule Liteskill.Chat do
         {:ok, _} = Authorization.create_owner_acl("conversation", conversation.id, params.user_id)
 
         {:ok, conversation}
+
+      # coveralls-ignore-start
+      {:error, reason} ->
+        {:error, reason}
+        # coveralls-ignore-stop
     end
   end
 
@@ -152,6 +157,11 @@ defmodule Liteskill.Chat do
           {:ok, _} = Authorization.create_owner_acl("conversation", new_conv.id, user_id)
 
           {:ok, new_conv}
+
+        # coveralls-ignore-start
+        {:error, reason} ->
+          {:error, reason}
+          # coveralls-ignore-stop
       end
     end
   end
@@ -540,10 +550,36 @@ defmodule Liteskill.Chat do
        when type in [
               "AssistantChunkReceived",
               "AssistantStreamCompleted",
-              "AssistantStreamFailed",
-              "ToolCallStarted",
-              "ToolCallCompleted"
+              "AssistantStreamFailed"
             ] do
+    new_msg_id = Map.get(id_map, data["message_id"], data["message_id"])
+    {Map.put(data, "message_id", new_msg_id), id_map}
+  end
+
+  defp remap_event_data(%{event_type: type, data: data}, _new_conv_id, id_map)
+       when type in ["ToolCallStarted", "ToolCallCompleted"] do
+    new_msg_id = Map.get(id_map, data["message_id"], data["message_id"])
+    old_tool_use_id = data["tool_use_id"]
+
+    {new_tool_use_id, id_map} =
+      case Map.fetch(id_map, old_tool_use_id) do
+        {:ok, existing} ->
+          {existing, id_map}
+
+        :error ->
+          new_id = Ecto.UUID.generate()
+          {new_id, Map.put(id_map, old_tool_use_id, new_id)}
+      end
+
+    data =
+      data
+      |> Map.put("message_id", new_msg_id)
+      |> Map.put("tool_use_id", new_tool_use_id)
+
+    {data, id_map}
+  end
+
+  defp remap_event_data(%{event_type: "ConversationTruncated", data: data}, _new_conv_id, id_map) do
     new_msg_id = Map.get(id_map, data["message_id"], data["message_id"])
     {Map.put(data, "message_id", new_msg_id), id_map}
   end

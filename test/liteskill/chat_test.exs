@@ -1042,4 +1042,140 @@ defmodule Liteskill.ChatTest do
       assert length(forked_conv.messages) >= 2
     end
   end
+
+  describe "fork with tool call events" do
+    test "remaps tool_use_id so forked tool calls have unique IDs", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _msg} = Chat.send_message(conv.id, user.id, "Use a tool")
+
+      stream_id = conv.stream_id
+      msg_id = Ecto.UUID.generate()
+      tool_use_id = Ecto.UUID.generate()
+
+      events = [
+        %{
+          event_type: "AssistantStreamStarted",
+          data: %{"message_id" => msg_id, "model_id" => "claude"}
+        },
+        %{
+          event_type: "ToolCallStarted",
+          data: %{
+            "message_id" => msg_id,
+            "tool_use_id" => tool_use_id,
+            "tool_name" => "search",
+            "input" => %{"query" => "test"},
+            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+          }
+        },
+        %{
+          event_type: "ToolCallCompleted",
+          data: %{
+            "message_id" => msg_id,
+            "tool_use_id" => tool_use_id,
+            "tool_name" => "search",
+            "input" => %{"query" => "test"},
+            "output" => %{"result" => "found"},
+            "duration_ms" => 100,
+            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+          }
+        },
+        %{
+          event_type: "AssistantStreamCompleted",
+          data: %{
+            "message_id" => msg_id,
+            "content" => "Done",
+            "model_id" => "claude",
+            "usage" => %{"input_tokens" => 10, "output_tokens" => 5}
+          }
+        }
+      ]
+
+      {:ok, stored} = Liteskill.EventStore.Postgres.append_events(stream_id, 3, events)
+      Liteskill.Chat.Projector.project_events(stream_id, stored)
+
+      # Verify parent tool call exists
+      parent_tc =
+        Liteskill.Repo.one!(
+          from tc in Liteskill.Chat.ToolCall, where: tc.tool_use_id == ^tool_use_id
+        )
+
+      assert parent_tc.status == "completed"
+
+      # Fork at position 2 (user message + assistant stream)
+      {:ok, forked} = Chat.fork_conversation(conv.id, user.id, 2)
+
+      {:ok, forked_conv} = Chat.get_conversation(forked.id, user.id)
+      assert length(forked_conv.messages) == 2
+
+      # Get forked tool calls - they should have different tool_use_ids
+      forked_msg = Enum.find(forked_conv.messages, &(&1.role == "assistant"))
+
+      forked_tool_calls =
+        Liteskill.Repo.all(
+          from tc in Liteskill.Chat.ToolCall, where: tc.message_id == ^forked_msg.id
+        )
+
+      assert length(forked_tool_calls) == 1
+      forked_tc = hd(forked_tool_calls)
+
+      # The critical assertion: forked tool_use_id must differ from parent
+      assert forked_tc.tool_use_id != tool_use_id
+      assert forked_tc.tool_name == "search"
+      assert forked_tc.status == "completed"
+    end
+  end
+
+  describe "fork with truncation events" do
+    test "remaps message_id in ConversationTruncated events", %{user: user} do
+      {:ok, conv} = Chat.create_conversation(%{user_id: user.id})
+      {:ok, _msg1} = Chat.send_message(conv.id, user.id, "Message 1")
+
+      stream_id = conv.stream_id
+      msg_id = Ecto.UUID.generate()
+
+      # Add an assistant reply (versions 3-4)
+      assistant_events = [
+        %{
+          event_type: "AssistantStreamStarted",
+          data: %{"message_id" => msg_id, "model_id" => "claude"}
+        },
+        %{
+          event_type: "AssistantStreamCompleted",
+          data: %{
+            "message_id" => msg_id,
+            "content" => "Reply",
+            "model_id" => "claude",
+            "usage" => %{"input_tokens" => 10, "output_tokens" => 5}
+          }
+        }
+      ]
+
+      {:ok, stored} = Liteskill.EventStore.Postgres.append_events(stream_id, 3, assistant_events)
+      Liteskill.Chat.Projector.project_events(stream_id, stored)
+
+      # Send another user message (version 5), then truncate (version 6)
+      {:ok, _msg2} = Chat.send_message(conv.id, user.id, "Message 2")
+      {:ok, _} = Chat.truncate_conversation(conv.id, user.id, msg_id)
+
+      # Now add a new message after truncation so we have a valid fork point
+      # after the truncation event
+      {:ok, _msg3} = Chat.send_message(conv.id, user.id, "Message 3 after truncate")
+
+      # Event stream versions:
+      # v1: ConversationCreated, v2: UserMessageAdded (count=1),
+      # v3: AssistantStreamStarted, v4: AssistantStreamCompleted (count=2),
+      # v5: UserMessageAdded "Message 2" (count=3),
+      # v6: ConversationTruncated (no count),
+      # v7: UserMessageAdded "Message 3" (count=4)
+      #
+      # Fork at position 4 → version 7, which includes ConversationTruncated at v6.
+      # The truncated message_id (msg_id) was generated for AssistantStreamStarted
+      # which gets a new ID in the fork — ConversationTruncated must also be remapped.
+      {:ok, forked} = Chat.fork_conversation(conv.id, user.id, 4)
+
+      # Verify the fork succeeded (ConversationTruncated message_id was remapped correctly)
+      {:ok, forked_conv} = Chat.get_conversation(forked.id, user.id)
+      assert forked_conv.title != nil
+    end
+  end
 end

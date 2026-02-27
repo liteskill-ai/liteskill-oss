@@ -410,7 +410,7 @@ defmodule Liteskill.Accounts do
 
     from(e in AuthEvent,
       where: e.user_id == ^user_id,
-      order_by: [desc: e.inserted_at],
+      order_by: [desc: e.inserted_at, desc: e.id],
       limit: ^limit
     )
     |> Repo.all()
