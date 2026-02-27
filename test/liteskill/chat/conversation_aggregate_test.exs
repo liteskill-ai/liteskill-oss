@@ -571,6 +571,128 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
     end
   end
 
+  describe "defensive guards for corrupted event streams" do
+    import ExUnit.CaptureLog
+
+    test "AssistantChunkReceived with nil current_stream logs warning and preserves state" do
+      state = %ConversationAggregate{status: :active, current_stream: nil, messages: []}
+
+      log =
+        capture_log(fn ->
+          new_state =
+            ConversationAggregate.apply_event(state, %{
+              event_type: "AssistantChunkReceived",
+              data: %{
+                "chunk_index" => 0,
+                "delta_text" => "orphaned chunk",
+                "delta_type" => "text_delta"
+              }
+            })
+
+          assert new_state == state
+        end)
+
+      assert log =~ "AssistantChunkReceived received with no active stream"
+    end
+
+    test "ToolCallStarted with nil current_stream logs warning and preserves state" do
+      state = %ConversationAggregate{status: :active, current_stream: nil, messages: []}
+
+      log =
+        capture_log(fn ->
+          new_state =
+            ConversationAggregate.apply_event(state, %{
+              event_type: "ToolCallStarted",
+              data: %{
+                "tool_use_id" => "t1",
+                "tool_name" => "calc",
+                "input" => %{}
+              }
+            })
+
+          assert new_state == state
+        end)
+
+      assert log =~ "ToolCallStarted received with no active stream"
+    end
+  end
+
+  describe "truncation at middle position" do
+    test "keeps only messages older than the target" do
+      state =
+        apply_commands(ConversationAggregate.init(), [
+          {:create_conversation, create_params()},
+          {:add_user_message, %{message_id: "msg-1", content: "first"}},
+          {:start_assistant_stream, %{message_id: "asst-1", model_id: "claude"}},
+          {:complete_stream,
+           %{message_id: "asst-1", full_content: "response", stop_reason: "end_turn"}},
+          {:add_user_message, %{message_id: "msg-2", content: "second"}},
+          {:start_assistant_stream, %{message_id: "asst-2", model_id: "claude"}},
+          {:complete_stream,
+           %{message_id: "asst-2", full_content: "response 2", stop_reason: "end_turn"}},
+          {:add_user_message, %{message_id: "msg-3", content: "third"}}
+        ])
+
+      assert length(state.messages) == 5
+
+      # Truncate at msg-2 (the middle user message) — should keep msg-1 and asst-1
+      {:ok, events} =
+        ConversationAggregate.handle_command(
+          state,
+          {:truncate_conversation, %{message_id: "msg-2"}}
+        )
+
+      new_state = apply_events(state, events)
+      assert length(new_state.messages) == 2
+      remaining_ids = Enum.map(new_state.messages, & &1.id)
+      assert "msg-1" in remaining_ids
+      assert "asst-1" in remaining_ids
+      refute "msg-2" in remaining_ids
+      refute "asst-2" in remaining_ids
+      refute "msg-3" in remaining_ids
+    end
+
+    test "truncation at oldest message removes all messages" do
+      state =
+        apply_commands(ConversationAggregate.init(), [
+          {:create_conversation, create_params()},
+          {:add_user_message, %{message_id: "msg-1", content: "first"}},
+          {:add_user_message, %{message_id: "msg-2", content: "second"}}
+        ])
+
+      {:ok, events} =
+        ConversationAggregate.handle_command(
+          state,
+          {:truncate_conversation, %{message_id: "msg-1"}}
+        )
+
+      new_state = apply_events(state, events)
+      assert new_state.messages == []
+    end
+
+    test "truncation at newest message keeps older messages" do
+      state =
+        apply_commands(ConversationAggregate.init(), [
+          {:create_conversation, create_params()},
+          {:add_user_message, %{message_id: "msg-1", content: "first"}},
+          {:add_user_message, %{message_id: "msg-2", content: "second"}},
+          {:add_user_message, %{message_id: "msg-3", content: "third"}}
+        ])
+
+      {:ok, events} =
+        ConversationAggregate.handle_command(
+          state,
+          {:truncate_conversation, %{message_id: "msg-3"}}
+        )
+
+      new_state = apply_events(state, events)
+      assert length(new_state.messages) == 2
+      remaining_ids = Enum.map(new_state.messages, & &1.id)
+      assert "msg-1" in remaining_ids
+      assert "msg-2" in remaining_ids
+    end
+  end
+
   defp create_params do
     %{conversation_id: "conv-1", user_id: "user-1", title: "Test", model_id: "claude"}
   end

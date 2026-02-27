@@ -7,6 +7,8 @@ defmodule Liteskill.Chat.ConversationAggregate do
 
   @behaviour Liteskill.Aggregate
 
+  require Logger
+
   alias Liteskill.Chat.Events
 
   defstruct [
@@ -319,12 +321,13 @@ defmodule Liteskill.Chat.ConversationAggregate do
     }
   end
 
-  # coveralls-ignore-start - defensive guard for out-of-order event replay
   def apply_event(%{current_stream: nil} = state, %{event_type: "AssistantChunkReceived"}) do
+    Logger.warning(
+      "AssistantChunkReceived received with no active stream — event stream may be corrupted"
+    )
+
     state
   end
-
-  # coveralls-ignore-stop
 
   def apply_event(state, %{event_type: "AssistantChunkReceived", data: data}) do
     chunk = %{
@@ -361,12 +364,13 @@ defmodule Liteskill.Chat.ConversationAggregate do
     %{state | status: :active, current_stream: nil}
   end
 
-  # coveralls-ignore-start - defensive guard for out-of-order event replay
   def apply_event(%{current_stream: nil} = state, %{event_type: "ToolCallStarted"}) do
+    Logger.warning(
+      "ToolCallStarted received with no active stream — event stream may be corrupted"
+    )
+
     state
   end
-
-  # coveralls-ignore-stop
 
   def apply_event(state, %{event_type: "ToolCallStarted", data: data}) do
     tool_call = %{

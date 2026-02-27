@@ -52,6 +52,48 @@ defmodule Liteskill.Chat.EventsTest do
       assert %ConversationArchived{} = result
       assert result.timestamp == "now"
     end
+
+    test "tolerates extra unknown fields in event data without crashing" do
+      # Simulates schema evolution: an old event has a field that no longer
+      # exists in the struct. deserialize must not crash.
+      event = %{
+        event_type: "UserMessageAdded",
+        data: %{
+          "message_id" => "m1",
+          "content" => "hello",
+          "timestamp" => "now",
+          "removed_field_from_v1" => "legacy_value"
+        }
+      }
+
+      result = Events.deserialize(event)
+      assert %UserMessageAdded{} = result
+      assert result.message_id == "m1"
+      assert result.content == "hello"
+    end
+
+    test "round-trips through serialize then deserialize" do
+      original = %ConversationCreated{
+        conversation_id: "c1",
+        user_id: "u1",
+        title: "Test",
+        model_id: "claude",
+        system_prompt: "Be helpful",
+        llm_model_id: "model-123"
+      }
+
+      round_tripped =
+        original
+        |> Events.serialize()
+        |> Events.deserialize()
+
+      assert round_tripped.conversation_id == original.conversation_id
+      assert round_tripped.user_id == original.user_id
+      assert round_tripped.title == original.title
+      assert round_tripped.model_id == original.model_id
+      assert round_tripped.system_prompt == original.system_prompt
+      assert round_tripped.llm_model_id == original.llm_model_id
+    end
   end
 
   describe "module_for/1" do

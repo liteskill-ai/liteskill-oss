@@ -902,6 +902,210 @@ defmodule Liteskill.Chat.ProjectorTest do
     end
   end
 
+  describe "atomic message_count and position correctness" do
+    test "multiple messages in a single batch get sequential positions", %{user: user} do
+      {stream_id, _} = create_conversation(user)
+
+      msg1_id = Ecto.UUID.generate()
+      msg2_id = Ecto.UUID.generate()
+      msg3_id = Ecto.UUID.generate()
+
+      {:ok, events} =
+        Store.append_events(stream_id, 1, [
+          %{
+            event_type: "UserMessageAdded",
+            data: %{
+              "message_id" => msg1_id,
+              "content" => "First",
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          },
+          %{
+            event_type: "UserMessageAdded",
+            data: %{
+              "message_id" => msg2_id,
+              "content" => "Second",
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          },
+          %{
+            event_type: "UserMessageAdded",
+            data: %{
+              "message_id" => msg3_id,
+              "content" => "Third",
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          }
+        ])
+
+      Projector.project_events(stream_id, events)
+
+      msg1 = Repo.get!(Message, msg1_id)
+      msg2 = Repo.get!(Message, msg2_id)
+      msg3 = Repo.get!(Message, msg3_id)
+
+      assert msg1.position == 1
+      assert msg2.position == 2
+      assert msg3.position == 3
+
+      conv = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
+      assert conv.message_count == 3
+    end
+
+    test "interleaved user and assistant messages get correct positions", %{user: user} do
+      {stream_id, _} = create_conversation(user)
+
+      user_msg_id = Ecto.UUID.generate()
+      asst_msg_id = Ecto.UUID.generate()
+
+      {:ok, events} =
+        Store.append_events(stream_id, 1, [
+          %{
+            event_type: "UserMessageAdded",
+            data: %{
+              "message_id" => user_msg_id,
+              "content" => "Hello",
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          },
+          %{
+            event_type: "AssistantStreamStarted",
+            data: %{
+              "message_id" => asst_msg_id,
+              "model_id" => "claude",
+              "request_id" => Ecto.UUID.generate(),
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          }
+        ])
+
+      Projector.project_events(stream_id, events)
+
+      user_msg = Repo.get!(Message, user_msg_id)
+      asst_msg = Repo.get!(Message, asst_msg_id)
+
+      assert user_msg.position == 1
+      assert asst_msg.position == 2
+
+      conv = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
+      assert conv.message_count == 2
+    end
+  end
+
+  describe "truncation at middle position" do
+    test "truncating at position 2 of 3 removes positions 2 and 3", %{user: user} do
+      {stream_id, _} = create_conversation(user)
+
+      msg1_id = Ecto.UUID.generate()
+      msg2_id = Ecto.UUID.generate()
+      msg3_id = Ecto.UUID.generate()
+
+      {:ok, events} =
+        Store.append_events(stream_id, 1, [
+          %{
+            event_type: "UserMessageAdded",
+            data: %{
+              "message_id" => msg1_id,
+              "content" => "First",
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          },
+          %{
+            event_type: "UserMessageAdded",
+            data: %{
+              "message_id" => msg2_id,
+              "content" => "Second",
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          },
+          %{
+            event_type: "UserMessageAdded",
+            data: %{
+              "message_id" => msg3_id,
+              "content" => "Third",
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          }
+        ])
+
+      Projector.project_events(stream_id, events)
+
+      # Truncate at msg2 — should delete msg2 (pos 2) and msg3 (pos 3), keep msg1 (pos 1)
+      {:ok, truncate_events} =
+        Store.append_events(stream_id, 4, [
+          %{
+            event_type: "ConversationTruncated",
+            data: %{
+              "message_id" => msg2_id,
+              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            }
+          }
+        ])
+
+      Projector.project_events(stream_id, truncate_events)
+
+      # msg1 kept, msg2 and msg3 deleted
+      assert Repo.get(Message, msg1_id) != nil
+      assert Repo.get(Message, msg2_id) == nil
+      assert Repo.get(Message, msg3_id) == nil
+
+      conv = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
+      assert conv.message_count == 1
+      assert conv.status == "active"
+    end
+  end
+
+  describe "ConversationForked parent lookup" do
+    import ExUnit.CaptureLog
+
+    test "logs warning when parent conversation does not exist", %{user: user} do
+      new_conv_id = Ecto.UUID.generate()
+      new_stream_id = "conversation-#{new_conv_id}"
+      nonexistent_parent_stream = "conversation-#{Ecto.UUID.generate()}"
+
+      {:ok, events} =
+        Store.append_events(new_stream_id, 0, [
+          %{
+            event_type: "ConversationCreated",
+            data: %{
+              "conversation_id" => new_conv_id,
+              "user_id" => user.id,
+              "title" => "Orphan Fork",
+              "model_id" => "claude",
+              "system_prompt" => nil
+            }
+          }
+        ])
+
+      Projector.project_events(new_stream_id, events)
+
+      fork_event = %Liteskill.EventStore.Event{
+        event_type: "ConversationForked",
+        data: %{
+          "parent_stream_id" => nonexistent_parent_stream,
+          "fork_at_version" => 1,
+          "user_id" => user.id,
+          "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+        },
+        stream_id: new_stream_id,
+        stream_version: 2,
+        metadata: %{}
+      }
+
+      log =
+        capture_log(fn ->
+          Projector.project_events(new_stream_id, [fork_event])
+        end)
+
+      assert log =~ "parent conversation not found"
+      assert log =~ nonexistent_parent_stream
+
+      # parent_conversation_id should be nil
+      conv = Repo.one!(from c in Conversation, where: c.stream_id == ^new_stream_id)
+      assert conv.parent_conversation_id == nil
+    end
+  end
+
   defp create_conversation(user) do
     conversation_id = Ecto.UUID.generate()
     stream_id = "conversation-#{conversation_id}"

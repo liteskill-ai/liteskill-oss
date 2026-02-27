@@ -159,7 +159,7 @@ defmodule Liteskill.Chat.Projector do
        }) do
     with_conversation(stream_id, fn conversation ->
       Repo.transaction(fn ->
-        message_count = conversation.message_count + 1
+        message_count = increment_message_count(conversation.id)
 
         %Message{}
         |> Message.changeset(%{
@@ -174,12 +174,10 @@ defmodule Liteskill.Chat.Projector do
         })
         |> Repo.insert!(on_conflict: :nothing)
 
-        conversation
-        |> Conversation.changeset(%{
-          message_count: message_count,
-          last_message_at: DateTime.utc_now() |> DateTime.truncate(:second)
-        })
-        |> Repo.update!()
+        from(c in Conversation, where: c.id == ^conversation.id)
+        |> Repo.update_all(
+          set: [last_message_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+        )
       end)
     end)
   end
@@ -192,7 +190,7 @@ defmodule Liteskill.Chat.Projector do
        }) do
     with_conversation(stream_id, fn conversation ->
       Repo.transaction(fn ->
-        message_count = conversation.message_count + 1
+        message_count = increment_message_count(conversation.id)
 
         %Message{}
         |> Message.changeset(%{
@@ -208,12 +206,8 @@ defmodule Liteskill.Chat.Projector do
         })
         |> Repo.insert!(on_conflict: :nothing)
 
-        conversation
-        |> Conversation.changeset(%{
-          message_count: message_count,
-          status: "streaming"
-        })
-        |> Repo.update!()
+        from(c in Conversation, where: c.id == ^conversation.id)
+        |> Repo.update_all(set: [status: "streaming"])
       end)
     end)
   end
@@ -346,6 +340,13 @@ defmodule Liteskill.Chat.Projector do
     parent =
       Repo.one(from c in Conversation, where: c.stream_id == ^data["parent_stream_id"])
 
+    if is_nil(parent) do
+      Logger.warning(
+        "Projector: parent conversation not found for stream=#{data["parent_stream_id"]} " <>
+          "while projecting ConversationForked on stream=#{stream_id} — fork tree may be incomplete"
+      )
+    end
+
     with_conversation(stream_id, fn conversation ->
       conversation
       |> Conversation.changeset(%{
@@ -451,6 +452,19 @@ defmodule Liteskill.Chat.Projector do
       conversation ->
         fun.(conversation)
     end
+  end
+
+  # Atomically increment message_count and return the new value.
+  # Uses a single UPDATE ... RETURNING to avoid read-modify-write races.
+  defp increment_message_count(conversation_id) do
+    {1, [%{message_count: new_count}]} =
+      from(c in Conversation,
+        where: c.id == ^conversation_id,
+        select: %{message_count: c.message_count}
+      )
+      |> Repo.update_all(inc: [message_count: 1])
+
+    new_count
   end
 
   defp filter_cited_sources(nil, _content), do: nil
