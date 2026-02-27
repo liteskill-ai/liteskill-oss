@@ -876,7 +876,7 @@ defmodule Liteskill.LLM.StreamHandler do
     output =
       case result do
         {:ok, data} -> data
-        {:error, _err} -> %{"error" => "tool execution failed"}
+        {:error, err} -> %{"error" => "tool execution failed: #{format_tool_error(err)}"}
       end
 
     command =
@@ -1031,4 +1031,10 @@ defmodule Liteskill.LLM.StreamHandler do
         {:error, reason}
     end
   end
+
+  defp format_tool_error(err) when is_binary(err), do: err
+  # coveralls-ignore-start
+  defp format_tool_error(err) when is_exception(err), do: Exception.message(err)
+  defp format_tool_error(err), do: inspect(err)
+  # coveralls-ignore-stop
 end

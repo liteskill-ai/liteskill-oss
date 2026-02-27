@@ -27,6 +27,8 @@ defmodule Liteskill.Chat do
   Read path: Context -> Ecto queries on projection tables
   """
 
+  require Logger
+
   alias Liteskill.Aggregate.Loader
   alias Liteskill.Authorization
   alias Liteskill.Chat.{Conversation, ConversationAggregate, Message, MessageChunk, Projector}
@@ -362,13 +364,15 @@ defmodule Liteskill.Chat do
   """
   def recover_stream(conversation_id, user_id) do
     with {:ok, conversation} <- authorize_conversation(conversation_id, user_id) do
-      do_recover_stream(
-        conversation,
-        "task_crashed",
-        "Stream handler process terminated unexpectedly"
-      )
-
-      {:ok, Repo.get!(Conversation, conversation_id)}
+      case do_recover_stream(
+             conversation,
+             "task_crashed",
+             "Stream handler process terminated unexpectedly"
+           ) do
+        # coveralls-ignore-next-line
+        {:error, reason} -> {:error, reason}
+        _ -> {:ok, Repo.get!(Conversation, conversation_id)}
+      end
     end
   end
 
@@ -401,13 +405,23 @@ defmodule Liteskill.Chat do
   def recover_stream_by_id(conversation_id) do
     conversation = Repo.get!(Conversation, conversation_id)
 
-    do_recover_stream(
-      conversation,
-      "orphaned_stream",
-      "Stream recovered by periodic sweep — no active handler"
-    )
+    case do_recover_stream(
+           conversation,
+           "orphaned_stream",
+           "Stream recovered by periodic sweep — no active handler"
+         ) do
+      # coveralls-ignore-start
+      {:error, reason} ->
+        Logger.warning(
+          "Orphaned stream recovery failed: conversation=#{conversation_id} reason=#{inspect(reason)}"
+        )
 
-    :ok
+        :error
+
+      # coveralls-ignore-stop
+      _ ->
+        :ok
+    end
   end
 
   # --- Internal Helpers ---
@@ -434,10 +448,17 @@ defmodule Liteskill.Chat do
         {:ok, _state, events} ->
           Projector.project_events(conversation.stream_id, events)
 
-        # coveralls-ignore-next-line
-        {:error, _reason} ->
-          :ok
+        # coveralls-ignore-start
+        {:error, reason} ->
+          Logger.warning(
+            "Stream recovery failed: stream=#{conversation.stream_id} reason=#{inspect(reason)}"
+          )
+
+          {:error, reason}
+          # coveralls-ignore-stop
       end
+    else
+      :ok
     end
   end
 
@@ -560,13 +581,13 @@ defmodule Liteskill.Chat do
               "AssistantStreamCompleted",
               "AssistantStreamFailed"
             ] do
-    new_msg_id = Map.get(id_map, data["message_id"], data["message_id"])
+    new_msg_id = Map.fetch!(id_map, data["message_id"])
     {Map.put(data, "message_id", new_msg_id), id_map}
   end
 
   defp remap_event_data(%{event_type: type, data: data}, _new_conv_id, id_map)
        when type in ["ToolCallStarted", "ToolCallCompleted"] do
-    new_msg_id = Map.get(id_map, data["message_id"], data["message_id"])
+    new_msg_id = Map.fetch!(id_map, data["message_id"])
     old_tool_use_id = data["tool_use_id"]
 
     {new_tool_use_id, id_map} =
@@ -588,7 +609,7 @@ defmodule Liteskill.Chat do
   end
 
   defp remap_event_data(%{event_type: "ConversationTruncated", data: data}, _new_conv_id, id_map) do
-    new_msg_id = Map.get(id_map, data["message_id"], data["message_id"])
+    new_msg_id = Map.fetch!(id_map, data["message_id"])
     {Map.put(data, "message_id", new_msg_id), id_map}
   end
 

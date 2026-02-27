@@ -189,6 +189,66 @@ defmodule Liteskill.DataSources.WikiExportTest do
     end
   end
 
+  describe "slug sanitization in build_entries" do
+    test "sanitizes path traversal in slugs" do
+      tree = [
+        %{
+          document: %{slug: "../etc/passwd", title: "Evil", position: 0, content: "body"},
+          children: []
+        }
+      ]
+
+      entries = WikiExport.build_entries(tree, "")
+      [{path, _}] = entries
+      path_str = to_string(path)
+
+      refute path_str =~ ".."
+      refute path_str =~ "/"
+    end
+
+    test "sanitizes backslashes and null bytes in slugs" do
+      tree = [
+        %{
+          document: %{slug: "foo\\bar\0baz", title: "Evil", position: 0, content: "body"},
+          children: []
+        }
+      ]
+
+      entries = WikiExport.build_entries(tree, "")
+      [{path, _}] = entries
+      path_str = to_string(path)
+
+      refute path_str =~ "\\"
+      refute path_str =~ "\0"
+    end
+
+    test "handles nil slug" do
+      tree = [
+        %{
+          document: %{slug: nil, title: "No Slug", position: 0, content: "body"},
+          children: []
+        }
+      ]
+
+      entries = WikiExport.build_entries(tree, "")
+      [{path, _}] = entries
+      assert to_string(path) == "untitled.md"
+    end
+
+    test "handles slug that becomes empty after sanitization" do
+      tree = [
+        %{
+          document: %{slug: ".", title: "Dot", position: 0, content: "body"},
+          children: []
+        }
+      ]
+
+      entries = WikiExport.build_entries(tree, "")
+      [{path, _}] = entries
+      assert to_string(path) == "untitled.md"
+    end
+  end
+
   describe "yaml_escape via encode_frontmatter" do
     test "escapes titles with special YAML characters" do
       entries =

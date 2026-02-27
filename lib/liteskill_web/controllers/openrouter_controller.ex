@@ -199,7 +199,16 @@ defmodule LiteskillWeb.OpenRouterController do
   @doc false
   def openrouter_topic(user_id), do: "openrouter:#{user_id}"
 
-  defp validate_return_path("/" <> _ = path), do: path
+  defp validate_return_path("//" <> _), do: "/"
+
+  defp validate_return_path("/" <> _ = path) do
+    case URI.parse(path) do
+      %URI{host: nil, scheme: nil} -> path
+      # coveralls-ignore-next-line
+      _ -> "/"
+    end
+  end
+
   defp validate_return_path(_), do: "/"
 
   @desktop_success_html "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Liteskill</title></head>" <>

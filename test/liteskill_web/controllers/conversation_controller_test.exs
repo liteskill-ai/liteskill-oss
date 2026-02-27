@@ -163,7 +163,10 @@ defmodule LiteskillWeb.ConversationControllerTest do
       {:ok, conv} = Liteskill.Chat.create_conversation(%{user_id: user.id})
 
       conn =
-        post(conn, ~p"/api/conversations/#{conv.id}/acls", %{user_id: other.id, role: "member"})
+        post(conn, ~p"/api/conversations/#{conv.id}/acls", %{
+          user_id: other.id,
+          role: "manager"
+        })
 
       assert %{"data" => acl} = json_response(conn, 201)
       assert acl["user_id"] == other.id
@@ -180,6 +183,38 @@ defmodule LiteskillWeb.ConversationControllerTest do
         |> post(~p"/api/conversations/#{conv.id}/acls", %{user_id: user.id})
 
       assert json_response(conn, 403)["error"] == "forbidden"
+    end
+
+    test "returns bad request for missing user_id", %{conn: conn, user: user} do
+      {:ok, conv} = Liteskill.Chat.create_conversation(%{user_id: user.id})
+
+      conn = post(conn, ~p"/api/conversations/#{conv.id}/acls", %{role: "manager"})
+
+      assert json_response(conn, 400)["error"] == "bad request"
+    end
+
+    test "returns bad request for invalid UUID", %{conn: conn, user: user} do
+      {:ok, conv} = Liteskill.Chat.create_conversation(%{user_id: user.id})
+
+      conn =
+        post(conn, ~p"/api/conversations/#{conv.id}/acls", %{
+          user_id: "not-a-uuid",
+          role: "manager"
+        })
+
+      assert json_response(conn, 400)["error"] == "bad request"
+    end
+
+    test "returns bad request for invalid role", %{conn: conn, user: user, other_user: other} do
+      {:ok, conv} = Liteskill.Chat.create_conversation(%{user_id: user.id})
+
+      conn =
+        post(conn, ~p"/api/conversations/#{conv.id}/acls", %{
+          user_id: other.id,
+          role: "superadmin"
+        })
+
+      assert json_response(conn, 400)["error"] == "bad request"
     end
   end
 

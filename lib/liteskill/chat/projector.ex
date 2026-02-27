@@ -90,10 +90,7 @@ defmodule Liteskill.Chat.Projector do
       Ecto.StaleEntryError,
       Ecto.InvalidChangesetError,
       Ecto.Query.CastError,
-      Ecto.ChangeError,
-      KeyError,
-      MatchError,
-      FunctionClauseError
+      Ecto.ChangeError
     ] ->
       handle_projection_error(stream_id, event, attempt, e)
   end

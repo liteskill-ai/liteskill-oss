@@ -1,6 +1,12 @@
 defmodule LiteskillWeb.FallbackController do
   use LiteskillWeb, :controller
 
+  def call(conn, {:error, :bad_request}) do
+    conn
+    |> put_status(:bad_request)
+    |> json(%{error: "bad request"})
+  end
+
   def call(conn, {:error, :not_found}) do
     conn
     |> put_status(:not_found)

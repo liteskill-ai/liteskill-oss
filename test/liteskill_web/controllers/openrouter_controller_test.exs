@@ -57,6 +57,18 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
 
       assert get_session(conn, :openrouter_return_to) == "/"
     end
+
+    test "rejects protocol-relative URLs in return_to", %{conn: conn} do
+      conn = get(conn, "/auth/openrouter?return_to=//evil.com")
+
+      assert get_session(conn, :openrouter_return_to) == "/"
+    end
+
+    test "allows valid relative paths in return_to", %{conn: conn} do
+      conn = get(conn, "/auth/openrouter?return_to=/settings/providers")
+
+      assert get_session(conn, :openrouter_return_to) == "/settings/providers"
+    end
   end
 
   describe "GET /auth/openrouter/callback (session-based)" do

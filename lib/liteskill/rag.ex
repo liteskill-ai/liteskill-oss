@@ -66,47 +66,25 @@ defmodule Liteskill.Rag do
   Wiki collections from users who share wiki spaces with them.
   """
   def list_accessible_collections(user_id) do
-    own = list_collections(user_id)
-    own_ids = Enum.map(own, & &1.id)
-
-    shared =
-      shared_wiki_collection_ids(user_id, own_ids)
-      |> case do
-        [] ->
-          []
-
-        ids ->
-          Collection
-          |> where([c], c.id in ^ids)
-          |> order_by([c], asc: c.name)
-          |> Repo.all()
-      end
-
-    own ++ shared
-  end
-
-  defp shared_wiki_collection_ids(user_id, exclude_ids) do
     wiki_space_ids = Liteskill.Authorization.accessible_entity_ids("wiki_space", user_id)
 
-    space_owner_ids =
-      from(d in Liteskill.DataSources.Document,
-        where: d.id in subquery(wiki_space_ids) and d.user_id != ^user_id,
-        select: d.user_id,
+    shared_wiki_collection_ids =
+      from(c in Collection,
+        join: d in Liteskill.DataSources.Document,
+        on: d.user_id == c.user_id,
+        where:
+          c.name == "Wiki" and
+            c.user_id != ^user_id and
+            d.id in subquery(wiki_space_ids),
+        select: c.id,
         distinct: true
       )
-      |> Repo.all()
 
-    case space_owner_ids do
-      [] ->
-        []
-
-      ids ->
-        from(c in Collection,
-          where: c.name == "Wiki" and c.user_id in ^ids and c.id not in ^exclude_ids,
-          select: c.id
-        )
-        |> Repo.all()
-    end
+    from(c in Collection,
+      where: c.user_id == ^user_id or c.id in subquery(shared_wiki_collection_ids),
+      order_by: [asc: c.name]
+    )
+    |> Repo.all()
   end
 
   def get_collection(id, user_id) do

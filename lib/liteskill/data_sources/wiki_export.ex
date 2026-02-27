@@ -36,7 +36,7 @@ defmodule Liteskill.DataSources.WikiExport do
         })
 
       entries = [{~c"manifest.json", manifest} | build_entries(tree, "")]
-      filename = "#{space_doc.slug}.zip"
+      filename = "#{sanitize_slug(space_doc.slug)}.zip"
 
       case :zip.create(~c"#{filename}", entries, [:memory]) do
         {:ok, {_name, zip_binary}} -> {:ok, {filename, zip_binary}}
@@ -52,7 +52,7 @@ defmodule Liteskill.DataSources.WikiExport do
   @spec build_entries([map()], String.t()) :: [{charlist(), binary()}]
   def build_entries(nodes, base_path) do
     Enum.flat_map(nodes, fn %{document: doc, children: children} ->
-      slug = doc.slug || "untitled"
+      slug = sanitize_slug(doc.slug)
       content = encode_frontmatter(doc.title, doc.position, doc.content || "")
 
       if children == [] do
@@ -78,6 +78,21 @@ defmodule Liteskill.DataSources.WikiExport do
     ---
     #{content}\
     """
+  end
+
+  defp sanitize_slug(nil), do: "untitled"
+
+  defp sanitize_slug(slug) do
+    slug
+    |> String.replace("..", "_")
+    |> String.replace("/", "_")
+    |> String.replace("\\", "_")
+    |> String.replace("\0", "")
+    |> String.trim_leading(".")
+    |> case do
+      "" -> "untitled"
+      sanitized -> sanitized
+    end
   end
 
   defp join_path("", name), do: name

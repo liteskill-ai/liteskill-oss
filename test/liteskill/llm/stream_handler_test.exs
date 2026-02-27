@@ -719,7 +719,8 @@ defmodule Liteskill.LLM.StreamHandlerTest do
       events = Store.read_stream_forward(stream_id)
 
       tc_completed = Enum.find(events, &(&1.event_type == "ToolCallCompleted"))
-      assert tc_completed.data["output"]["error"] == "tool execution failed"
+      assert tc_completed.data["output"]["error"] =~ "tool execution failed: "
+      assert tc_completed.data["output"]["error"] =~ "connection timeout"
     end
 
     test "tool server nil returns error for unconfigured tool", %{stream_id: stream_id} do
@@ -739,7 +740,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
       events = Store.read_stream_forward(stream_id)
       tc_completed = Enum.find(events, &(&1.event_type == "ToolCallCompleted"))
-      assert tc_completed.data["output"]["error"] == "tool execution failed"
+      assert tc_completed.data["output"]["error"] =~ "tool execution failed: "
     end
 
     test "manual confirm rejects tool calls on timeout", %{stream_id: stream_id} do

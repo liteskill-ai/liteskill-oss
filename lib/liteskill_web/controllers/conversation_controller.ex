@@ -86,21 +86,36 @@ defmodule LiteskillWeb.ConversationController do
     end
   end
 
+  @grantable_roles ~w(viewer editor manager)
+
   def grant_access(conn, %{"conversation_id" => conversation_id} = params) do
     user = conn.assigns.current_user
-    grantee_user_id = params["user_id"]
-    role = Map.get(params, "role", "manager")
 
-    case Chat.grant_conversation_access(conversation_id, user.id, grantee_user_id, role) do
-      {:ok, acl} ->
-        conn
-        |> put_status(:created)
-        |> json(%{data: %{id: acl.id, role: acl.role, user_id: acl.user_id}})
+    with {:ok, grantee_user_id} <- cast_uuid(params["user_id"]),
+         {:ok, role} <- validate_grantable_role(Map.get(params, "role", "manager")) do
+      case Chat.grant_conversation_access(conversation_id, user.id, grantee_user_id, role) do
+        {:ok, acl} ->
+          conn
+          |> put_status(:created)
+          |> json(%{data: %{id: acl.id, role: acl.role, user_id: acl.user_id}})
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
+
+  defp cast_uuid(nil), do: {:error, :bad_request}
+
+  defp cast_uuid(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> {:ok, uuid}
+      :error -> {:error, :bad_request}
+    end
+  end
+
+  defp validate_grantable_role(role) when role in @grantable_roles, do: {:ok, role}
+  defp validate_grantable_role(_), do: {:error, :bad_request}
 
   def revoke_access(conn, %{
         "conversation_id" => conversation_id,
