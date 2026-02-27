@@ -760,7 +760,14 @@ defmodule LiteskillWeb.SourcesLive do
               )
             end
           rescue
-            e -> {:error, Exception.message(e)}
+            e in [
+              Postgrex.Error,
+              DBConnection.ConnectionError,
+              Ecto.QueryError,
+              RuntimeError,
+              ArgumentError
+            ] ->
+              {:error, Exception.message(e)}
           end
 
         send(lv, {:rag_search_result, result})

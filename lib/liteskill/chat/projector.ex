@@ -76,7 +76,18 @@ defmodule Liteskill.Chat.Projector do
       try do
         project_event(event)
       rescue
-        e ->
+        e in [
+          Postgrex.Error,
+          DBConnection.ConnectionError,
+          Ecto.ConstraintError,
+          Ecto.StaleEntryError,
+          Ecto.InvalidChangesetError,
+          Ecto.Query.CastError,
+          Ecto.ChangeError,
+          KeyError,
+          MatchError,
+          FunctionClauseError
+        ] ->
           Logger.error(
             "Projector failed: stream=#{stream_id} event=#{event.event_type} version=#{event.stream_version} error=#{Exception.message(e)}"
           )

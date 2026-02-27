@@ -191,7 +191,7 @@ defmodule Liteskill.Rag.EmbeddingClient do
         LlmProviders.get_bedrock_credentials()
       rescue
         # coveralls-ignore-start
-        e ->
+        e in [Postgrex.Error, DBConnection.ConnectionError] ->
           Logger.warning("Failed to resolve DB credentials: #{Exception.message(e)}")
           nil
           # coveralls-ignore-stop

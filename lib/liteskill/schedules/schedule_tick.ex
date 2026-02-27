@@ -47,7 +47,7 @@ defmodule Liteskill.Schedules.ScheduleTick do
       |> Oban.insert()
     end)
   rescue
-    e ->
+    e in [Postgrex.Error, DBConnection.ConnectionError, Ecto.QueryError] ->
       Logger.error("ScheduleTick error: #{Exception.message(e)}")
   end
 end
