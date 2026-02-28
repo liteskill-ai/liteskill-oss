@@ -1579,7 +1579,10 @@ defmodule LiteskillWeb.AgentStudioComponents do
                 @run.completed_at && Calendar.strftime(@run.completed_at, "%Y-%m-%dT%H:%M:%S")
               }
             >
-              {format_duration(@run.started_at, @run.completed_at)}
+              <span :if={@run.status in ["completed", "failed"]}>Ran for: </span>{format_duration(
+                @run.started_at,
+                @run.completed_at
+              )}
             </p>
           </div>
         </div>
@@ -1603,8 +1606,8 @@ defmodule LiteskillWeb.AgentStudioComponents do
                 <span class="badge badge-ghost badge-xs">{task.status}</span>
                 <span class="font-medium text-sm">{task.name}</span>
               </div>
-              <span :if={task.duration_ms} class="text-xs text-base-content/50">
-                {task.duration_ms}ms
+              <span :if={task.duration_ms} class="text-xs italic text-base-content/40">
+                Ran for: {format_duration_ms(task.duration_ms)}
               </span>
             </div>
           </div>
@@ -1981,6 +1984,22 @@ defmodule LiteskillWeb.AgentStudioComponents do
   defp log_level_badge("info"), do: "badge-info"
   defp log_level_badge("debug"), do: "badge-ghost"
   defp log_level_badge(_), do: "badge-ghost"
+
+  defp format_duration_ms(ms) when is_integer(ms) and ms < 1000, do: "#{ms}ms"
+
+  defp format_duration_ms(ms) when is_integer(ms) and ms < 60_000 do
+    seconds = ms / 1000
+    :erlang.float_to_binary(seconds, decimals: 2) <> " seconds"
+  end
+
+  defp format_duration_ms(ms) when is_integer(ms) do
+    total_sec = div(ms, 1000)
+    m = div(total_sec, 60)
+    s = rem(total_sec, 60)
+    "#{m}m #{s}s"
+  end
+
+  defp format_duration_ms(_), do: ""
 
   defp format_duration(nil, _), do: "-"
 
