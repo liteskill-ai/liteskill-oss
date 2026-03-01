@@ -43,9 +43,17 @@ defmodule Liteskill.Schedules.ScheduleTick do
     now
     |> Schedules.list_due_schedules()
     |> Enum.each(fn schedule ->
-      %{"schedule_id" => schedule.id, "user_id" => schedule.user_id}
-      |> ScheduleWorker.new()
-      |> Oban.insert()
+      case %{"schedule_id" => schedule.id, "user_id" => schedule.user_id}
+           |> ScheduleWorker.new()
+           |> Oban.insert() do
+        {:ok, _job} ->
+          :ok
+
+        # coveralls-ignore-start — Oban insert failures require Oban/DB to be down
+        {:error, reason} ->
+          Logger.error("Failed to enqueue schedule #{schedule.id}: #{inspect(reason)}")
+          # coveralls-ignore-stop
+      end
     end)
   rescue
     # coveralls-ignore-start — defensive: only reached on transient DB errors

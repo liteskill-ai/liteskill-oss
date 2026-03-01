@@ -696,7 +696,7 @@ defmodule LiteskillWeb.SourcesLive do
     user_id = socket.assigns.current_user.id
 
     case Liteskill.DataSources.start_sync(source.id, user_id) do
-      {:ok, _} ->
+      :ok ->
         case Liteskill.DataSources.get_source(source.id, user_id) do
           {:ok, updated} ->
             {:noreply,

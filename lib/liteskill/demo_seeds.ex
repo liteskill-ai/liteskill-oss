@@ -18,6 +18,11 @@ defmodule Liteskill.DemoSeeds do
 
   require Logger
 
+  @doc "Returns true when demo seed loading is enabled via LOAD_DEMO_SEEDS env var (default: true)."
+  def enabled? do
+    System.get_env("LOAD_DEMO_SEEDS", "true") in ~w(true 1 yes)
+  end
+
   @agent_specs [
     %{
       name: "Intent Agent",
@@ -139,7 +144,15 @@ defmodule Liteskill.DemoSeeds do
       Logger.warning("Demo seeds: admin user not found, skipping")
     end
   rescue
-    e ->
+    e in [
+      Postgrex.Error,
+      DBConnection.ConnectionError,
+      Ecto.ConstraintError,
+      Ecto.InvalidChangesetError,
+      Ecto.QueryError,
+      RuntimeError,
+      ArgumentError
+    ] ->
       Logger.error("Demo seeds failed: #{Exception.message(e)}")
   end
 

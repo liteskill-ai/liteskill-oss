@@ -51,11 +51,6 @@ defmodule LiteskillWeb.PasswordAuthController do
   end
 
   def login(conn, %{"email" => email, "password" => password}) do
-    # Intentional shortcut: allow "admin" as a login alias for the root admin
-    # email. This is a UX convenience for operators who don't want to remember
-    # the full admin@liteskill.local address.
-    email = if email == "admin", do: Accounts.User.admin_email(), else: email
-
     conn_info = SessionHelpers.conn_info(conn)
 
     case Accounts.authenticate_by_email_password(email, password) do

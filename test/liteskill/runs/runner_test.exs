@@ -170,7 +170,7 @@ defmodule Liteskill.Runs.RunnerTest do
       assert "init" in log_steps
       assert "resolve_agents" in log_steps
       assert "create_report" in log_steps
-      assert "crash" in log_steps
+      assert "pipeline" in log_steps
     end
   end
 

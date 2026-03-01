@@ -134,7 +134,7 @@ defmodule Liteskill.DataSources.SyncWorkerTest do
       {:ok, source} =
         DataSources.create_source(%{name: "Queue Test", source_type: "wiki"}, owner.id)
 
-      assert {:ok, _job} = DataSources.start_sync(source.id, owner.id)
+      assert :ok = DataSources.start_sync(source.id, owner.id)
 
       assert_enqueued(
         worker: SyncWorker,

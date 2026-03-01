@@ -184,18 +184,27 @@ defmodule Liteskill.DataSources.SyncWorker do
   end
 
   defp enqueue_document_sync(document_id, source_name, user_id, action, plug) do
-    %{
-      "document_id" => document_id,
-      "source_name" => source_name,
-      "user_id" => user_id,
-      "action" => action,
-      "plug" => plug
-    }
-    |> Oban.Job.new(
-      worker: "Liteskill.Rag.DocumentSyncWorker",
-      queue: :rag_ingest,
-      max_attempts: 3
-    )
-    |> Oban.insert()
+    case %{
+           "document_id" => document_id,
+           "source_name" => source_name,
+           "user_id" => user_id,
+           "action" => action,
+           "plug" => plug
+         }
+         |> Oban.Job.new(
+           worker: "Liteskill.Rag.DocumentSyncWorker",
+           queue: :rag_ingest,
+           max_attempts: 3
+         )
+         |> Oban.insert() do
+      {:ok, _job} ->
+        :ok
+
+      # coveralls-ignore-start — Oban insert failures require Oban/DB to be down
+      {:error, reason} ->
+        Logger.error("Failed to enqueue document sync: #{inspect(reason)}")
+        {:error, :enqueue_failed}
+        # coveralls-ignore-stop
+    end
   end
 end

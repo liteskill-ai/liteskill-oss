@@ -218,7 +218,7 @@ defmodule Liteskill.Chat.StreamRegistryTest do
       conv_id = Ecto.UUID.generate()
 
       # Send the :recover message directly to exercise the handler
-      send(pid, {:recover, conv_id})
+      send(pid, {:recover, conv_id, 0})
 
       # Synchronize — ensures the GenServer processed the message
       _ = :sys.get_state(pid)
@@ -281,7 +281,7 @@ defmodule Liteskill.Chat.StreamRegistryTest do
       assert StreamRegistry.streaming?(conv_id)
 
       # Send a :recover message (simulating a delayed recovery from a crashed old stream)
-      send(registry_pid, {:recover, conv_id})
+      send(registry_pid, {:recover, conv_id, 0})
       # Synchronize — ensure the GenServer processed the message
       _ = :sys.get_state(registry_pid)
 

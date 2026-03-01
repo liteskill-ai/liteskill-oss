@@ -681,7 +681,7 @@ defmodule LiteskillWeb.AgentStudioLive do
 
   @impl true
   def handle_event("remove_opinion", %{"index" => idx}, socket) do
-    idx = String.to_integer(idx)
+    {idx, _} = Integer.parse(idx)
     current = socket.assigns.agent_form.params
     opinions = List.delete_at(current["opinions"] || [], idx)
 
@@ -1092,7 +1092,7 @@ defmodule LiteskillWeb.AgentStudioLive do
   defp decode_opinions(%{"opinions" => entries} = params) when is_map(entries) do
     opinions =
       entries
-      |> Enum.sort_by(fn {idx, _} -> String.to_integer(idx) end)
+      |> Enum.sort_by(fn {idx, _} -> elem(Integer.parse(idx), 0) end)
       |> Enum.reduce(%{}, fn {_idx, %{"key" => k, "value" => v}}, acc ->
         key = String.trim(k)
         if key == "", do: acc, else: Map.put(acc, key, String.trim(v))
@@ -1106,7 +1106,7 @@ defmodule LiteskillWeb.AgentStudioLive do
   defp normalize_opinion_params(%{"opinions" => entries} = params) when is_map(entries) do
     opinions =
       entries
-      |> Enum.sort_by(fn {idx, _} -> String.to_integer(idx) end)
+      |> Enum.sort_by(fn {idx, _} -> elem(Integer.parse(idx), 0) end)
       |> Enum.map(fn {_idx, entry} -> entry end)
 
     %{params | "opinions" => opinions}

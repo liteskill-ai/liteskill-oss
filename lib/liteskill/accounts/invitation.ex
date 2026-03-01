@@ -25,7 +25,7 @@ defmodule Liteskill.Accounts.Invitation do
     invitation
     |> cast(attrs, [:email, :created_by_id])
     |> validate_required([:email])
-    |> validate_format(:email, ~r/@/)
+    |> validate_format(:email, ~r/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
     |> update_change(:email, &String.downcase/1)
     |> put_token()
     |> put_expires_at()

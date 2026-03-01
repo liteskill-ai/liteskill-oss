@@ -130,6 +130,12 @@ defmodule Liteskill.LLM.StreamHandler do
     end
   end
 
+  # Average bytes per token across common LLM tokenizers (conservative estimate).
+  # English text ~4 bytes/token; multilingual or code may differ.
+  @bytes_per_token 4
+  # Reject when estimated tokens exceed this fraction of the context window.
+  @context_usage_threshold 0.95
+
   defp check_context_size(messages, %{context_window: cw}) when is_integer(cw) and cw > 0 do
     estimated_bytes =
       Enum.reduce(messages, 0, fn msg, acc ->
@@ -137,12 +143,12 @@ defmodule Liteskill.LLM.StreamHandler do
         acc + content_byte_size(content)
       end)
 
-    estimated_tokens = div(estimated_bytes, 4)
+    estimated_tokens = div(estimated_bytes, @bytes_per_token)
 
-    if estimated_tokens > cw * 0.95 do
+    if estimated_tokens > cw * @context_usage_threshold do
       {:error,
        {"context_too_large",
-        "Estimated #{estimated_tokens} tokens exceeds #{trunc(cw * 0.95)} token limit (95% of #{cw} context window)"}}
+        "Estimated #{estimated_tokens} tokens exceeds #{trunc(cw * @context_usage_threshold)} token limit (#{trunc(@context_usage_threshold * 100)}% of #{cw} context window)"}}
     else
       :ok
     end
@@ -209,7 +215,7 @@ defmodule Liteskill.LLM.StreamHandler do
 
   defp do_stream_with_retry(stream_id, message_id, _model_id, _messages, opts, retry_count)
        when retry_count >= @max_retries do
-    gateway_checkin(opts, {:error, :retryable, @default_backoff_ms})
+    gateway_checkin(opts, {:error, :non_retryable})
 
     fail_stream(
       stream_id,
@@ -700,34 +706,36 @@ defmodule Liteskill.LLM.StreamHandler do
     approval_topic = "tool_approval:#{stream_id}"
     if !auto_confirm, do: Phoenix.PubSub.subscribe(Liteskill.PubSub, approval_topic)
 
-    Enum.each(parsed_tool_calls, fn tc ->
-      command =
-        {:start_tool_call,
-         %{
-           message_id: message_id,
-           tool_use_id: tc.tool_use_id,
-           tool_name: tc.name,
-           input: tc.input
-         }}
-
-      case Loader.execute(ConversationAggregate, stream_id, command) do
-        {:ok, _state, events} -> Projector.project_events(stream_id, events)
-        # coveralls-ignore-next-line
-        {:error, reason} -> Logger.error("Failed to record tool call start: #{inspect(reason)}")
-      end
-    end)
-
     tool_results =
-      execute_or_await_tool_calls(
-        stream_id,
-        message_id,
-        parsed_tool_calls,
-        auto_confirm,
-        approval_topic,
-        opts
-      )
+      try do
+        Enum.each(parsed_tool_calls, fn tc ->
+          command =
+            {:start_tool_call,
+             %{
+               message_id: message_id,
+               tool_use_id: tc.tool_use_id,
+               tool_name: tc.name,
+               input: tc.input
+             }}
 
-    if !auto_confirm, do: Phoenix.PubSub.unsubscribe(Liteskill.PubSub, approval_topic)
+          case Loader.execute(ConversationAggregate, stream_id, command) do
+            {:ok, _state, events} -> Projector.project_events(stream_id, events)
+            # coveralls-ignore-next-line
+            {:error, reason} -> Logger.error("Failed to record tool call start: #{inspect(reason)}")
+          end
+        end)
+
+        execute_or_await_tool_calls(
+          stream_id,
+          message_id,
+          parsed_tool_calls,
+          auto_confirm,
+          approval_topic,
+          opts
+        )
+      after
+        if !auto_confirm, do: Phoenix.PubSub.unsubscribe(Liteskill.PubSub, approval_topic)
+      end
 
     complete_stream_with_stop_reason(
       stream_id,

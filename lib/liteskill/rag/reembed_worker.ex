@@ -18,6 +18,8 @@ defmodule Liteskill.Rag.ReembedWorker do
   alias Liteskill.Repo
   alias Liteskill.Settings
 
+  require Logger
+
   @batch_size 10
 
   @impl Oban.Worker
@@ -44,11 +46,7 @@ defmodule Liteskill.Rag.ReembedWorker do
             # Self-chain: enqueue next batch if more documents remain
             remaining = Rag.list_documents_for_reembedding(1, 0)
 
-            if remaining != [] do
-              %{"user_id" => user_id, "batch" => batch + 1}
-              |> __MODULE__.new()
-              |> Oban.insert()
-            end
+            if remaining != [], do: enqueue_next_batch(user_id, batch + 1)
 
             :ok
 
@@ -58,6 +56,18 @@ defmodule Liteskill.Rag.ReembedWorker do
       end
     else
       {:cancel, "embedding_disabled"}
+    end
+  end
+
+  defp enqueue_next_batch(user_id, batch) do
+    case %{"user_id" => user_id, "batch" => batch} |> __MODULE__.new() |> Oban.insert() do
+      {:ok, _job} ->
+        :ok
+
+      # coveralls-ignore-start — Oban insert failures require Oban/DB to be down
+      {:error, reason} ->
+        Logger.error("Failed to enqueue re-embed batch #{batch}: #{inspect(reason)}")
+        # coveralls-ignore-stop
     end
   end
 

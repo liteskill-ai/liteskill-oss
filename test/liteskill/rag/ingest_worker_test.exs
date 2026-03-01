@@ -219,8 +219,7 @@ defmodule Liteskill.Rag.IngestWorkerTest do
 
   describe "ingest_url/4" do
     test "enqueues Oban job", %{owner: owner, collection: coll} do
-      assert {:ok, %Oban.Job{}} =
-               Rag.ingest_url(coll.id, "https://example.com/docs", owner.id, plug: true)
+      assert :ok = Rag.ingest_url(coll.id, "https://example.com/docs", owner.id, plug: true)
 
       assert_enqueued(
         worker: IngestWorker,
@@ -233,7 +232,7 @@ defmodule Liteskill.Rag.IngestWorkerTest do
     end
 
     test "passes custom method and headers", %{owner: owner, collection: coll} do
-      assert {:ok, _} =
+      assert :ok =
                Rag.ingest_url(coll.id, "https://example.com/api", owner.id,
                  method: "POST",
                  headers: %{"Authorization" => "Bearer token"},
@@ -250,7 +249,7 @@ defmodule Liteskill.Rag.IngestWorkerTest do
     end
 
     test "passes custom chunk_opts", %{owner: owner, collection: coll} do
-      assert {:ok, _} =
+      assert :ok =
                Rag.ingest_url(coll.id, "https://example.com", owner.id,
                  chunk_size: 500,
                  overlap: 50,

@@ -74,8 +74,8 @@ defmodule Liteskill.Chat.Projector do
 
   # coveralls-ignore-start - only reached on transient DB errors triggering async retry
   @impl true
-  def handle_info({:retry_projection, stream_id, event, attempt}, state) do
-    project_with_retry(stream_id, event, attempt)
+  def handle_info({:retry_projection_batch, stream_id, events, attempt}, state) do
+    do_project_ordered(stream_id, events, attempt)
     {:noreply, state}
   end
 
@@ -90,13 +90,14 @@ defmodule Liteskill.Chat.Projector do
   @projection_max_backoff_ms 5_000
 
   defp do_project(stream_id, events) do
-    Enum.each(events, fn event ->
-      project_with_retry(stream_id, event, 0)
-    end)
+    do_project_ordered(stream_id, events, 0)
   end
 
-  defp project_with_retry(stream_id, event, attempt) do
+  defp do_project_ordered(_stream_id, [], _attempt), do: :ok
+
+  defp do_project_ordered(stream_id, [event | rest], attempt) do
     project_event(event)
+    do_project_ordered(stream_id, rest, 0)
   rescue
     e in [
       Postgrex.Error,
@@ -107,11 +108,11 @@ defmodule Liteskill.Chat.Projector do
       Ecto.Query.CastError,
       Ecto.ChangeError
     ] ->
-      handle_projection_error(stream_id, event, attempt, e)
+      handle_projection_error(stream_id, event, rest, attempt, e)
   end
 
   # coveralls-ignore-start - retry/failure paths require transient DB errors
-  defp handle_projection_error(stream_id, event, attempt, error) when attempt < @max_projection_retries do
+  defp handle_projection_error(stream_id, event, rest, attempt, error) when attempt < @max_projection_retries do
     if retryable_projection_error?(error) do
       backoff_ms = retry_backoff_ms(attempt)
 
@@ -132,14 +133,23 @@ defmodule Liteskill.Chat.Projector do
         }
       )
 
-      Process.send_after(self(), {:retry_projection, stream_id, event, attempt + 1}, backoff_ms)
+      # Schedule retry of the failed event AND all remaining events to preserve ordering
+      Process.send_after(
+        self(),
+        {:retry_projection_batch, stream_id, [event | rest], attempt + 1},
+        backoff_ms
+      )
     else
       log_projection_failure(stream_id, event, attempt, error)
+      # Still attempt remaining events — the failed event was non-retryable (constraint, cast, etc.)
+      do_project_ordered(stream_id, rest, 0)
     end
   end
 
-  defp handle_projection_error(stream_id, event, attempt, error) do
+  defp handle_projection_error(stream_id, event, rest, attempt, error) do
     log_projection_failure(stream_id, event, attempt, error)
+    # Exhausted retries for this event — skip it and continue with rest
+    do_project_ordered(stream_id, rest, 0)
   end
 
   defp log_projection_failure(stream_id, event, attempt, error) do
@@ -438,7 +448,21 @@ defmodule Liteskill.Chat.Projector do
         Event
         |> order_by([e], asc: e.inserted_at, asc: e.stream_version)
         |> Repo.stream(max_rows: 500)
-        |> Enum.each(&project_event/1)
+        # coveralls-ignore-start — rebuild rescue requires transient DB errors
+        |> Enum.each(fn event ->
+          try do
+            project_event(event)
+          rescue
+            e ->
+              Logger.error(
+                "Projector rebuild failed: event=#{event.event_type} " <>
+                  "stream=#{event.stream_id} version=#{event.stream_version} " <>
+                  "error=#{Exception.message(e)}"
+              )
+          end
+        end)
+
+        # coveralls-ignore-stop
       end,
       timeout: :infinity
     )

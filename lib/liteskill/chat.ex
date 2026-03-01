@@ -57,7 +57,9 @@ defmodule Liteskill.Chat do
             {params[:model_id], nil}
 
           llm_model_id ->
-            case Liteskill.LlmModels.get_model(llm_model_id, params.user_id) do
+            user_id = params[:user_id] || params["user_id"]
+
+            case Liteskill.LlmModels.get_model(llm_model_id, user_id) do
               {:ok, %{model_id: mid}} -> {mid, llm_model_id}
               {:error, _} -> {params[:model_id], nil}
             end
@@ -76,7 +78,7 @@ defmodule Liteskill.Chat do
       {:create_conversation,
        %{
          conversation_id: conversation_id,
-         user_id: params.user_id,
+         user_id: params[:user_id] || params["user_id"],
          title: params[:title] || "New Conversation",
          model_id: model_id,
          system_prompt: params[:system_prompt],
@@ -89,7 +91,7 @@ defmodule Liteskill.Chat do
         conversation = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
 
         # Auto-create owner ACL in entity_acls
-        {:ok, _} = Authorization.create_owner_acl("conversation", conversation.id, params.user_id)
+        {:ok, _} = Authorization.create_owner_acl("conversation", conversation.id, params[:user_id] || params["user_id"])
 
         {:ok, conversation}
 

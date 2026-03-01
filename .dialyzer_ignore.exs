@@ -27,6 +27,7 @@
   {"lib/liteskill/mcp_servers/client.ex", :call_without_opaque},
   {"lib/liteskill/rbac/permissions.ex", :call_without_opaque},
   {"lib/liteskill/runs/runner.ex", :call_without_opaque},
+  {"lib/liteskill/llm/tool_utils.ex", :call_without_opaque},
 
   # -- 4. Jido library upstream issues --
   {"deps/jido/lib/jido/agent.ex", :pattern_match},

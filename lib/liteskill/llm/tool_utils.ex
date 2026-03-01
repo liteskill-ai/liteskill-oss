@@ -44,6 +44,9 @@ defmodule Liteskill.LLM.ToolUtils do
   - MCP server struct — calls `McpClient.call_tool/4`
   - `nil` — returns `{:error, "No server configured for tool <name>"}`
   """
+  # Timeout for MCP tool execution (external HTTP calls).
+  @mcp_tool_timeout_ms 120_000
+
   def execute_tool(%{builtin: module}, tool_name, input, opts) do
     context = Keyword.take(opts, [:user_id])
     module.call_tool(tool_name, input, context)
@@ -51,7 +54,18 @@ defmodule Liteskill.LLM.ToolUtils do
 
   def execute_tool(server, tool_name, input, opts) when not is_nil(server) do
     req_opts = Keyword.take(opts, [:plug])
-    McpClient.call_tool(server, tool_name, input, req_opts)
+    timeout = Keyword.get(opts, :tool_timeout_ms, @mcp_tool_timeout_ms)
+
+    task =
+      Task.Supervisor.async_nolink(Liteskill.TaskSupervisor, fn ->
+        McpClient.call_tool(server, tool_name, input, req_opts)
+      end)
+
+    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} -> result
+      # coveralls-ignore-next-line — requires actual MCP server timeout
+      nil -> {:error, "Tool #{tool_name} timed out after #{timeout}ms"}
+    end
   end
 
   def execute_tool(nil, tool_name, _input, _opts) do

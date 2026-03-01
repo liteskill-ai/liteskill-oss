@@ -311,7 +311,7 @@ defmodule LiteskillWeb.AuthLive do
   end
 
   defp handle_login(params, socket) do
-    email = expand_admin_shorthand(params["email"])
+    email = params["email"]
 
     case Accounts.authenticate_by_email_password(email, params["password"]) do
       {:ok, user} ->
@@ -347,9 +347,6 @@ defmodule LiteskillWeb.AuthLive do
         {:noreply, assign(socket, error: action_error("create account", reason))}
     end
   end
-
-  defp expand_admin_shorthand("admin"), do: Liteskill.Accounts.User.admin_email()
-  defp expand_admin_shorthand(email), do: email
 
   defp page_title(:register, _), do: "Create Account"
   defp page_title(:login, _), do: "Welcome Back"

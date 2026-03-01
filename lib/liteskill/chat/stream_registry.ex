@@ -18,6 +18,7 @@ defmodule Liteskill.Chat.StreamRegistry do
 
   @table __MODULE__
   @default_recovery_delay_ms 250
+  @max_recovery_retries 3
 
   # --- Public API ---
 
@@ -126,7 +127,7 @@ defmodule Liteskill.Chat.StreamRegistry do
           ArgumentError -> :ok
         end
 
-        Process.send_after(self(), {:recover, conv_id}, state.recovery_delay_ms)
+        Process.send_after(self(), {:recover, conv_id, 0}, state.recovery_delay_ms)
         {:noreply, %{state | monitors: monitors}}
 
       {nil, _} ->
@@ -135,13 +136,15 @@ defmodule Liteskill.Chat.StreamRegistry do
     end
   end
 
-  def handle_info({:recover, conv_id}, state) do
+  def handle_info({:recover, conv_id, attempt}, state) do
     # Skip recovery if a new stream task has already registered for this
     # conversation. Without this guard, the delayed recovery would fail_stream
     # the *new* stream's message, not the old one that crashed.
     if streaming?(conv_id) do
       Logger.debug("StreamRegistry: skipping recovery for #{conv_id} — new stream active")
     else
+      recovery_delay = state.recovery_delay_ms
+
       Task.Supervisor.start_child(Liteskill.TaskSupervisor, fn ->
         try do
           Liteskill.Chat.recover_stream_by_id(conv_id)
@@ -155,7 +158,26 @@ defmodule Liteskill.Chat.StreamRegistry do
             Ecto.StaleEntryError,
             Ecto.InvalidChangesetError
           ] ->
-            Logger.warning("StreamRegistry auto-recovery failed for #{conv_id}: #{Exception.message(e)}")
+            if attempt < @max_recovery_retries do
+              backoff = recovery_delay * Integer.pow(2, attempt)
+
+              Logger.warning(
+                "StreamRegistry auto-recovery failed for #{conv_id} " <>
+                  "(attempt #{attempt + 1}/#{@max_recovery_retries + 1}): #{Exception.message(e)}, " <>
+                  "retrying in #{backoff}ms"
+              )
+
+              Process.send_after(
+                Process.whereis(__MODULE__),
+                {:recover, conv_id, attempt + 1},
+                backoff
+              )
+            else
+              Logger.error(
+                "StreamRegistry auto-recovery exhausted for #{conv_id} " <>
+                  "after #{attempt + 1} attempts: #{Exception.message(e)}"
+              )
+            end
 
             # coveralls-ignore-stop
         end

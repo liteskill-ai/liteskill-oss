@@ -42,6 +42,8 @@ defmodule Liteskill.Rag do
   alias Liteskill.Rag.Source
   alias Liteskill.Repo
 
+  require Logger
+
   # --- Collections ---
 
   def create_collection(attrs, user_id) do
@@ -627,7 +629,16 @@ defmodule Liteskill.Rag do
         "plug" => plug
       }
 
-      args |> IngestWorker.new() |> Oban.insert()
+      case args |> IngestWorker.new() |> Oban.insert() do
+        {:ok, _job} ->
+          :ok
+
+        # coveralls-ignore-start — Oban insert failures require Oban/DB to be down
+        {:error, reason} ->
+          Logger.error("Failed to enqueue ingest for #{url}: #{inspect(reason)}")
+          {:error, :enqueue_failed}
+          # coveralls-ignore-stop
+      end
     end
   end
 

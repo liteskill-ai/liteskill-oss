@@ -61,7 +61,7 @@ Command → Aggregate → Event → EventStore (append) → PubSub broadcast →
 
 ## Testing
 
-- **100% coverage required** (ExCoveralls). Use `# coveralls-ignore-start` / `# coveralls-ignore-stop` for genuinely unreachable branches.
+- **Best-effort 100% coverage** (ExCoveralls, `minimum_coverage: 100`). Many UI/LiveView files are excluded via `skip_files` in `coveralls.json`, so enforcement applies only to the non-skipped subset. Use `# coveralls-ignore-start` / `# coveralls-ignore-stop` for genuinely unreachable branches, and always include a comment explaining **why** the code is unreachable or untestable (e.g. `# coveralls-ignore-start — requires transient DB error to trigger`).
 - **Req.Test for HTTP mocking**: Pass `plug: {Req.Test, ModuleName}` option. Note: Req.Test does NOT trigger `into:` callbacks.
 - **Projector runs in supervision tree** — never `start_supervised!` it in tests.
 - **Process synchronization after writes**: Chat context write functions include `Process.sleep(50)`. In tests, prefer `_ = :sys.get_state(pid)` over additional sleeps.

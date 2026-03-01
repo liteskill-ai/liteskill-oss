@@ -77,14 +77,20 @@ defmodule Liteskill.Chat.Events do
             ArgumentError -> key
           end
 
-        {atom_key, value}
+        {atom_key, atomize_value(value)}
 
       {key, value} when is_atom(key) ->
-        {key, value}
+        {key, atomize_value(value)}
 
       # coveralls-ignore-next-line
       {key, value} ->
-        {key, value}
+        {key, atomize_value(value)}
     end)
   end
+
+  # coveralls-ignore-start — recursive arms only triggered by nested event data
+  defp atomize_value(map) when is_map(map) and not is_struct(map), do: atomize_keys(map)
+  defp atomize_value(list) when is_list(list), do: Enum.map(list, &atomize_value/1)
+  # coveralls-ignore-stop
+  defp atomize_value(value), do: value
 end

@@ -30,7 +30,7 @@ defmodule Liteskill.Application do
                  Liteskill.Rbac.ensure_system_roles()
                  Liteskill.LlmProviders.ensure_env_providers()
                  Liteskill.Settings.get()
-                 Liteskill.DemoSeeds.ensure_demo_agents()
+                 if Liteskill.DemoSeeds.enabled?(), do: Liteskill.DemoSeeds.ensure_demo_agents()
 
                  if Liteskill.SingleUser.enabled?(), do: Liteskill.SingleUser.auto_provision_admin()
                end}

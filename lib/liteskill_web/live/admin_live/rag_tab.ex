@@ -9,6 +9,8 @@ defmodule LiteskillWeb.AdminLive.RagTab do
   alias Liteskill.LlmModels
   alias Liteskill.Settings
 
+  require Logger
+
   def assigns do
     [
       rag_embedding_models: [],
@@ -86,11 +88,7 @@ defmodule LiteskillWeb.AdminLive.RagTab do
           {:ok, _settings} ->
             Liteskill.Rag.clear_all_embeddings()
 
-            if selected_id do
-              %{"user_id" => user_id}
-              |> Liteskill.Rag.ReembedWorker.new()
-              |> Oban.insert()
-            end
+            if selected_id, do: enqueue_reembed(user_id)
 
             socket =
               socket
@@ -280,5 +278,17 @@ defmodule LiteskillWeb.AdminLive.RagTab do
       <% end %>
     </div>
     """
+  end
+
+  defp enqueue_reembed(user_id) do
+    case %{"user_id" => user_id} |> Liteskill.Rag.ReembedWorker.new() |> Oban.insert() do
+      {:ok, _job} ->
+        :ok
+
+      # coveralls-ignore-start — Oban insert failures require Oban/DB to be down
+      {:error, reason} ->
+        Logger.error("Failed to enqueue re-embed job: #{inspect(reason)}")
+        # coveralls-ignore-stop
+    end
   end
 end

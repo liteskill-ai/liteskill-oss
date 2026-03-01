@@ -12,6 +12,8 @@ defmodule Liteskill.LlmGateway.TokenBucket do
         window_ms: 60_000  # window duration
   """
 
+  require Logger
+
   @table :liteskill_llm_token_bucket
   @default_limit 60
   @default_window_ms 60_000
@@ -48,28 +50,36 @@ defmodule Liteskill.LlmGateway.TokenBucket do
       try do
         :ets.update_counter(@table, bucket_key, {2, 1}, {bucket_key, 0})
       rescue
-        # coveralls-ignore-next-line
-        ArgumentError -> 0
+        # coveralls-ignore-start — ETS table not yet created during boot
+        ArgumentError ->
+          Logger.warning("TokenBucket: ETS table not available, rejecting request")
+          :unavailable
+          # coveralls-ignore-stop
       end
 
-    if count <= limit do
-      :telemetry.execute(
-        [:liteskill, :llm_gateway, :checkout],
-        %{count: 1},
-        %{user_id: user_id, model_id: model_id}
-      )
-
-      :ok
+    if count == :unavailable do
+      # coveralls-ignore-next-line — only reachable if ETS table missing during boot
+      {:error, :rate_limited, window_ms}
     else
-      remaining_ms = window_ms - Integer.mod(System.monotonic_time(:millisecond), window_ms)
+      if count <= limit do
+        :telemetry.execute(
+          [:liteskill, :llm_gateway, :checkout],
+          %{count: 1},
+          %{user_id: user_id, model_id: model_id}
+        )
 
-      :telemetry.execute(
-        [:liteskill, :llm_gateway, :rate_limited],
-        %{count: 1},
-        %{user_id: user_id, model_id: model_id}
-      )
+        :ok
+      else
+        remaining_ms = window_ms - Integer.mod(System.monotonic_time(:millisecond), window_ms)
 
-      {:error, :rate_limited, remaining_ms}
+        :telemetry.execute(
+          [:liteskill, :llm_gateway, :rate_limited],
+          %{count: 1},
+          %{user_id: user_id, model_id: model_id}
+        )
+
+        {:error, :rate_limited, remaining_ms}
+      end
     end
   end
 

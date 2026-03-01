@@ -89,7 +89,7 @@ defmodule Liteskill.Runs.Runner do
   end
 
   defp run_pipeline(_run, [], _report_id, _context) do
-    raise "No agents assigned — cannot run without at least one agent"
+    {:error, "No agents assigned — cannot run without at least one agent"}
   end
 
   defp run_pipeline(run, agents, report_id, context) do
@@ -454,6 +454,7 @@ defmodule Liteskill.Runs.Runner do
     # coveralls-ignore-start
     e in [Postgrex.Error, DBConnection.ConnectionError, Ecto.StaleEntryError] ->
       Logger.error("Failed to update run #{run_id} after #{step}: #{Exception.message(e)}")
+      {:error, :update_failed}
       # coveralls-ignore-stop
   end
 

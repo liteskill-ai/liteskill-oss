@@ -641,11 +641,11 @@ defmodule LiteskillWeb.WikiLive do
 
     consumed =
       consume_uploaded_entries(socket, :wiki_import, fn %{path: path}, _entry ->
-        {:ok, File.read!(path)}
+        {:ok, File.read(path)}
       end)
 
     case consumed do
-      [zip_binary] ->
+      [{:ok, zip_binary}] ->
         opts = if title == "", do: [], else: [space_title: title]
 
         case Liteskill.DataSources.WikiImport.import_space(zip_binary, user_id, opts) do

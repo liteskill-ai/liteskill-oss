@@ -57,9 +57,9 @@ defmodule LiteskillWeb.Router do
     get "/openrouter/callback", OpenRouterController, :callback
   end
 
-  # Public LiveView routes
+  # Public LiveView routes (rate-limited to prevent brute force)
   scope "/", LiteskillWeb do
-    pipe_through [:browser]
+    pipe_through [:browser, :auth_rate_limit]
 
     live_session :auth,
       on_mount: [{LiveAuth, :redirect_if_authenticated}] do

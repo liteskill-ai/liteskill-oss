@@ -30,6 +30,8 @@ defmodule Liteskill.DataSources do
   alias Liteskill.DataSources.SyncWorker
   alias Liteskill.Repo
 
+  require Logger
+
   # --- Source Config Fields ---
 
   @source_config_fields %{
@@ -702,9 +704,18 @@ defmodule Liteskill.DataSources do
   # --- Sync Pipeline ---
 
   def start_sync(source_id, user_id) do
-    %{"source_id" => source_id, "user_id" => user_id}
-    |> SyncWorker.new()
-    |> Oban.insert()
+    case %{"source_id" => source_id, "user_id" => user_id}
+         |> SyncWorker.new()
+         |> Oban.insert() do
+      {:ok, _job} ->
+        :ok
+
+      # coveralls-ignore-start — Oban insert failures require Oban/DB to be down
+      {:error, reason} ->
+        Logger.error("Failed to enqueue sync for source #{source_id}: #{inspect(reason)}")
+        {:error, :enqueue_failed}
+        # coveralls-ignore-stop
+    end
   end
 
   def get_document_by_external_id(source_ref, external_id) do
@@ -826,13 +837,22 @@ defmodule Liteskill.DataSources do
   end
 
   def enqueue_wiki_sync(wiki_document_id, user_id, action) when action in ["upsert", "delete"] do
-    %{
-      "wiki_document_id" => wiki_document_id,
-      "user_id" => user_id,
-      "action" => action
-    }
-    |> Oban.Job.new(worker: "Liteskill.Rag.WikiSyncWorker", queue: :rag_ingest, max_attempts: 3)
-    |> Oban.insert()
+    case %{
+           "wiki_document_id" => wiki_document_id,
+           "user_id" => user_id,
+           "action" => action
+         }
+         |> Oban.Job.new(worker: "Liteskill.Rag.WikiSyncWorker", queue: :rag_ingest, max_attempts: 3)
+         |> Oban.insert() do
+      {:ok, _job} ->
+        :ok
+
+      # coveralls-ignore-start — Oban insert failures require Oban/DB to be down
+      {:error, reason} ->
+        Logger.error("Failed to enqueue wiki sync for #{wiki_document_id}: #{inspect(reason)}")
+        {:error, :enqueue_failed}
+        # coveralls-ignore-stop
+    end
   end
 
   def enqueue_index_source(source_ref, user_id) do
