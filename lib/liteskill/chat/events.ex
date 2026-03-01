@@ -5,20 +5,18 @@ defmodule Liteskill.Chat.Events do
   Maps event_type strings to struct modules and handles serialization/deserialization.
   """
 
-  alias Liteskill.Chat.Events.{
-    ConversationCreated,
-    UserMessageAdded,
-    AssistantStreamStarted,
-    AssistantChunkReceived,
-    AssistantStreamCompleted,
-    AssistantStreamFailed,
-    ToolCallStarted,
-    ToolCallCompleted,
-    ConversationForked,
-    ConversationTitleUpdated,
-    ConversationArchived,
-    ConversationTruncated
-  }
+  alias Liteskill.Chat.Events.AssistantChunkReceived
+  alias Liteskill.Chat.Events.AssistantStreamCompleted
+  alias Liteskill.Chat.Events.AssistantStreamFailed
+  alias Liteskill.Chat.Events.AssistantStreamStarted
+  alias Liteskill.Chat.Events.ConversationArchived
+  alias Liteskill.Chat.Events.ConversationCreated
+  alias Liteskill.Chat.Events.ConversationForked
+  alias Liteskill.Chat.Events.ConversationTitleUpdated
+  alias Liteskill.Chat.Events.ConversationTruncated
+  alias Liteskill.Chat.Events.ToolCallCompleted
+  alias Liteskill.Chat.Events.ToolCallStarted
+  alias Liteskill.Chat.Events.UserMessageAdded
 
   @event_types %{
     "ConversationCreated" => ConversationCreated,

@@ -12,6 +12,8 @@ defmodule LiteskillWeb.SourcesComponents do
 
   import LiteskillWeb.CoreComponents, only: [icon: 1]
 
+  alias Phoenix.HTML.Form
+
   attr :source, :map, required: true
   attr :current_user, :map, required: true
 
@@ -234,8 +236,7 @@ defmodule LiteskillWeb.SourcesComponents do
 
   def sources_sidebar(assigns) do
     deduped =
-      assigns.sources
-      |> Enum.uniq_by(fn s -> s["document_id"] end)
+      Enum.uniq_by(assigns.sources, fn s -> s["document_id"] end)
 
     assigns = assign(assigns, :deduped, deduped)
 
@@ -758,9 +759,9 @@ defmodule LiteskillWeb.SourcesComponents do
   end
 
   defp required_config_keys(source_type) do
-    Liteskill.DataSources.config_fields_for(source_type)
-    |> Enum.map(& &1.key)
-    |> MapSet.new()
+    source_type
+    |> Liteskill.DataSources.config_fields_for()
+    |> MapSet.new(& &1.key)
   end
 
   defp can_delete_source?(source, user) do
@@ -770,9 +771,9 @@ defmodule LiteskillWeb.SourcesComponents do
   end
 
   defp form_value(form, key) do
-    Phoenix.HTML.Form.input_value(form, String.to_existing_atom(key))
+    Form.input_value(form, String.to_existing_atom(key))
   rescue
-    ArgumentError -> Phoenix.HTML.Form.input_value(form, key)
+    ArgumentError -> Form.input_value(form, key)
   end
 
   defp source_icon(%{icon: icon}), do: icon

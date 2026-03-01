@@ -35,7 +35,7 @@ defmodule Liteskill.Accounts.AuthEventTest do
       assert event.ip_address == "192.168.1.1"
       assert event.user_agent == "TestBrowser/1.0"
       assert event.metadata == %{"method" => "password"}
-      assert event.inserted_at != nil
+      assert event.inserted_at
     end
 
     test "creates an auth event without user_id (failed login with unknown email)" do

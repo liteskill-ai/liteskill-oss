@@ -1,12 +1,12 @@
 defmodule Liteskill.BuiltinSources do
-  use Boundary, top_level?: true, deps: [], exports: [Wiki]
-
   @moduledoc """
   Behaviour and registry for built-in data sources.
 
   Built-in sources are data sources that exist in code (no DB row),
   appearing alongside user-created DB sources in the sources listing.
   """
+
+  use Boundary, top_level?: true, deps: [], exports: [Wiki]
 
   @callback id() :: String.t()
   @callback name() :: String.t()

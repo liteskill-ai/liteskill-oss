@@ -1,14 +1,14 @@
 defmodule Liteskill.LlmModelsTest do
   use Liteskill.DataCase, async: false
 
+  import Ecto.Query
+
   alias Liteskill.Authorization.EntityAcl
   alias Liteskill.LlmModels
   alias Liteskill.LlmModels.LlmModel
   alias Liteskill.LlmProviders
   alias Liteskill.LlmProviders.LlmProvider
   alias Liteskill.Rbac
-
-  import Ecto.Query
 
   setup do
     # Ensure RBAC system roles exist
@@ -23,7 +23,7 @@ defmodule Liteskill.LlmModelsTest do
       })
 
     # Give admin the Instance Admin role (which has "*" permission)
-    [admin_role] = Rbac.list_roles() |> Enum.filter(&(&1.name == "Instance Admin"))
+    [admin_role] = Enum.filter(Rbac.list_roles(), &(&1.name == "Instance Admin"))
     {:ok, _} = Rbac.assign_role_to_user(admin.id, admin_role.id)
 
     {:ok, other} =
@@ -64,31 +64,31 @@ defmodule Liteskill.LlmModelsTest do
     end
 
     test "invalid without name", %{admin: admin, provider: provider} do
-      attrs = valid_attrs(admin.id, provider.id) |> Map.delete(:name)
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.delete(:name)
       changeset = LlmModel.changeset(%LlmModel{}, attrs)
       refute changeset.valid?
     end
 
     test "invalid without provider_id", %{admin: admin, provider: provider} do
-      attrs = valid_attrs(admin.id, provider.id) |> Map.delete(:provider_id)
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.delete(:provider_id)
       changeset = LlmModel.changeset(%LlmModel{}, attrs)
       refute changeset.valid?
     end
 
     test "invalid without model_id", %{admin: admin, provider: provider} do
-      attrs = valid_attrs(admin.id, provider.id) |> Map.delete(:model_id)
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.delete(:model_id)
       changeset = LlmModel.changeset(%LlmModel{}, attrs)
       refute changeset.valid?
     end
 
     test "invalid model_type rejected", %{admin: admin, provider: provider} do
-      attrs = valid_attrs(admin.id, provider.id) |> Map.put(:model_type, "invalid_type")
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.put(:model_type, "invalid_type")
       changeset = LlmModel.changeset(%LlmModel{}, attrs)
       refute changeset.valid?
     end
 
     test "invalid status rejected", %{admin: admin, provider: provider} do
-      attrs = valid_attrs(admin.id, provider.id) |> Map.put(:status, "deleted")
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.put(:status, "deleted")
       changeset = LlmModel.changeset(%LlmModel{}, attrs)
       refute changeset.valid?
     end
@@ -115,16 +115,15 @@ defmodule Liteskill.LlmModelsTest do
 
       # No owner ACL — RBAC handles management, explicit ACLs handle usage
       acl =
-        Repo.one(
-          from a in EntityAcl, where: a.entity_type == "llm_model" and a.entity_id == ^model.id
-        )
+        Repo.one(from a in EntityAcl, where: a.entity_type == "llm_model" and a.entity_id == ^model.id)
 
       assert acl == nil
     end
 
     test "creates model with all optional fields", %{admin: admin, provider: provider} do
       attrs =
-        valid_attrs(admin.id, provider.id)
+        admin.id
+        |> valid_attrs(provider.id)
         |> Map.merge(%{
           model_config: %{"max_tokens" => 4096},
           model_type: "embedding",
@@ -140,7 +139,7 @@ defmodule Liteskill.LlmModelsTest do
     end
 
     test "fails with invalid attrs", %{admin: admin, provider: provider} do
-      attrs = valid_attrs(admin.id, provider.id) |> Map.delete(:name)
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.delete(:name)
       assert {:error, _changeset} = LlmModels.create_model(attrs)
     end
   end
@@ -229,7 +228,7 @@ defmodule Liteskill.LlmModelsTest do
       other: other,
       provider: provider
     } do
-      attrs = valid_attrs(admin.id, provider.id) |> Map.put(:instance_wide, true)
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.put(:instance_wide, true)
       {:ok, _model} = LlmModels.create_model(attrs)
 
       models = LlmModels.list_models(other.id)
@@ -258,13 +257,13 @@ defmodule Liteskill.LlmModelsTest do
 
     test "returns models ordered by name", %{admin: admin, provider: provider} do
       {:ok, m1} =
-        LlmModels.create_model(valid_attrs(admin.id, provider.id) |> Map.put(:name, "Zzz Model"))
+        admin.id |> valid_attrs(provider.id) |> Map.put(:name, "Zzz Model") |> LlmModels.create_model()
 
       {:ok, m2} =
-        LlmModels.create_model(
-          valid_attrs(admin.id, provider.id)
-          |> Map.merge(%{name: "Aaa Model", model_id: "aaa-model"})
-        )
+        admin.id
+        |> valid_attrs(provider.id)
+        |> Map.merge(%{name: "Aaa Model", model_id: "aaa-model"})
+        |> LlmModels.create_model()
 
       # Grant usage access so they appear in the list
       {:ok, _} = LlmModels.grant_usage(m1.id, admin.id, admin.id)
@@ -281,10 +280,10 @@ defmodule Liteskill.LlmModelsTest do
       {:ok, active} = LlmModels.create_model(valid_attrs(admin.id, provider.id))
 
       {:ok, _inactive} =
-        LlmModels.create_model(
-          valid_attrs(admin.id, provider.id)
-          |> Map.merge(%{status: "inactive", model_id: "inactive-model"})
-        )
+        admin.id
+        |> valid_attrs(provider.id)
+        |> Map.merge(%{status: "inactive", model_id: "inactive-model"})
+        |> LlmModels.create_model()
 
       {:ok, _} = LlmModels.grant_usage(active.id, admin.id, admin.id)
 
@@ -308,10 +307,10 @@ defmodule Liteskill.LlmModelsTest do
       {:ok, inference} = LlmModels.create_model(valid_attrs(admin.id, provider.id))
 
       {:ok, embedding} =
-        LlmModels.create_model(
-          valid_attrs(admin.id, provider.id)
-          |> Map.merge(%{model_type: "embedding", model_id: "embed-model"})
-        )
+        admin.id
+        |> valid_attrs(provider.id)
+        |> Map.merge(%{model_type: "embedding", model_id: "embed-model"})
+        |> LlmModels.create_model()
 
       # Grant usage access
       {:ok, _} = LlmModels.grant_usage(inference.id, admin.id, admin.id)
@@ -333,10 +332,10 @@ defmodule Liteskill.LlmModelsTest do
       {:ok, inference} = LlmModels.create_model(valid_attrs(admin.id, provider.id))
 
       {:ok, embedding} =
-        LlmModels.create_model(
-          valid_attrs(admin.id, provider.id)
-          |> Map.merge(%{model_type: "embedding", model_id: "embed-model"})
-        )
+        admin.id
+        |> valid_attrs(provider.id)
+        |> Map.merge(%{model_type: "embedding", model_id: "embed-model"})
+        |> LlmModels.create_model()
 
       {:ok, _} = LlmModels.grant_usage(inference.id, admin.id, admin.id)
       {:ok, _} = LlmModels.grant_usage(embedding.id, admin.id, admin.id)
@@ -406,7 +405,7 @@ defmodule Liteskill.LlmModelsTest do
       other: other,
       provider: provider
     } do
-      attrs = valid_attrs(admin.id, provider.id) |> Map.put(:instance_wide, true)
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.put(:instance_wide, true)
       {:ok, model} = LlmModels.create_model(attrs)
 
       assert {:ok, _} = LlmModels.get_model(model.id, other.id)
@@ -466,8 +465,8 @@ defmodule Liteskill.LlmModelsTest do
                provider: :amazon_bedrock
              }
 
-      assert Keyword.get(opts, :provider_options) |> Keyword.get(:region) == "us-west-2"
-      assert Keyword.get(opts, :provider_options) |> Keyword.get(:use_converse) == true
+      assert opts |> Keyword.get(:provider_options) |> Keyword.get(:region) == "us-west-2"
+      assert opts |> Keyword.get(:provider_options) |> Keyword.get(:use_converse) == true
       assert Keyword.get(opts, :api_key) == "my-token"
     end
 
@@ -481,7 +480,7 @@ defmodule Liteskill.LlmModelsTest do
       model = %LlmModel{model_id: "model-id", provider: provider}
 
       {_model_spec, opts} = LlmModels.build_provider_options(model)
-      assert Keyword.get(opts, :provider_options) |> Keyword.get(:region) == "us-east-1"
+      assert opts |> Keyword.get(:provider_options) |> Keyword.get(:region) == "us-east-1"
     end
 
     test "amazon_bedrock handles nil provider_config" do
@@ -494,7 +493,7 @@ defmodule Liteskill.LlmModelsTest do
       model = %LlmModel{model_id: "model-id", provider: provider}
 
       {_model_spec, opts} = LlmModels.build_provider_options(model)
-      assert Keyword.get(opts, :provider_options) |> Keyword.get(:region) == "us-east-1"
+      assert opts |> Keyword.get(:provider_options) |> Keyword.get(:region) == "us-east-1"
     end
 
     test "azure with deployment config" do
@@ -771,7 +770,7 @@ defmodule Liteskill.LlmModelsTest do
       result = Liteskill.LLM.available_models(admin.id)
       assert is_list(result)
       assert length(result) == 1
-      assert %Liteskill.LlmModels.LlmModel{} = hd(result)
+      assert %LlmModel{} = hd(result)
     end
 
     test "returns empty list when no DB models configured", %{other: other} do
@@ -783,10 +782,10 @@ defmodule Liteskill.LlmModelsTest do
       {:ok, inference} = LlmModels.create_model(valid_attrs(admin.id, provider.id))
 
       {:ok, embedding} =
-        LlmModels.create_model(
-          valid_attrs(admin.id, provider.id)
-          |> Map.merge(%{model_type: "embedding", model_id: "embed-model"})
-        )
+        admin.id
+        |> valid_attrs(provider.id)
+        |> Map.merge(%{model_type: "embedding", model_id: "embed-model"})
+        |> LlmModels.create_model()
 
       {:ok, _} = LlmModels.grant_usage(inference.id, admin.id, admin.id)
       {:ok, _} = LlmModels.grant_usage(embedding.id, admin.id, admin.id)
@@ -846,10 +845,10 @@ defmodule Liteskill.LlmModelsTest do
       {:ok, _active} = LlmModels.create_model(valid_attrs(admin.id, provider.id))
 
       {:ok, _inactive} =
-        LlmModels.create_model(
-          valid_attrs(admin.id, provider.id)
-          |> Map.merge(%{status: "inactive", model_id: "inactive-model"})
-        )
+        admin.id
+        |> valid_attrs(provider.id)
+        |> Map.merge(%{status: "inactive", model_id: "inactive-model"})
+        |> LlmModels.create_model()
 
       models = LlmModels.list_all_active_models()
       active_names = Enum.map(models, & &1.name)
@@ -860,10 +859,10 @@ defmodule Liteskill.LlmModelsTest do
       {:ok, _inference} = LlmModels.create_model(valid_attrs(admin.id, provider.id))
 
       {:ok, _embedding} =
-        LlmModels.create_model(
-          valid_attrs(admin.id, provider.id)
-          |> Map.merge(%{model_type: "embedding", model_id: "embed-model"})
-        )
+        admin.id
+        |> valid_attrs(provider.id)
+        |> Map.merge(%{model_type: "embedding", model_id: "embed-model"})
+        |> LlmModels.create_model()
 
       models = LlmModels.list_all_active_models(model_type: "embedding")
       assert Enum.all?(models, &(&1.model_type == "embedding"))
@@ -982,10 +981,10 @@ defmodule Liteskill.LlmModelsTest do
         })
 
       {:ok, other_model} =
-        LlmModels.create_model(
-          valid_attrs(other.id, other_provider.id)
-          |> Map.put(:name, "Other's Model")
-        )
+        other.id
+        |> valid_attrs(other_provider.id)
+        |> Map.put(:name, "Other's Model")
+        |> LlmModels.create_model()
 
       owned = LlmModels.list_owned_models(other.id)
       assert length(owned) == 1
@@ -1032,7 +1031,7 @@ defmodule Liteskill.LlmModelsTest do
     test "model_config is encrypted and decrypted", %{admin: admin, provider: provider} do
       config = %{"max_tokens" => 4096, "temperature" => 0.7}
 
-      attrs = valid_attrs(admin.id, provider.id) |> Map.put(:model_config, config)
+      attrs = admin.id |> valid_attrs(provider.id) |> Map.put(:model_config, config)
       {:ok, model} = LlmModels.create_model(attrs)
 
       reloaded = Repo.get!(LlmModel, model.id)

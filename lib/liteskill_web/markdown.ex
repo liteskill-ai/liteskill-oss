@@ -3,6 +3,8 @@ defmodule LiteskillWeb.Markdown do
   Converts Markdown content to safe HTML for rendering in the chat UI.
   """
 
+  alias Phoenix.HTML.Safe
+
   @mdex_opts [
     extension: [
       table: true,
@@ -62,7 +64,9 @@ defmodule LiteskillWeb.Markdown do
     {cleaned, placeholders} = extract_visual_blocks(markdown)
 
     html =
-      MDEx.new(Keyword.merge(@mdex_opts, streaming: true, markdown: cleaned))
+      @mdex_opts
+      |> Keyword.merge(streaming: true, markdown: cleaned)
+      |> MDEx.new()
       |> MDEx.to_html!()
 
     {:safe, html |> replace_citations() |> restore_visual_blocks(placeholders)}
@@ -70,7 +74,8 @@ defmodule LiteskillWeb.Markdown do
 
   defp replace_citations(html) do
     {result, _n} =
-      Regex.scan(@uuid_re, html)
+      @uuid_re
+      |> Regex.scan(html)
       |> Enum.reduce({html, 1}, fn [full_match, uuid], {acc, n} ->
         replacement =
           ~s(<button class="rag-cite" phx-click="show_source" phx-value-doc-id="#{html_escape_attr(uuid)}">#{n}</button>)
@@ -106,10 +111,11 @@ defmodule LiteskillWeb.Markdown do
     validate? = Keyword.get(opts, :validate, false)
     format = Keyword.fetch!(opts, :format)
 
-    Regex.scan(regex, markdown, return: :index)
+    regex
+    |> Regex.scan(markdown, return: :index)
     |> Enum.reverse()
     |> Enum.reduce({markdown, %{}}, fn [{start, len}, {content_start, content_len}], {md, acc} ->
-      content = String.slice(markdown, content_start, content_len) |> String.trim()
+      content = markdown |> String.slice(content_start, content_len) |> String.trim()
 
       if validate? and not json_render_spec?(content) do
         # Not a json-render spec — leave it as a regular code block
@@ -157,7 +163,7 @@ defmodule LiteskillWeb.Markdown do
             # Non-patch, non-blank line → flush any accumulated patches
             {result, ph} = flush_jsonl_block(result, patches, ph)
             # Restore buffered blanks as regular text, then this line
-            result = [line | Enum.reverse(blanks) ++ result]
+            result = [line | Enum.reverse(blanks, result)]
             {result, [], [], ph}
         end
       end)
@@ -167,7 +173,7 @@ defmodule LiteskillWeb.Markdown do
       flush_jsonl_block(result_lines, patch_lines, placeholders)
 
     # Restore any trailing blanks
-    result_lines = Enum.reverse(blank_buffer) ++ result_lines
+    result_lines = Enum.reverse(blank_buffer, result_lines)
 
     cleaned = result_lines |> Enum.reverse() |> Enum.join("\n")
     {cleaned, placeholders}
@@ -224,7 +230,7 @@ defmodule LiteskillWeb.Markdown do
 
   defp html_escape_attr(value) do
     value
-    |> Phoenix.HTML.Safe.to_iodata()
+    |> Safe.to_iodata()
     |> IO.iodata_to_binary()
     |> String.replace("\"", "&quot;")
     |> String.replace("'", "&#39;")
@@ -251,7 +257,7 @@ defmodule LiteskillWeb.Markdown do
 
       ~s(<div id="#{dom_id}" phx-hook="JsonRender" phx-update="ignore" data-format="jsonl" data-spec="#{escaped}"></div>)
     else
-      escaped = content |> Phoenix.HTML.Safe.to_iodata() |> IO.iodata_to_binary()
+      escaped = content |> Safe.to_iodata() |> IO.iodata_to_binary()
       ~s(<pre><code class="language-spec">#{escaped}</code></pre>)
     end
   end
@@ -265,7 +271,7 @@ defmodule LiteskillWeb.Markdown do
         ~s(<div id="#{dom_id}" phx-hook="JsonRender" phx-update="ignore" data-spec="#{escaped}"></div>)
 
       {:error, _} ->
-        escaped = content |> Phoenix.HTML.Safe.to_iodata() |> IO.iodata_to_binary()
+        escaped = content |> Safe.to_iodata() |> IO.iodata_to_binary()
         ~s(<pre><code class="language-json-render">#{escaped}</code></pre>)
     end
   end

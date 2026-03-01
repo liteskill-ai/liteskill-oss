@@ -2,6 +2,7 @@ defmodule Liteskill.EmbeddingCatalogTest do
   use ExUnit.Case, async: true
 
   alias Liteskill.EmbeddingCatalog
+  alias Liteskill.OpenRouter.Models
 
   describe "list_models/0" do
     test "returns a non-empty list" do
@@ -111,7 +112,7 @@ defmodule Liteskill.EmbeddingCatalogTest do
   describe "get_model/1" do
     test "returns model for known id" do
       model = EmbeddingCatalog.get_model("openai/text-embedding-3-small")
-      assert model != nil
+      assert model
       assert model.name == "OpenAI Text Embedding 3 Small"
     end
 
@@ -157,7 +158,7 @@ defmodule Liteskill.EmbeddingCatalogTest do
 
   describe "fetch_models/0" do
     test "falls back to static catalog on API failure" do
-      Req.Test.stub(Liteskill.OpenRouter.Models, fn conn ->
+      Req.Test.stub(Models, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(500, Jason.encode!(%{"error" => "internal"}))
@@ -168,7 +169,7 @@ defmodule Liteskill.EmbeddingCatalogTest do
     end
 
     test "returns enriched dynamic models on API success" do
-      Req.Test.stub(Liteskill.OpenRouter.Models, fn conn ->
+      Req.Test.stub(Models, fn conn ->
         data = [
           %{
             "id" => "openai/text-embedding-3-small",

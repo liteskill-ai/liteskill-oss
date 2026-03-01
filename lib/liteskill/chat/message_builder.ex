@@ -6,9 +6,9 @@ defmodule Liteskill.Chat.MessageBuilder do
   expected by the LLM layer: lists of `%{"role" => ..., "content" => [...]}`.
   """
 
-  alias Liteskill.Repo
-
   import Ecto.Query
+
+  alias Liteskill.Repo
 
   @doc """
   Converts a list of Message records into LLM message format.
@@ -62,7 +62,9 @@ defmodule Liteskill.Chat.MessageBuilder do
       content = text_blocks ++ tool_use_blocks
       assistant_msg = %{"role" => "assistant", "content" => content}
 
-      if completed_tcs != [] do
+      if completed_tcs == [] do
+        [assistant_msg | acc]
+      else
         tool_results =
           Enum.map(completed_tcs, fn tc ->
             %{
@@ -76,8 +78,6 @@ defmodule Liteskill.Chat.MessageBuilder do
 
         # Prepend in reverse order so Enum.reverse produces [assistant_msg, tool_results_msg]
         [%{"role" => "user", "content" => tool_results}, assistant_msg | acc]
-      else
-        [assistant_msg | acc]
       end
     else
       if msg.content && msg.content != "" do
@@ -109,8 +109,8 @@ defmodule Liteskill.Chat.MessageBuilder do
   # Merge consecutive same-role messages (can happen when failed assistant
   # messages are filtered out, leaving adjacent user messages).
   defp merge_consecutive_roles(messages) do
-    messages
-    |> Enum.chunk_while(
+    Enum.chunk_while(
+      messages,
       nil,
       fn msg, acc ->
         case acc do
@@ -144,8 +144,7 @@ defmodule Liteskill.Chat.MessageBuilder do
     messages
     |> Enum.map(fn msg ->
       content =
-        msg["content"]
-        |> Enum.filter(fn
+        Enum.filter(msg["content"], fn
           %{"toolUse" => _} -> false
           %{"toolResult" => _} -> false
           _ -> true

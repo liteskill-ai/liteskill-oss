@@ -37,7 +37,8 @@ defmodule Liteskill.Agents.ToolResolver do
 
   defp resolve_mcp_tools(agent, user_id) do
     server_ids =
-      Authorization.agent_accessible_entity_ids("mcp_server", agent.id)
+      "mcp_server"
+      |> Authorization.agent_accessible_entity_ids(agent.id)
       |> Repo.all()
 
     if server_ids == [] do

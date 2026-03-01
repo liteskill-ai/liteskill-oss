@@ -3,7 +3,8 @@ defmodule Liteskill.DataSources.WikiImportTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.DataSources
-  alias Liteskill.DataSources.{WikiExport, WikiImport}
+  alias Liteskill.DataSources.WikiExport
+  alias Liteskill.DataSources.WikiImport
 
   setup do
     {:ok, user} =
@@ -107,10 +108,8 @@ defmodule Liteskill.DataSources.WikiImportTest do
            exported_at: "2026-01-01T00:00:00Z"
          })},
         {~c"level1/level1.md", "---\ntitle: Level 1\nposition: 0\n---\nL1 content"},
-        {~c"level1/children/level2/level2.md",
-         "---\ntitle: Level 2\nposition: 0\n---\nL2 content"},
-        {~c"level1/children/level2/children/level3.md",
-         "---\ntitle: Level 3\nposition: 0\n---\nL3 content"}
+        {~c"level1/children/level2/level2.md", "---\ntitle: Level 2\nposition: 0\n---\nL2 content"},
+        {~c"level1/children/level2/children/level3.md", "---\ntitle: Level 3\nposition: 0\n---\nL3 content"}
       ]
 
       {:ok, {_, zip_binary}} = :zip.create(~c"test.zip", entries, [:memory])

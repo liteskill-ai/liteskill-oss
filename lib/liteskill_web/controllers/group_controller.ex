@@ -1,4 +1,5 @@
 defmodule LiteskillWeb.GroupController do
+  @moduledoc false
   use LiteskillWeb, :controller
 
   alias Liteskill.Groups

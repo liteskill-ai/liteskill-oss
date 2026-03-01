@@ -1,10 +1,10 @@
 defmodule Liteskill.Rag.RequestLoggerTest do
   use Liteskill.DataCase, async: false
 
-  alias Liteskill.Rag.RequestLogger
-  alias Liteskill.Rag.EmbeddingRequest
-
   import Ecto.Query
+
+  alias Liteskill.Rag.EmbeddingRequest
+  alias Liteskill.Rag.RequestLogger
 
   setup do
     {:ok, user} =

@@ -59,8 +59,7 @@ defmodule Liteskill.Rbac.Permissions do
   def valid?(permission), do: MapSet.member?(@permission_set, permission)
 
   def grouped do
-    @permissions
-    |> Enum.group_by(fn perm ->
+    Enum.group_by(@permissions, fn perm ->
       perm |> String.split(":") |> hd()
     end)
   end

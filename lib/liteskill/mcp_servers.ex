@@ -1,4 +1,8 @@
 defmodule Liteskill.McpServers do
+  @moduledoc """
+  The McpServers context. Manages MCP server registrations per user.
+  """
+
   use Boundary,
     top_level?: true,
     deps: [
@@ -10,16 +14,12 @@ defmodule Liteskill.McpServers do
     ],
     exports: [McpServer, Client, UserToolSelection]
 
-  @moduledoc """
-  The McpServers context. Manages MCP server registrations per user.
-  """
+  import Ecto.Query
 
   alias Liteskill.Authorization
   alias Liteskill.McpServers.McpServer
   alias Liteskill.McpServers.UserToolSelection
   alias Liteskill.Repo
-
-  import Ecto.Query
 
   def list_servers(user_id) do
     accessible_ids = Authorization.accessible_entity_ids("mcp_server", user_id)
@@ -115,14 +115,14 @@ defmodule Liteskill.McpServers do
       |> MapSet.new()
 
     accessible =
-      list_servers(user_id)
-      |> Enum.map(& &1.id)
-      |> MapSet.new()
+      user_id
+      |> list_servers()
+      |> MapSet.new(& &1.id)
 
     valid = MapSet.intersection(persisted, accessible)
     stale = MapSet.difference(persisted, accessible)
 
-    unless MapSet.size(stale) == 0 do
+    if MapSet.size(stale) != 0 do
       stale_list = MapSet.to_list(stale)
 
       UserToolSelection

@@ -2,6 +2,7 @@ defmodule Liteskill.Accounts.UserSessionTest do
   use Liteskill.DataCase, async: false
 
   alias Liteskill.Accounts
+  alias Liteskill.Accounts.UserSession
 
   defp create_user(_context \\ %{}) do
     unique = System.unique_integer([:positive])
@@ -27,9 +28,9 @@ defmodule Liteskill.Accounts.UserSessionTest do
       assert session.user_id == user.id
       assert session.ip_address == "127.0.0.1"
       assert session.user_agent == "TestAgent"
-      assert session.last_active_at != nil
-      assert session.expires_at != nil
-      assert DateTime.compare(session.expires_at, session.last_active_at) == :gt
+      assert session.last_active_at
+      assert session.expires_at
+      assert DateTime.after?(session.expires_at, session.last_active_at)
     end
 
     test "creates a session without conn_info" do
@@ -64,10 +65,10 @@ defmodule Liteskill.Accounts.UserSessionTest do
       %{user: user} = create_user()
       {:ok, session} = Accounts.create_session(user.id)
 
-      past = DateTime.add(DateTime.utc_now(), -1, :second) |> DateTime.truncate(:second)
+      past = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.truncate(:second)
 
       Liteskill.Repo.update_all(
-        from(s in Liteskill.Accounts.UserSession, where: s.id == ^session.id),
+        from(s in UserSession, where: s.id == ^session.id),
         set: [expires_at: past]
       )
 
@@ -78,10 +79,10 @@ defmodule Liteskill.Accounts.UserSessionTest do
       %{user: user} = create_user()
       {:ok, session} = Accounts.create_session(user.id)
 
-      past = DateTime.add(DateTime.utc_now(), -200_000, :second) |> DateTime.truncate(:second)
+      past = DateTime.utc_now() |> DateTime.add(-200_000, :second) |> DateTime.truncate(:second)
 
       Liteskill.Repo.update_all(
-        from(s in Liteskill.Accounts.UserSession, where: s.id == ^session.id),
+        from(s in UserSession, where: s.id == ^session.id),
         set: [last_active_at: past]
       )
 
@@ -95,17 +96,17 @@ defmodule Liteskill.Accounts.UserSessionTest do
       {:ok, session} = Accounts.create_session(user.id)
 
       # Set last_active_at to past
-      past = DateTime.add(DateTime.utc_now(), -120, :second) |> DateTime.truncate(:second)
+      past = DateTime.utc_now() |> DateTime.add(-120, :second) |> DateTime.truncate(:second)
 
       Liteskill.Repo.update_all(
-        from(s in Liteskill.Accounts.UserSession, where: s.id == ^session.id),
+        from(s in UserSession, where: s.id == ^session.id),
         set: [last_active_at: past]
       )
 
       Accounts.touch_session(session)
 
       {updated, _user} = Accounts.validate_session_with_user(session.id)
-      assert DateTime.compare(updated.last_active_at, past) == :gt
+      assert DateTime.after?(updated.last_active_at, past)
     end
   end
 
@@ -150,10 +151,10 @@ defmodule Liteskill.Accounts.UserSessionTest do
       %{user: user} = create_user()
       {:ok, session} = Accounts.create_session(user.id)
 
-      past = DateTime.add(DateTime.utc_now(), -1, :second) |> DateTime.truncate(:second)
+      past = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.truncate(:second)
 
       Liteskill.Repo.update_all(
-        from(s in Liteskill.Accounts.UserSession, where: s.id == ^session.id),
+        from(s in UserSession, where: s.id == ^session.id),
         set: [expires_at: past]
       )
 
@@ -167,7 +168,7 @@ defmodule Liteskill.Accounts.UserSessionTest do
       {:ok, session} = Accounts.create_session(user.id)
 
       Accounts.delete_expired_sessions()
-      assert Accounts.validate_session_with_user(session.id) != nil
+      assert Accounts.validate_session_with_user(session.id)
     end
   end
 end

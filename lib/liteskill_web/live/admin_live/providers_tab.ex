@@ -3,8 +3,8 @@ defmodule LiteskillWeb.AdminLive.ProvidersTab do
 
   use LiteskillWeb, :html
 
-  import Phoenix.LiveView, only: [put_flash: 3]
   import LiteskillWeb.AdminLive.Helpers, only: [require_admin: 2, build_provider_attrs: 2]
+  import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Liteskill.LlmProviders
   alias Liteskill.LlmProviders.LlmProvider

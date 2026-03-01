@@ -12,8 +12,9 @@ defmodule Liteskill.Schedules.ScheduleWorker do
     max_attempts: 1,
     unique: [period: 55, fields: [:args], keys: [:schedule_id]]
 
-  alias Liteskill.{Runs, Schedules}
+  alias Liteskill.Runs
   alias Liteskill.Runs.Runner
+  alias Liteskill.Schedules
 
   require Logger
 
@@ -51,7 +52,7 @@ defmodule Liteskill.Schedules.ScheduleWorker do
         Logger.info("Schedule #{schedule.name} created run #{run.id}")
 
         # Update schedule timestamps
-        now = DateTime.utc_now() |> DateTime.truncate(:second)
+        now = DateTime.truncate(DateTime.utc_now(), :second)
         next = Schedules.compute_next_run(schedule.cron_expression, schedule.timezone, now)
 
         Schedules.update_schedule(schedule.id, user_id, %{

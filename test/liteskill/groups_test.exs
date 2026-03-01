@@ -2,6 +2,7 @@ defmodule Liteskill.GroupsTest do
   use Liteskill.DataCase, async: true
 
   alias Liteskill.Groups
+  alias Liteskill.Groups.GroupMembership
 
   setup do
     {:ok, creator} =
@@ -41,7 +42,7 @@ defmodule Liteskill.GroupsTest do
       # Verify owner membership
       membership =
         Repo.one!(
-          from gm in Liteskill.Groups.GroupMembership,
+          from gm in GroupMembership,
             where: gm.group_id == ^group.id and gm.user_id == ^creator.id
         )
 
@@ -196,7 +197,7 @@ defmodule Liteskill.GroupsTest do
       results = Groups.list_all_groups()
       entry = Enum.find(results, fn g -> g.id == group.id end)
 
-      assert entry != nil
+      assert entry
       assert entry.name == "All Groups Test"
       assert length(entry.memberships) == 2
       assert entry.creator.id == creator.id
@@ -204,7 +205,7 @@ defmodule Liteskill.GroupsTest do
 
     test "returns empty list when no groups exist" do
       # Delete all groups first
-      Repo.delete_all(Liteskill.Groups.GroupMembership)
+      Repo.delete_all(GroupMembership)
       Repo.delete_all(Liteskill.Groups.Group)
 
       assert Groups.list_all_groups() == []

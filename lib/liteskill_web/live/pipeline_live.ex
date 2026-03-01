@@ -7,7 +7,8 @@ defmodule LiteskillWeb.PipelineLive do
 
   alias Liteskill.Chat
   alias Liteskill.Rag.Pipeline
-  alias LiteskillWeb.{Layouts, PipelineComponents}
+  alias LiteskillWeb.Layouts
+  alias LiteskillWeb.PipelineComponents
 
   @refresh_interval_ms 5_000
 
@@ -47,7 +48,7 @@ defmodule LiteskillWeb.PipelineLive do
        sidebar_open: true,
        has_admin_access: Liteskill.Rbac.has_any_admin_permission?(socket.assigns.current_user.id),
        single_user_mode: Liteskill.SingleUser.enabled?()
-     ), layout: {LiteskillWeb.Layouts, :chat}}
+     ), layout: {Layouts, :chat}}
   end
 
   @impl true

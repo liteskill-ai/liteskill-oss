@@ -2,7 +2,9 @@ defmodule Liteskill.RunsTest do
   use Liteskill.DataCase, async: true
 
   alias Liteskill.Runs
-  alias Liteskill.Runs.{Run, RunLog, RunTask}
+  alias Liteskill.Runs.Run
+  alias Liteskill.Runs.RunLog
+  alias Liteskill.Runs.RunTask
   alias Liteskill.Teams
 
   setup do
@@ -160,7 +162,7 @@ defmodule Liteskill.RunsTest do
 
       assert {:ok, cancelled} = Runs.cancel_run(run.id, owner.id)
       assert cancelled.status == "cancelled"
-      assert cancelled.completed_at != nil
+      assert cancelled.completed_at
     end
 
     test "returns not_running for pending run", %{owner: owner} do

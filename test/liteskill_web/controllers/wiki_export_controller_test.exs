@@ -13,9 +13,7 @@ defmodule LiteskillWeb.WikiExportControllerTest do
         oidc_issuer: "https://test.example.com"
       })
 
-    conn =
-      build_conn()
-      |> init_authenticated_session(user)
+    conn = init_authenticated_session(build_conn(), user)
 
     %{conn: conn, user: user}
   end

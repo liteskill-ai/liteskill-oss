@@ -55,12 +55,9 @@
           {Credo.Check.Refactor.LongQuoteBlocks, []},
           {Credo.Check.Refactor.MapJoin, []},
           {Credo.Check.Refactor.MatchInCondition, []},
-          {Credo.Check.Refactor.NegatedConditionsInUnless, []},
-          {Credo.Check.Refactor.NegatedConditionsWithElse, []},
           {Credo.Check.Refactor.Nesting, [max_nesting: 4]},
           {Credo.Check.Refactor.RedundantWithClauseResult, []},
           {Credo.Check.Refactor.RejectReject, []},
-          {Credo.Check.Refactor.UnlessWithElse, []},
           {Credo.Check.Refactor.WithClauses, []},
 
           ## Warnings
@@ -89,6 +86,10 @@
           {Credo.Check.Warning.WrongTestFileExtension, []}
         ],
         disabled: [
+          # Handled by Styler — formatter plugin auto-fixes these
+          {Credo.Check.Refactor.NegatedConditionsInUnless, []},
+          {Credo.Check.Refactor.NegatedConditionsWithElse, []},
+          {Credo.Check.Refactor.UnlessWithElse, []},
           # Style preferences — not bug-catching, too noisy
           {Credo.Check.Design.AliasUsage, []},
           {Credo.Check.Readability.AliasOrder, []},

@@ -94,9 +94,7 @@ defmodule Liteskill.RagNewFunctionsTest do
       nonexistent_id = Ecto.UUID.generate()
 
       assert {:ok, []} =
-               Liteskill.Rag.augment_context_for_agent("query", [nonexistent_id], owner.id,
-                 plug: true
-               )
+               Rag.augment_context_for_agent("query", [nonexistent_id], owner.id, plug: true)
     end
   end
 end

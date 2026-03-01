@@ -69,7 +69,7 @@ defmodule Liteskill.Desktop do
   @spec arch_triple() :: String.t()
   def arch_triple do
     {os_family, os_name} = :os.type()
-    arch = :erlang.system_info(:system_architecture) |> to_string()
+    arch = :system_architecture |> :erlang.system_info() |> to_string()
 
     cpu =
       cond do

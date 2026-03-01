@@ -1,9 +1,4 @@
 defmodule Liteskill.Rbac do
-  use Boundary,
-    top_level?: true,
-    deps: [Liteskill.Accounts, Liteskill.Groups],
-    exports: [Permissions, Role, UserRole, GroupRole, AgentRole]
-
   @moduledoc """
   Role-based access control context.
 
@@ -11,14 +6,24 @@ defmodule Liteskill.Rbac do
   Orthogonal to EntityAcl which controls per-resource access.
   """
 
-  alias Liteskill.Rbac.{AgentRole, GroupRole, Permissions, Role, UserRole}
-  alias Liteskill.Repo
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Accounts, Liteskill.Groups],
+    exports: [Permissions, Role, UserRole, GroupRole, AgentRole]
 
   import Ecto.Query
 
+  alias Liteskill.Accounts.User
+  alias Liteskill.Rbac.AgentRole
+  alias Liteskill.Rbac.GroupRole
+  alias Liteskill.Rbac.Permissions
+  alias Liteskill.Rbac.Role
+  alias Liteskill.Rbac.UserRole
+  alias Liteskill.Repo
+
   @instance_admin_name "Instance Admin"
   @default_role_name "Default"
-  @root_admin_email Liteskill.Accounts.User.admin_email()
+  @root_admin_email User.admin_email()
 
   # --- Boot-time seeding ---
 
@@ -56,9 +61,7 @@ defmodule Liteskill.Rbac do
   defp migrate_admin_users do
     admin_role = Repo.one!(from r in Role, where: r.name == ^@instance_admin_name)
 
-    admin_user_ids =
-      from(u in Liteskill.Accounts.User, where: u.role == "admin", select: u.id)
-      |> Repo.all()
+    admin_user_ids = Repo.all(from(u in User, where: u.role == "admin", select: u.id))
 
     for user_id <- admin_user_ids do
       %UserRole{}
@@ -205,17 +208,18 @@ defmodule Liteskill.Rbac do
   end
 
   def list_user_roles(user_id) do
-    from(r in Role,
-      join: ur in UserRole,
-      on: ur.role_id == r.id,
-      where: ur.user_id == ^user_id,
-      order_by: [desc: r.system, asc: r.name]
+    Repo.all(
+      from(r in Role,
+        join: ur in UserRole,
+        on: ur.role_id == r.id,
+        where: ur.user_id == ^user_id,
+        order_by: [desc: r.system, asc: r.name]
+      )
     )
-    |> Repo.all()
   end
 
   defp root_admin?(user_id) do
-    case Repo.get(Liteskill.Accounts.User, user_id) do
+    case Repo.get(User, user_id) do
       %{email: email} ->
         email == @root_admin_email
 
@@ -233,22 +237,21 @@ defmodule Liteskill.Rbac do
   end
 
   def remove_role_from_group(group_id, role_id) do
-    case Repo.one(
-           from gr in GroupRole, where: gr.group_id == ^group_id and gr.role_id == ^role_id
-         ) do
+    case Repo.one(from gr in GroupRole, where: gr.group_id == ^group_id and gr.role_id == ^role_id) do
       nil -> {:error, :not_found}
       group_role -> Repo.delete(group_role)
     end
   end
 
   def list_group_roles(group_id) do
-    from(r in Role,
-      join: gr in GroupRole,
-      on: gr.role_id == r.id,
-      where: gr.group_id == ^group_id,
-      order_by: [desc: r.system, asc: r.name]
+    Repo.all(
+      from(r in Role,
+        join: gr in GroupRole,
+        on: gr.role_id == r.id,
+        where: gr.group_id == ^group_id,
+        order_by: [desc: r.system, asc: r.name]
+      )
     )
-    |> Repo.all()
   end
 
   # --- Agent role assignments ---
@@ -270,13 +273,14 @@ defmodule Liteskill.Rbac do
   end
 
   def list_agent_roles(agent_definition_id) do
-    from(r in Role,
-      join: ar in AgentRole,
-      on: ar.role_id == r.id,
-      where: ar.agent_definition_id == ^agent_definition_id,
-      order_by: [desc: r.system, asc: r.name]
+    Repo.all(
+      from(r in Role,
+        join: ar in AgentRole,
+        on: ar.role_id == r.id,
+        where: ar.agent_definition_id == ^agent_definition_id,
+        order_by: [desc: r.system, asc: r.name]
+      )
     )
-    |> Repo.all()
   end
 
   def list_agent_permissions(agent_definition_id) do
@@ -294,30 +298,28 @@ defmodule Liteskill.Rbac do
   # --- Query helpers for admin UI ---
 
   def list_role_users(role_id) do
-    from(u in Liteskill.Accounts.User,
-      join: ur in UserRole,
-      on: ur.user_id == u.id,
-      where: ur.role_id == ^role_id,
-      order_by: [asc: u.email]
+    Repo.all(
+      from(u in User,
+        join: ur in UserRole,
+        on: ur.user_id == u.id,
+        where: ur.role_id == ^role_id,
+        order_by: [asc: u.email]
+      )
     )
-    |> Repo.all()
   end
 
   def list_role_agent_ids(role_id) do
-    from(ar in AgentRole,
-      where: ar.role_id == ^role_id,
-      select: ar.agent_definition_id
-    )
-    |> Repo.all()
+    Repo.all(from(ar in AgentRole, where: ar.role_id == ^role_id, select: ar.agent_definition_id))
   end
 
   def list_role_groups(role_id) do
-    from(g in Liteskill.Groups.Group,
-      join: gr in GroupRole,
-      on: gr.group_id == g.id,
-      where: gr.role_id == ^role_id,
-      order_by: [asc: g.name]
+    Repo.all(
+      from(g in Liteskill.Groups.Group,
+        join: gr in GroupRole,
+        on: gr.group_id == g.id,
+        where: gr.role_id == ^role_id,
+        order_by: [asc: g.name]
+      )
     )
-    |> Repo.all()
   end
 end

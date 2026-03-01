@@ -2,8 +2,9 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
   use Liteskill.DataCase, async: false
 
   alias Liteskill.Agents.Actions.LlmGenerate
-  alias Liteskill.LlmProviders
+  alias Liteskill.Agents.Actions.LlmGenerateTest
   alias Liteskill.LlmModels
+  alias Liteskill.LlmProviders
 
   setup do
     {:ok, owner} =
@@ -39,7 +40,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
   end
 
   defp stub_llm_response(text) do
-    Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+    Req.Test.stub(LlmGenerateTest, fn conn ->
       {:ok, _body, conn} = Plug.Conn.read_body(conn)
 
       response = %{
@@ -57,14 +58,13 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
       |> Plug.Conn.send_resp(200, Jason.encode!(response))
     end)
 
-    Application.put_env(:liteskill, :test_req_opts,
-      req_http_options: [plug: {Req.Test, __MODULE__}]
-    )
+    Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
     Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
   end
 
   defmodule FakeSearchLoop do
+    @moduledoc false
     def call_tool("fake_search", _input, _context) do
       {:ok, %{"content" => [%{"text" => "loop search result"}]}}
     end
@@ -118,7 +118,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
     end
 
     test "includes backstory and opinions in system prompt", %{model: model} do
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -155,9 +155,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -181,7 +179,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
     end
 
     test "includes prior context in user message", %{model: model} do
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -218,9 +216,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -246,7 +242,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
 
   describe "run/2 — LLM error" do
     test "returns error when LLM call fails", %{model: model} do
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, _body, conn} = Plug.Conn.read_body(conn)
 
         conn
@@ -254,9 +250,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(500, Jason.encode!(%{"error" => "internal error"}))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -290,7 +284,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
     test "executes tool calls and loops back to LLM", %{model: model} do
       {:ok, call_counter} = Agent.start_link(fn -> 0 end)
 
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, _body, conn} = Plug.Conn.read_body(conn)
         call_num = Agent.get_and_update(call_counter, fn n -> {n, n + 1} end)
 
@@ -332,13 +326,12 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
       defmodule FakeSearch do
+        @moduledoc false
         def call_tool("fake_search", %{"query" => "test"}, _context) do
           {:ok, %{"content" => [%{"text" => "search result: 42"}]}}
         end
@@ -380,7 +373,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
     test "retries on 429 and succeeds on second attempt", %{model: model} do
       {:ok, counter} = Agent.start_link(fn -> 0 end)
 
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, _body, conn} = Plug.Conn.read_body(conn)
         call_num = Agent.get_and_update(counter, fn n -> {n, n + 1} end)
 
@@ -405,9 +398,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         end
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -435,7 +426,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
     end
 
     test "fails after max retries on persistent 503", %{model: model} do
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, _body, conn} = Plug.Conn.read_body(conn)
 
         conn
@@ -443,9 +434,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(503, Jason.encode!(%{"error" => "unavailable"}))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -473,7 +462,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
     test "does not retry on non-retryable 400 error", %{model: model} do
       {:ok, counter} = Agent.start_link(fn -> 0 end)
 
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, _body, conn} = Plug.Conn.read_body(conn)
         Agent.update(counter, &(&1 + 1))
 
@@ -482,9 +471,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(400, Jason.encode!(%{"error" => "bad request"}))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -553,7 +540,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
             %{
               "id" => "t1",
               "type" => "function",
-              "function" => %{"name" => "search", "arguments" => "{\"q\":\"X\"}"}
+              "function" => %{"name" => "search", "arguments" => ~s({"q":"X"})}
             }
           ],
           "tool_call_id" => nil
@@ -648,7 +635,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
 
       # The LLM should see the resumed context (3 messages: user + assistant + new user continuation)
       # but ReqLLM just gets the existing context and continues from there
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -672,9 +659,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -706,7 +691,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
 
   describe "run/2 — handoff instruction" do
     test "includes handoff instruction when report_id is present", %{model: model} do
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -744,9 +729,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -771,7 +754,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
     end
 
     test "does not include handoff instruction when report_id is nil", %{model: model} do
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -805,9 +788,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -1031,7 +1012,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
   describe "run/2 — max iterations" do
     test "stops at max iterations with marker text", %{model: model} do
       # Stub that always returns tool calls (never a final text response)
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, _body, conn} = Plug.Conn.read_body(conn)
 
         response = %{
@@ -1057,9 +1038,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -1328,9 +1307,9 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
           instance_wide: true
         })
 
-      captured_body = Agent.start_link(fn -> nil end) |> elem(1)
+      captured_body = fn -> nil end |> Agent.start_link() |> elem(1)
 
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         Agent.update(captured_body, fn _ -> Jason.decode!(body) end)
 
@@ -1349,9 +1328,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -1392,9 +1369,9 @@ defmodule Liteskill.Agents.Actions.LlmGenerateTest do
           instance_wide: true
         })
 
-      captured_body = Agent.start_link(fn -> nil end) |> elem(1)
+      captured_body = fn -> nil end |> Agent.start_link() |> elem(1)
 
-      Req.Test.stub(Liteskill.Agents.Actions.LlmGenerateTest, fn conn ->
+      Req.Test.stub(LlmGenerateTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         Agent.update(captured_body, fn _ -> Jason.decode!(body) end)
 

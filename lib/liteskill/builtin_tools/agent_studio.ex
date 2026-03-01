@@ -10,10 +10,10 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   @behaviour Liteskill.BuiltinTools
 
   alias Liteskill.Agents
-  alias Liteskill.Teams
   alias Liteskill.Runs
   alias Liteskill.Runs.Runner
   alias Liteskill.Schedules
+  alias Liteskill.Teams
 
   @impl true
   def id, do: "agent_studio"
@@ -22,8 +22,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   def name, do: "Agent Studio"
 
   @impl true
-  def description,
-    do: "Create and manage AI agent workflows \u2014 agents, teams, runs, and schedules"
+  def description, do: "Create and manage AI agent workflows \u2014 agents, teams, runs, and schedules"
 
   # ---------------------------------------------------------------------------
   # Tool definitions
@@ -66,13 +65,12 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   @impl true
   def call_tool(tool_name, input, context) do
     user_id = Keyword.fetch!(context, :user_id)
-    dispatch(tool_name, user_id, input) |> wrap_result()
+    tool_name |> dispatch(user_id, input) |> wrap_result()
   end
 
   defp dispatch("agent_studio__list_models", user_id, _input), do: do_list_models(user_id)
 
-  defp dispatch("agent_studio__list_available_tools", user_id, _input),
-    do: do_list_available_tools(user_id)
+  defp dispatch("agent_studio__list_available_tools", user_id, _input), do: do_list_available_tools(user_id)
 
   defp dispatch("agent_studio__create_agent", user_id, input), do: do_create_agent(user_id, input)
   defp dispatch("agent_studio__update_agent", user_id, input), do: do_update_agent(user_id, input)
@@ -89,14 +87,11 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   defp dispatch("agent_studio__get_run", user_id, input), do: do_get_run(user_id, input)
   defp dispatch("agent_studio__cancel_run", user_id, input), do: do_cancel_run(user_id, input)
 
-  defp dispatch("agent_studio__create_schedule", user_id, input),
-    do: do_create_schedule(user_id, input)
+  defp dispatch("agent_studio__create_schedule", user_id, input), do: do_create_schedule(user_id, input)
 
-  defp dispatch("agent_studio__list_schedules", user_id, _input),
-    do: do_list_schedules(user_id)
+  defp dispatch("agent_studio__list_schedules", user_id, _input), do: do_list_schedules(user_id)
 
-  defp dispatch("agent_studio__delete_schedule", user_id, input),
-    do: do_delete_schedule(user_id, input)
+  defp dispatch("agent_studio__delete_schedule", user_id, input), do: do_delete_schedule(user_id, input)
 
   defp dispatch(tool_name, _user_id, _input), do: {:error, "Unknown tool: #{tool_name}"}
 
@@ -115,7 +110,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
              "id" => m.id,
              "name" => m.name,
              "model_id" => m.model_id,
-             "provider" => if(m.provider, do: m.provider.name, else: nil)
+             "provider" => if(m.provider, do: m.provider.name)
            }
          end)
      }}
@@ -221,7 +216,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
              "name" => a.name,
              "description" => a.description,
              "strategy" => a.strategy,
-             "model" => if(a.llm_model, do: a.llm_model.name, else: nil),
+             "model" => if(a.llm_model, do: a.llm_model.name),
              "tool_count" => length(Agents.list_tool_server_ids(a.id))
            }
          end)
@@ -549,7 +544,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   defp assign_builtin_tools(_agent_id, _user_id, []), do: []
 
   defp assign_builtin_tools(agent_id, user_id, builtin_tools) do
-    builtin_ids = Enum.map(builtin_tools, & &1["server_id"]) |> Enum.uniq()
+    builtin_ids = builtin_tools |> Enum.map(& &1["server_id"]) |> Enum.uniq()
 
     case Agents.get_agent(agent_id, user_id) do
       {:ok, agent} ->
@@ -626,12 +621,12 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
           %{
             "id" => agent.llm_model.id,
             "name" => agent.llm_model.name,
-            "provider" =>
-              if(agent.llm_model.provider, do: agent.llm_model.provider.name, else: nil)
+            "provider" => if(agent.llm_model.provider, do: agent.llm_model.provider.name)
           }
         end,
       "tools" =>
-        Agents.list_accessible_servers(agent.id)
+        agent.id
+        |> Agents.list_accessible_servers()
         |> Enum.map(fn server ->
           %{
             "server_id" => server.id,
@@ -653,7 +648,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
         Enum.map(team.team_members, fn tm ->
           %{
             "agent_id" => tm.agent_definition_id,
-            "agent_name" => if(tm.agent_definition, do: tm.agent_definition.name, else: nil),
+            "agent_name" => if(tm.agent_definition, do: tm.agent_definition.name),
             "role" => tm.role,
             "description" => tm.description,
             "position" => tm.position
@@ -797,8 +792,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
                 },
                 "tool_name" => %{
                   "type" => "string",
-                  "description" =>
-                    "Specific tool name from the server (omit to include all tools from server)"
+                  "description" => "Specific tool name from the server (omit to include all tools from server)"
                 }
               },
               "required" => ["server_id"]
@@ -807,8 +801,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
           "builtin_server_ids" => %{
             "type" => "array",
             "items" => %{"type" => "string"},
-            "description" =>
-              "Built-in server IDs to enable (e.g. [\"builtin:reports\", \"builtin:wiki\"])"
+            "description" => ~s{Built-in server IDs to enable (e.g. ["builtin:reports", "builtin:wiki"])}
           }
         },
         "required" => ["name"]
@@ -948,8 +941,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   defp update_team_tool do
     %{
       "name" => "agent_studio__update_team",
-      "description" =>
-        "Update an existing team definition. Only include fields you want to change.",
+      "description" => "Update an existing team definition. Only include fields you want to change.",
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{
@@ -1077,8 +1069,7 @@ defmodule Liteskill.BuiltinTools.AgentStudio do
   defp cancel_run_tool do
     %{
       "name" => "agent_studio__cancel_run",
-      "description" =>
-        "Cancel a currently running run. Only works on runs with status 'running'.",
+      "description" => "Cancel a currently running run. Only works on runs with status 'running'.",
       "inputSchema" => %{
         "type" => "object",
         "properties" => %{

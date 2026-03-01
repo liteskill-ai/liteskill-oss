@@ -113,8 +113,7 @@ defmodule Liteskill.OpenRouter.Models do
 
   defp parse_cost(_), do: nil
 
-  defp infer_model_type(%{"architecture" => %{"modality" => modality}})
-       when is_binary(modality) do
+  defp infer_model_type(%{"architecture" => %{"modality" => modality}}) when is_binary(modality) do
     if String.contains?(modality, "embedding"), do: "embedding", else: "inference"
   end
 

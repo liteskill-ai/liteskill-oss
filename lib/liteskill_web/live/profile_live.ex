@@ -9,15 +9,14 @@ defmodule LiteskillWeb.ProfileLive do
 
   import LiteskillWeb.FormatHelpers
 
-  alias Liteskill.Chat
-  alias LiteskillWeb.Layouts
-
   alias Liteskill.Accounts
   alias Liteskill.Accounts.User
+  alias Liteskill.Chat
   alias Liteskill.LlmModels
   alias Liteskill.LlmProviders
   alias Liteskill.LlmProviders.LlmProvider
   alias LiteskillWeb.AdminLive
+  alias LiteskillWeb.Layouts
   alias LiteskillWeb.SettingsLive
 
   @profile_actions [:info, :password, :user_providers, :user_models]
@@ -53,7 +52,7 @@ defmodule LiteskillWeb.ProfileLive do
        sidebar_open: true,
        has_admin_access: Liteskill.Rbac.has_any_admin_permission?(socket.assigns.current_user.id),
        single_user_mode: Liteskill.SingleUser.enabled?()
-     ), layout: {LiteskillWeb.Layouts, :chat}}
+     ), layout: {Layouts, :chat}}
   end
 
   @impl true
@@ -806,13 +805,11 @@ defmodule LiteskillWeb.ProfileLive do
         case Accounts.change_password(socket.assigns.current_user, current, new_pass) do
           {:ok, user} ->
             {:noreply,
-             socket
-             |> assign(
+             assign(socket,
                current_user: user,
                password_error: nil,
                password_success: true,
-               password_form:
-                 to_form(%{"current" => "", "new" => "", "confirm" => ""}, as: :password)
+               password_form: to_form(%{"current" => "", "new" => "", "confirm" => ""}, as: :password)
              )}
 
           {:error, :invalid_current_password} ->
@@ -1016,10 +1013,8 @@ defmodule LiteskillWeb.ProfileLive do
           "model_id" => model.model_id,
           "model_type" => model.model_type,
           "model_config_json" => config_json,
-          "input_cost_per_million" =>
-            model.input_cost_per_million && Decimal.to_string(model.input_cost_per_million),
-          "output_cost_per_million" =>
-            model.output_cost_per_million && Decimal.to_string(model.output_cost_per_million),
+          "input_cost_per_million" => model.input_cost_per_million && Decimal.to_string(model.input_cost_per_million),
+          "output_cost_per_million" => model.output_cost_per_million && Decimal.to_string(model.output_cost_per_million),
           "status" => model.status
         }
 

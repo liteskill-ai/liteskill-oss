@@ -5,7 +5,8 @@ defmodule Liteskill.Rag.CollectionsTest do
   import Liteskill.RetryTestHelpers
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Collection, CohereClient}
+  alias Liteskill.Rag.CohereClient
+  alias Liteskill.Rag.Collection
 
   setup :setup_users
 
@@ -104,7 +105,7 @@ defmodule Liteskill.Rag.CollectionsTest do
       {:ok, doc} = create_document(source.id, owner.id)
 
       embedding = List.duplicate(0.1, 1024)
-      agent = Agent.start_link(fn -> :embed end) |> elem(1)
+      agent = fn -> :embed end |> Agent.start_link() |> elem(1)
 
       Req.Test.stub(CohereClient, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -158,7 +159,7 @@ defmodule Liteskill.Rag.CollectionsTest do
         })
 
       embedding = List.duplicate(0.1, 1024)
-      agent = Agent.start_link(fn -> :embed end) |> elem(1)
+      agent = fn -> :embed end |> Agent.start_link() |> elem(1)
 
       Req.Test.stub(CohereClient, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -211,7 +212,7 @@ defmodule Liteskill.Rag.CollectionsTest do
         })
 
       embedding = List.duplicate(0.1, 1024)
-      agent = Agent.start_link(fn -> :embed end) |> elem(1)
+      agent = fn -> :embed end |> Agent.start_link() |> elem(1)
 
       Req.Test.stub(CohereClient, fn conn ->
         response =

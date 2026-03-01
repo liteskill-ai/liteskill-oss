@@ -1,6 +1,4 @@
 defmodule Liteskill.Authorization do
-  use Boundary, top_level?: true, deps: [Liteskill.Groups], exports: [EntityAcl, Roles]
-
   @moduledoc """
   Centralized authorization context for all entity types.
 
@@ -14,11 +12,14 @@ defmodule Liteskill.Authorization do
   - **owner**: full control (delete, demote anyone, transfer ownership)
   """
 
-  alias Liteskill.Authorization.{EntityAcl, Roles}
-  alias Liteskill.Groups.GroupMembership
-  alias Liteskill.Repo
+  use Boundary, top_level?: true, deps: [Liteskill.Groups], exports: [EntityAcl, Roles]
 
   import Ecto.Query
+
+  alias Liteskill.Authorization.EntityAcl
+  alias Liteskill.Authorization.Roles
+  alias Liteskill.Groups.GroupMembership
+  alias Liteskill.Repo
 
   # --- Access Checks ---
 
@@ -45,16 +46,15 @@ defmodule Liteskill.Authorization do
   """
   def get_role(entity_type, entity_id, user_id) do
     roles =
-      from(a in EntityAcl,
-        left_join: gm in GroupMembership,
-        on: gm.group_id == a.group_id and gm.user_id == ^user_id,
-        where:
-          a.entity_type == ^entity_type and
-            a.entity_id == ^entity_id and
-            (a.user_id == ^user_id or not is_nil(gm.id)),
-        select: a.role
+      Repo.all(
+        from(a in EntityAcl,
+          left_join: gm in GroupMembership,
+          on: gm.group_id == a.group_id and gm.user_id == ^user_id,
+          where:
+            a.entity_type == ^entity_type and a.entity_id == ^entity_id and (a.user_id == ^user_id or not is_nil(gm.id)),
+          select: a.role
+        )
       )
-      |> Repo.all()
 
     case roles do
       [] -> {:error, :no_access}
@@ -214,12 +214,13 @@ defmodule Liteskill.Authorization do
 
   @doc "Lists all ACLs for an entity, preloading user and group."
   def list_acls(entity_type, entity_id) do
-    from(a in EntityAcl,
-      where: a.entity_type == ^entity_type and a.entity_id == ^entity_id,
-      preload: [:user, :group],
-      order_by: [desc: a.role, asc: a.inserted_at]
+    Repo.all(
+      from(a in EntityAcl,
+        where: a.entity_type == ^entity_type and a.entity_id == ^entity_id,
+        preload: [:user, :group],
+        order_by: [desc: a.role, asc: a.inserted_at]
+      )
     )
-    |> Repo.all()
   end
 
   @doc """
@@ -377,11 +378,12 @@ defmodule Liteskill.Authorization do
 
   @doc "Lists all ACLs granted to a specific agent definition for a given entity type."
   def list_agent_acls(entity_type, agent_definition_id) do
-    from(a in EntityAcl,
-      where: a.entity_type == ^entity_type and a.agent_definition_id == ^agent_definition_id,
-      order_by: [asc: a.inserted_at]
+    Repo.all(
+      from(a in EntityAcl,
+        where: a.entity_type == ^entity_type and a.agent_definition_id == ^agent_definition_id,
+        order_by: [asc: a.inserted_at]
+      )
     )
-    |> Repo.all()
   end
 
   # --- Private Helpers ---
@@ -419,21 +421,17 @@ defmodule Liteskill.Authorization do
     )
   end
 
-  defp validate_grant_permission(_entity_type, _grantor_role, "owner"),
-    do: {:error, :cannot_grant_owner}
+  defp validate_grant_permission(_entity_type, _grantor_role, "owner"), do: {:error, :cannot_grant_owner}
 
   # Wiki spaces: manager can grant viewer/editor; owner can grant viewer/editor/manager
-  defp validate_grant_permission("wiki_space", "manager", role) when role in ["viewer", "editor"],
-    do: :ok
+  defp validate_grant_permission("wiki_space", "manager", role) when role in ["viewer", "editor"], do: :ok
 
   defp validate_grant_permission("wiki_space", "manager", _role), do: {:error, :forbidden}
 
   defp validate_grant_permission("wiki_space", "owner", _role), do: :ok
 
   # All other entity types: owner/manager can grant any non-owner role
-  defp validate_grant_permission(_entity_type, grantor_role, _role)
-       when grantor_role in ["owner", "manager"],
-       do: :ok
+  defp validate_grant_permission(_entity_type, grantor_role, _role) when grantor_role in ["owner", "manager"], do: :ok
 
   defp validate_grant_permission(_, _, _), do: {:error, :forbidden}
 

@@ -3,7 +3,8 @@ defmodule Liteskill.Rag.EmbedQueueTest do
 
   import Liteskill.RetryTestHelpers
 
-  alias Liteskill.Rag.{EmbedQueue, CohereClient}
+  alias Liteskill.Rag.CohereClient
+  alias Liteskill.Rag.EmbedQueue
 
   setup do
     Req.Test.set_req_test_to_shared()
@@ -21,15 +22,15 @@ defmodule Liteskill.Rag.EmbedQueueTest do
   defp assert_retry_in_progress(pid, retries \\ 50) do
     state = :sys.get_state(pid)
 
-    if state.retry != nil do
-      :ok
-    else
+    if state.retry == nil do
       if retries > 0 do
         Process.sleep(5)
         assert_retry_in_progress(pid, retries - 1)
       else
         flunk("retry never became in_progress")
       end
+    else
+      :ok
     end
   end
 
@@ -213,8 +214,7 @@ defmodule Liteskill.Rag.EmbedQueueTest do
 
       pid =
         start_supervised!(
-          {EmbedQueue,
-           name: name, flush_ms: 10, batch_size: 100, max_retries: 2, backoff_ms: 100},
+          {EmbedQueue, name: name, flush_ms: 10, batch_size: 100, max_retries: 2, backoff_ms: 100},
           id: name
         )
 

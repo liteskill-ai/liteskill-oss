@@ -18,7 +18,7 @@ defmodule Liteskill.AccountsTest do
 
       assert user.oidc_sub == attrs.oidc_sub
       assert user.name == "Test User"
-      assert user.id != nil
+      assert user.id
     end
 
     test "returns existing user on duplicate oidc_sub + oidc_issuer" do
@@ -123,7 +123,7 @@ defmodule Liteskill.AccountsTest do
 
       assert user.email == attrs.email
       assert user.name == "Password User"
-      assert user.password_hash != nil
+      assert user.password_hash
       assert user.password == nil
     end
 
@@ -475,9 +475,7 @@ defmodule Liteskill.AccountsTest do
 
     test "excludes specified user IDs" do
       {:ok, user} =
-        Accounts.find_or_create_from_oidc(
-          unique_oidc_attrs(%{email: "exclude-me@search.com", name: "ExcludeMe"})
-        )
+        Accounts.find_or_create_from_oidc(unique_oidc_attrs(%{email: "exclude-me@search.com", name: "ExcludeMe"}))
 
       results = Accounts.search_users("ExcludeMe", exclude: [user.id])
       refute Enum.any?(results, &(&1.id == user.id))
@@ -507,8 +505,8 @@ defmodule Liteskill.AccountsTest do
 
       assert {:ok, invitation} = Accounts.create_invitation("invitee@example.com", admin.id)
       assert invitation.email == "invitee@example.com"
-      assert invitation.token != nil
-      assert invitation.expires_at != nil
+      assert invitation.token
+      assert invitation.expires_at
       assert invitation.created_by_id == admin.id
     end
 
@@ -573,7 +571,7 @@ defmodule Liteskill.AccountsTest do
 
       # Invitation should be marked as used
       updated = Accounts.get_invitation_by_token(invitation.token)
-      assert updated.used_at != nil
+      assert updated.used_at
     end
 
     test "returns error for unknown token" do

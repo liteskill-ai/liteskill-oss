@@ -1,12 +1,13 @@
 defmodule Liteskill.McpServersTest do
   use Liteskill.DataCase, async: true
 
+  import Ecto.Query
+
   alias Liteskill.Authorization
   alias Liteskill.Authorization.EntityAcl
   alias Liteskill.McpServers
   alias Liteskill.McpServers.McpServer
-
-  import Ecto.Query
+  alias Liteskill.McpServers.UserToolSelection
 
   setup do
     {:ok, owner} =
@@ -380,7 +381,7 @@ defmodule Liteskill.McpServersTest do
         )
 
       # Raw DB value should be encrypted (base64), not plaintext JSON
-      assert raw != nil
+      assert raw
       refute raw =~ "secret-token"
       assert {:ok, _} = Base.decode64(raw)
 
@@ -707,7 +708,7 @@ defmodule Liteskill.McpServersTest do
 
     test "prunes stale selections for inaccessible servers", %{owner: owner} do
       # Insert a selection for a server that doesn't exist
-      Liteskill.Repo.insert!(%Liteskill.McpServers.UserToolSelection{
+      Liteskill.Repo.insert!(%UserToolSelection{
         user_id: owner.id,
         server_id: Ecto.UUID.generate()
       })
@@ -718,7 +719,7 @@ defmodule Liteskill.McpServersTest do
       # Verify the stale row was pruned
       count =
         Liteskill.Repo.aggregate(
-          from(s in Liteskill.McpServers.UserToolSelection,
+          from(s in UserToolSelection,
             where: s.user_id == ^owner.id
           ),
           :count

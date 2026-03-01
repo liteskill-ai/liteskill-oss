@@ -1,8 +1,8 @@
 defmodule Liteskill.ReportsTest do
   use Liteskill.DataCase, async: true
 
-  alias Liteskill.Reports
   alias Liteskill.Authorization.EntityAcl
+  alias Liteskill.Reports
   alias Liteskill.Reports.Report
 
   setup do
@@ -210,7 +210,7 @@ defmodule Liteskill.ReportsTest do
 
       assert section.title == "Key Points"
       assert section.content == "Important stuff"
-      assert section.parent_section_id != nil
+      assert section.parent_section_id
     end
 
     test "updates existing section content", %{owner: owner} do
@@ -652,8 +652,8 @@ defmodule Liteskill.ReportsTest do
 
       {:ok, loaded} = Reports.get_report(report.id, owner.id)
       md = Reports.render_markdown(loaded)
-      c_pos = :binary.match(md, "## C") |> elem(0)
-      a_pos = :binary.match(md, "## A") |> elem(0)
+      c_pos = md |> :binary.match("## C") |> elem(0)
+      a_pos = md |> :binary.match("## A") |> elem(0)
       assert c_pos < a_pos
     end
 
@@ -730,7 +730,7 @@ defmodule Liteskill.ReportsTest do
       # Verify reply was created
       {:ok, comments} = Reports.list_section_comments(section.id, owner.id)
       reply = Enum.find(comments, &(&1.parent_comment_id == comment.id))
-      assert reply != nil
+      assert reply
       assert reply.body == "Done, fixed the typo"
       assert reply.author_type == "agent"
     end
@@ -777,7 +777,7 @@ defmodule Liteskill.ReportsTest do
       assert {:ok, [result]} = Reports.manage_comments(report.id, owner.id, actions)
       assert result.action == "add"
       assert result.path == "Intro"
-      assert result.comment_id != nil
+      assert result.comment_id
     end
 
     test "resolve action marks comment addressed and creates reply", %{owner: owner} do
@@ -792,7 +792,7 @@ defmodule Liteskill.ReportsTest do
       assert {:ok, [result]} = Reports.manage_comments(report.id, owner.id, actions)
       assert result.action == "resolve"
       assert result.comment_id == comment.id
-      assert result.reply_id != nil
+      assert result.reply_id
     end
 
     test "resolve already-addressed comment returns already_addressed", %{owner: owner} do
@@ -879,7 +879,7 @@ defmodule Liteskill.ReportsTest do
       assert {:ok, [result]} = Reports.manage_comments(report.id, owner.id, actions)
       assert result.action == "add"
       assert result.path == ""
-      assert result.comment_id != nil
+      assert result.comment_id
     end
 
     test "add with no path key creates report-level comment", %{owner: owner} do
@@ -1103,8 +1103,8 @@ defmodule Liteskill.ReportsTest do
       assert md =~ "[USER]"
 
       # Report-level comments appear before section content
-      feedback_pos = :binary.match(md, "Overall feedback") |> elem(0)
-      intro_pos = :binary.match(md, "# Intro") |> elem(0)
+      feedback_pos = md |> :binary.match("Overall feedback") |> elem(0)
+      intro_pos = md |> :binary.match("# Intro") |> elem(0)
       assert feedback_pos < intro_pos
     end
 

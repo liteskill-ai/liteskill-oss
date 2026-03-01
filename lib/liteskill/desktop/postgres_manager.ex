@@ -67,7 +67,7 @@ defmodule Liteskill.Desktop.PostgresManager do
 
     database = opts[:database] || "liteskill_desktop"
 
-    unless Regex.match?(~r/\A[a-zA-Z_][a-zA-Z0-9_]*\z/, database) do
+    if !Regex.match?(~r/\A[a-zA-Z_][a-zA-Z0-9_]*\z/, database) do
       raise ArgumentError, "invalid database name: #{inspect(database)}"
     end
 
@@ -105,17 +105,13 @@ defmodule Liteskill.Desktop.PostgresManager do
 
   # -- Platform helpers --
 
-  defp host_args(%__MODULE__{windows?: true, port: port}),
-    do: ["-h", "localhost", "-p", to_string(port)]
+  defp host_args(%__MODULE__{windows?: true, port: port}), do: ["-h", "localhost", "-p", to_string(port)]
 
-  defp host_args(%__MODULE__{socket_dir: socket_dir}),
-    do: ["-h", socket_dir]
+  defp host_args(%__MODULE__{socket_dir: socket_dir}), do: ["-h", socket_dir]
 
-  defp pg_bin(%__MODULE__{windows?: true, bin_dir: bin_dir}, name),
-    do: Path.join(bin_dir, name <> ".exe")
+  defp pg_bin(%__MODULE__{windows?: true, bin_dir: bin_dir}, name), do: Path.join(bin_dir, name <> ".exe")
 
-  defp pg_bin(%__MODULE__{bin_dir: bin_dir}, name),
-    do: Path.join(bin_dir, name)
+  defp pg_bin(%__MODULE__{bin_dir: bin_dir}, name), do: Path.join(bin_dir, name)
 
   # -- Setup pipeline --
 
@@ -153,7 +149,7 @@ defmodule Liteskill.Desktop.PostgresManager do
     for name <- ~w(postgres pg_ctl initdb pg_isready psql createdb) do
       path = pg_bin(state, name)
 
-      unless File.exists?(path) do
+      if !File.exists?(path) do
         Logger.error("[PostgresManager] Missing bundled binary: #{path}")
         raise "PostgreSQL binary not found: #{path}"
       end
@@ -163,7 +159,7 @@ defmodule Liteskill.Desktop.PostgresManager do
     end
 
     # Log shared library status for debugging (pg_lib_dir returns colon-separated paths)
-    lib_dirs = pg_lib_dir(state) |> String.split(":")
+    lib_dirs = state |> pg_lib_dir() |> String.split(":")
 
     for dir <- lib_dirs do
       Logger.info("[PostgresManager] Checking #{dir}")
@@ -298,13 +294,9 @@ defmodule Liteskill.Desktop.PostgresManager do
 
     case state.cmd_fn.(pg_isready, host_args(state), stderr_to_stdout: true) do
       {_output, 0} ->
-        Logger.info(
-          "[PostgresManager] PostgreSQL already running — restarting with updated config"
-        )
+        Logger.info("[PostgresManager] PostgreSQL already running — restarting with updated config")
 
-        state.cmd_fn.(pg_ctl, ["stop", "-D", state.data_dir, "-m", "fast"],
-          stderr_to_stdout: true
-        )
+        state.cmd_fn.(pg_ctl, ["stop", "-D", state.data_dir, "-m", "fast"], stderr_to_stdout: true)
 
       _ ->
         :ok

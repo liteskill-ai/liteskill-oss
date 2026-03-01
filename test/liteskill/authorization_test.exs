@@ -3,7 +3,9 @@ defmodule Liteskill.AuthorizationTest do
 
   alias Liteskill.Authorization
   alias Liteskill.Authorization.EntityAcl
+  alias Liteskill.Chat.Conversation
   alias Liteskill.Groups
+  alias Liteskill.McpServers.McpServer
 
   setup do
     {:ok, user} =
@@ -658,7 +660,7 @@ defmodule Liteskill.AuthorizationTest do
 
       assert :ok =
                Authorization.verify_ownership(
-                 Liteskill.Chat.Conversation,
+                 Conversation,
                  conversation.id,
                  user.id
                )
@@ -670,7 +672,7 @@ defmodule Liteskill.AuthorizationTest do
 
       assert :error =
                Authorization.verify_ownership(
-                 Liteskill.Chat.Conversation,
+                 Conversation,
                  conversation.id,
                  other.id
                )
@@ -679,7 +681,7 @@ defmodule Liteskill.AuthorizationTest do
     test "returns :error for non-existent entity", %{user: user} do
       assert :error =
                Authorization.verify_ownership(
-                 Liteskill.Chat.Conversation,
+                 Conversation,
                  Ecto.UUID.generate(),
                  user.id
                )
@@ -695,7 +697,7 @@ defmodule Liteskill.AuthorizationTest do
 
       assert :ok =
                Authorization.verify_ownership(
-                 Liteskill.McpServers.McpServer,
+                 McpServer,
                  server.id,
                  user.id
                )
@@ -711,7 +713,7 @@ defmodule Liteskill.AuthorizationTest do
 
       assert :error =
                Authorization.verify_ownership(
-                 Liteskill.McpServers.McpServer,
+                 McpServer,
                  server.id,
                  other.id
                )
@@ -772,7 +774,8 @@ defmodule Liteskill.AuthorizationTest do
       {:ok, _} = Authorization.grant_agent_access("mcp_server", server.id, agent.id)
 
       ids =
-        Authorization.agent_accessible_entity_ids("mcp_server", agent.id)
+        "mcp_server"
+        |> Authorization.agent_accessible_entity_ids(agent.id)
         |> Liteskill.Repo.all()
 
       assert server.id in ids
@@ -780,7 +783,8 @@ defmodule Liteskill.AuthorizationTest do
 
     test "agent_accessible_entity_ids returns empty for no access", %{agent: agent} do
       ids =
-        Authorization.agent_accessible_entity_ids("mcp_server", agent.id)
+        "mcp_server"
+        |> Authorization.agent_accessible_entity_ids(agent.id)
         |> Liteskill.Repo.all()
 
       assert ids == []

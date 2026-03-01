@@ -8,11 +8,12 @@ defmodule Liteskill.Rag.IngestWorker do
 
   use Oban.Worker, queue: :rag_ingest, max_attempts: 3
 
-  alias Liteskill.Rag
-  alias Liteskill.Rag.{Chunker, Source}
-  alias Liteskill.Repo
-
   import Ecto.Query
+
+  alias Liteskill.Rag
+  alias Liteskill.Rag.Chunker
+  alias Liteskill.Rag.Source
+  alias Liteskill.Repo
 
   @text_content_types [
     "text/",
@@ -42,7 +43,7 @@ defmodule Liteskill.Rag.IngestWorker do
          body = normalize_body(response.body),
          {:ok, source} <- find_or_create_source(url, collection_id, user_id),
          {:ok, document} <- create_document(url, body, content_type, source, user_id),
-         chunks <- chunk_text(body, chunk_opts),
+         chunks = chunk_text(body, chunk_opts),
          {:ok, _} <- embed_chunks(document, chunks, user_id, plug) do
       :ok
     end
@@ -99,7 +100,7 @@ defmodule Liteskill.Rag.IngestWorker do
     raw =
       case headers do
         %{} ->
-          Map.get(headers, "content-type", []) |> List.first()
+          headers |> Map.get("content-type", []) |> List.first()
 
         # coveralls-ignore-start
         list when is_list(list) ->

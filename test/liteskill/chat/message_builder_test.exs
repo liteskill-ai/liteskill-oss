@@ -2,7 +2,9 @@ defmodule Liteskill.Chat.MessageBuilderTest do
   use Liteskill.DataCase, async: false
 
   alias Liteskill.Chat
+  alias Liteskill.Chat.Message
   alias Liteskill.Chat.MessageBuilder
+  alias Liteskill.Chat.ToolCall
 
   setup do
     {:ok, user} =
@@ -28,13 +30,14 @@ defmodule Liteskill.Chat.MessageBuilderTest do
     end
 
     test "filters out non-complete messages", %{user: user} do
+      alias Chat.ConversationAggregate
+      alias Chat.Projector
+      alias Liteskill.Aggregate.Loader
+
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Filter Test"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "Hello")
 
       # Start a streaming message (will be status "streaming", not "complete")
-      alias Liteskill.Aggregate.Loader
-      alias Liteskill.Chat.{ConversationAggregate, Projector}
-
       message_id = Ecto.UUID.generate()
 
       command =
@@ -59,7 +62,7 @@ defmodule Liteskill.Chat.MessageBuilderTest do
 
       # Simulate empty message by updating
       msg = hd(messages)
-      msg |> Liteskill.Chat.Message.changeset(%{content: ""}) |> Repo.update!()
+      msg |> Message.changeset(%{content: ""}) |> Repo.update!()
 
       {:ok, messages} = Chat.list_messages(conv.id, user.id)
       result = MessageBuilder.build_llm_messages(messages)
@@ -68,11 +71,12 @@ defmodule Liteskill.Chat.MessageBuilderTest do
     end
 
     test "builds assistant messages with tool_use and tool results", %{user: user} do
+      alias Chat.ConversationAggregate
+      alias Chat.Projector
+      alias Liteskill.Aggregate.Loader
+
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Tool Test"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "Use a tool")
-
-      alias Liteskill.Aggregate.Loader
-      alias Liteskill.Chat.{ConversationAggregate, Projector}
 
       message_id = Ecto.UUID.generate()
       tool_use_id = "tool-#{System.unique_integer([:positive])}"
@@ -169,11 +173,12 @@ defmodule Liteskill.Chat.MessageBuilderTest do
     end
 
     test "handles assistant message without tool_use", %{user: user} do
+      alias Chat.ConversationAggregate
+      alias Chat.Projector
+      alias Liteskill.Aggregate.Loader
+
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Plain Test"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "Hello")
-
-      alias Liteskill.Aggregate.Loader
-      alias Liteskill.Chat.{ConversationAggregate, Projector}
 
       message_id = Ecto.UUID.generate()
 
@@ -210,11 +215,12 @@ defmodule Liteskill.Chat.MessageBuilderTest do
     end
 
     test "filters out empty assistant messages", %{user: user} do
+      alias Chat.ConversationAggregate
+      alias Chat.Projector
+      alias Liteskill.Aggregate.Loader
+
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Empty Asst"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "Hello")
-
-      alias Liteskill.Aggregate.Loader
-      alias Liteskill.Chat.{ConversationAggregate, Projector}
 
       message_id = Ecto.UUID.generate()
 
@@ -251,14 +257,14 @@ defmodule Liteskill.Chat.MessageBuilderTest do
     end
 
     test "handles tool_use with empty content and no completed tool calls" do
-      msg = %Liteskill.Chat.Message{
+      msg = %Message{
         id: Ecto.UUID.generate(),
         role: "assistant",
         content: "",
         status: "complete",
         stop_reason: "tool_use",
         tool_calls: [
-          %Liteskill.Chat.ToolCall{
+          %ToolCall{
             tool_use_id: "tc-empty",
             tool_name: "test",
             input: %{},
@@ -285,7 +291,7 @@ defmodule Liteskill.Chat.MessageBuilderTest do
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
 
       {:ok, messages} = Chat.list_messages(conv.id, user.id)
-      msg = hd(messages) |> Repo.preload(:tool_calls)
+      msg = messages |> hd() |> Repo.preload(:tool_calls)
 
       result = MessageBuilder.tool_calls_for_message(msg)
       assert result == []
@@ -306,14 +312,14 @@ defmodule Liteskill.Chat.MessageBuilderTest do
   describe "format_tool_output (via build_llm_messages)" do
     test "handles nil output" do
       # Create a minimal tool call scenario
-      msg = %Liteskill.Chat.Message{
+      msg = %Message{
         id: Ecto.UUID.generate(),
         role: "assistant",
         content: "test",
         status: "complete",
         stop_reason: "tool_use",
         tool_calls: [
-          %Liteskill.Chat.ToolCall{
+          %ToolCall{
             tool_use_id: "tc-1",
             tool_name: "test",
             input: %{},
@@ -340,14 +346,14 @@ defmodule Liteskill.Chat.MessageBuilderTest do
     end
 
     test "handles content list with non-text items" do
-      msg = %Liteskill.Chat.Message{
+      msg = %Message{
         id: Ecto.UUID.generate(),
         role: "assistant",
         content: "test",
         status: "complete",
         stop_reason: "tool_use",
         tool_calls: [
-          %Liteskill.Chat.ToolCall{
+          %ToolCall{
             tool_use_id: "tc-mixed",
             tool_name: "test",
             input: %{},
@@ -370,18 +376,18 @@ defmodule Liteskill.Chat.MessageBuilderTest do
           "text"
         ])
 
-      assert text == "{\"image\":\"base64data\"}"
+      assert text == ~s({"image":"base64data"})
     end
 
     test "handles map output" do
-      msg = %Liteskill.Chat.Message{
+      msg = %Message{
         id: Ecto.UUID.generate(),
         role: "assistant",
         content: "test",
         status: "complete",
         stop_reason: "tool_use",
         tool_calls: [
-          %Liteskill.Chat.ToolCall{
+          %ToolCall{
             tool_use_id: "tc-2",
             tool_name: "test",
             input: %{},
@@ -404,18 +410,18 @@ defmodule Liteskill.Chat.MessageBuilderTest do
           "text"
         ])
 
-      assert text == "{\"key\":\"val\"}"
+      assert text == ~s({"key":"val"})
     end
 
     test "handles non-map output" do
-      msg = %Liteskill.Chat.Message{
+      msg = %Message{
         id: Ecto.UUID.generate(),
         role: "assistant",
         content: "",
         status: "complete",
         stop_reason: "tool_use",
         tool_calls: [
-          %Liteskill.Chat.ToolCall{
+          %ToolCall{
             tool_use_id: "tc-3",
             tool_name: "test",
             input: %{},

@@ -20,8 +20,10 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
     description: "Calls the LLM with prompt, system prompt, and tools",
     schema: []
 
-  alias Liteskill.LlmGateway.{ProviderGate, TokenBucket}
-  alias Liteskill.LLM.{StreamHandler, ToolUtils}
+  alias Liteskill.LLM.StreamHandler
+  alias Liteskill.LLM.ToolUtils
+  alias Liteskill.LlmGateway.ProviderGate
+  alias Liteskill.LlmGateway.TokenBucket
   alias Liteskill.Retry
 
   require Logger
@@ -33,7 +35,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
   @default_keep_rounds 4
 
   def run(_params, context) do
-    state = context.state |> maybe_inject_rag_context()
+    state = maybe_inject_rag_context(context.state)
 
     if state[:llm_model] do
       {system_prompt, llm_context} =
@@ -42,9 +44,7 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
             msg_count = length(messages)
 
             # coveralls-ignore-start — Logger macro wraps string in lazy fn invisible to coverage
-            Logger.info(
-              "LlmGenerate: resuming #{state[:agent_name]} from #{msg_count} saved messages"
-            )
+            Logger.info("LlmGenerate: resuming #{state[:agent_name]} from #{msg_count} saved messages")
 
             # coveralls-ignore-stop
 
@@ -130,15 +130,15 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
 
     # Batch optimization hint when tools are available
     parts =
-      if (state[:tools] || []) != [] do
+      if (state[:tools] || []) == [] do
+        parts
+      else
         parts ++
           [
             "When using tools, prefer batching multiple operations into a single tool call " <>
               "where the tool supports batch operations (e.g. multiple actions in wiki__write " <>
               "or reports__modify_sections). This reduces round-trips and improves efficiency."
           ]
-      else
-        parts
       end
 
     parts =
@@ -340,11 +340,11 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
     tools = state[:tools] || []
 
     req_opts =
-      if tools != [] do
+      if tools == [] do
+        req_opts
+      else
         reqllm_tools = Enum.map(tools, &ToolUtils.convert_tool/1)
         Keyword.put(req_opts, :tools, reqllm_tools)
-      else
-        req_opts
       end
 
     # Enable Anthropic prompt caching when the model supports it (use_converse: false).
@@ -530,7 +530,8 @@ defmodule Liteskill.Agents.Actions.LlmGenerate do
 
   defp append_tool_results(llm_context, tool_calls, tool_results) do
     tool_result_messages =
-      Enum.zip(tool_calls, tool_results)
+      tool_calls
+      |> Enum.zip(tool_results)
       |> Enum.map(fn {tc, result} ->
         ReqLLM.Context.tool_result(tc.tool_use_id, tc.name, ToolUtils.format_tool_output(result))
       end)

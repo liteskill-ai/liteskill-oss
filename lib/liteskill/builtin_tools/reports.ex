@@ -82,8 +82,7 @@ defmodule Liteskill.BuiltinTools.Reports do
                   },
                   "path" => %{
                     "type" => "string",
-                    "description" =>
-                      "Section path using ' > ' separator. E.g. 'Findings > Key Points'"
+                    "description" => "Section path using ' > ' separator. E.g. 'Findings > Key Points'"
                   },
                   "content" => %{
                     "type" => "string",
@@ -148,8 +147,7 @@ defmodule Liteskill.BuiltinTools.Reports do
       },
       %{
         "name" => "reports__delete",
-        "description" =>
-          "Delete a report and all its sections. Only the report owner can delete.",
+        "description" => "Delete a report and all its sections. Only the report owner can delete.",
         "inputSchema" => %{
           "type" => "object",
           "properties" => %{
@@ -165,16 +163,18 @@ defmodule Liteskill.BuiltinTools.Reports do
   def call_tool(tool_name, input, context) do
     user_id = Keyword.fetch!(context, :user_id)
 
-    case tool_name do
-      "reports__create" -> do_create(user_id, input, context)
-      "reports__list" -> do_list(user_id)
-      "reports__get" -> do_get(user_id, input)
-      "reports__modify_sections" -> do_modify_sections(user_id, input)
-      "reports__comment" -> do_comment(user_id, input)
-      "reports__delete" -> do_delete(user_id, input)
-      _ -> {:error, "Unknown tool: #{tool_name}"}
-    end
-    |> wrap_result()
+    case_result =
+      case tool_name do
+        "reports__create" -> do_create(user_id, input, context)
+        "reports__list" -> do_list(user_id)
+        "reports__get" -> do_get(user_id, input)
+        "reports__modify_sections" -> do_modify_sections(user_id, input)
+        "reports__comment" -> do_comment(user_id, input)
+        "reports__delete" -> do_delete(user_id, input)
+        _ -> {:error, "Unknown tool: #{tool_name}"}
+      end
+
+    wrap_result(case_result)
   end
 
   defp do_create(user_id, %{"title" => title}, context) do
@@ -211,7 +211,7 @@ defmodule Liteskill.BuiltinTools.Reports do
     case Reports.get_report(report_id, user_id) do
       {:ok, report} ->
         markdown = Reports.render_markdown(report, start_depth: 2)
-        {:ok, "# #{report.title}\n\n#{markdown}" |> String.trim()}
+        {:ok, String.trim("# #{report.title}\n\n#{markdown}")}
 
       {:error, reason} ->
         {:error, reason}
@@ -220,8 +220,7 @@ defmodule Liteskill.BuiltinTools.Reports do
 
   defp do_get(_user_id, _input), do: {:error, "Missing required field: report_id"}
 
-  defp do_modify_sections(user_id, %{"report_id" => report_id, "actions" => actions})
-       when is_list(actions) do
+  defp do_modify_sections(user_id, %{"report_id" => report_id, "actions" => actions}) when is_list(actions) do
     case Reports.modify_sections(report_id, user_id, actions) do
       {:ok, results} ->
         {:ok, %{"results" => Enum.map(results, &Map.new(&1, fn {k, v} -> {to_string(k), v} end))}}
@@ -231,11 +230,9 @@ defmodule Liteskill.BuiltinTools.Reports do
     end
   end
 
-  defp do_modify_sections(_user_id, _input),
-    do: {:error, "Missing required fields: report_id, actions"}
+  defp do_modify_sections(_user_id, _input), do: {:error, "Missing required fields: report_id, actions"}
 
-  defp do_comment(user_id, %{"report_id" => report_id, "actions" => actions})
-       when is_list(actions) do
+  defp do_comment(user_id, %{"report_id" => report_id, "actions" => actions}) when is_list(actions) do
     case Reports.manage_comments(report_id, user_id, actions) do
       {:ok, results} ->
         {:ok, %{"results" => Enum.map(results, &Map.new(&1, fn {k, v} -> {to_string(k), v} end))}}
@@ -245,8 +242,7 @@ defmodule Liteskill.BuiltinTools.Reports do
     end
   end
 
-  defp do_comment(_user_id, _input),
-    do: {:error, "Missing required fields: report_id, actions"}
+  defp do_comment(_user_id, _input), do: {:error, "Missing required fields: report_id, actions"}
 
   defp do_delete(user_id, %{"report_id" => report_id}) do
     case Reports.delete_report(report_id, user_id) do

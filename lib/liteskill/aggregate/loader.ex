@@ -7,9 +7,9 @@ defmodule Liteskill.Aggregate.Loader do
   and appending resulting events.
   """
 
-  require Logger
-
   alias Liteskill.EventStore.Postgres, as: Store
+
+  require Logger
 
   @snapshot_interval 100
   @replay_batch_size 10_000
@@ -189,9 +189,7 @@ defmodule Liteskill.Aggregate.Loader do
   rescue
     # coveralls-ignore-start
     e ->
-      Logger.warning(
-        "Failed to prune old snapshots: stream=#{stream_id} error=#{Exception.message(e)}"
-      )
+      Logger.warning("Failed to prune old snapshots: stream=#{stream_id} error=#{Exception.message(e)}")
 
       # coveralls-ignore-stop
   end
@@ -242,8 +240,7 @@ defmodule Liteskill.Aggregate.Loader do
 
   defp restore_atom_fields(map), do: restore_nested_atom_fields(map)
 
-  defp restore_nested_atom_fields(%{current_stream: %{tool_calls: tool_calls} = stream} = map)
-       when is_list(tool_calls) do
+  defp restore_nested_atom_fields(%{current_stream: %{tool_calls: tool_calls} = stream} = map) when is_list(tool_calls) do
     restored_tcs =
       Enum.map(tool_calls, fn
         %{status: status} = tc when is_binary(status) -> safe_to_atom(tc, :status, status)

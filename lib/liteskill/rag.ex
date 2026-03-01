@@ -1,4 +1,9 @@
 defmodule Liteskill.Rag do
+  @moduledoc """
+  The RAG context. Manages collections, sources, documents, chunks,
+  embedding generation, and semantic search.
+  """
+
   use Boundary,
     top_level?: true,
     deps: [
@@ -25,25 +30,17 @@ defmodule Liteskill.Rag do
       WikiSyncWorker
     ]
 
-  @moduledoc """
-  The RAG context. Manages collections, sources, documents, chunks,
-  embedding generation, and semantic search.
-  """
-
-  alias Liteskill.Rag.{
-    Collection,
-    Source,
-    Document,
-    Chunk,
-    CohereClient,
-    EmbeddingClient,
-    EmbedQueue,
-    IngestWorker
-  }
-
-  alias Liteskill.Repo
-
   import Ecto.Query
+
+  alias Liteskill.Rag.Chunk
+  alias Liteskill.Rag.CohereClient
+  alias Liteskill.Rag.Collection
+  alias Liteskill.Rag.Document
+  alias Liteskill.Rag.EmbeddingClient
+  alias Liteskill.Rag.EmbedQueue
+  alias Liteskill.Rag.IngestWorker
+  alias Liteskill.Rag.Source
+  alias Liteskill.Repo
 
   # --- Collections ---
 
@@ -80,11 +77,12 @@ defmodule Liteskill.Rag do
         distinct: true
       )
 
-    from(c in Collection,
-      where: c.user_id == ^user_id or c.id in subquery(shared_wiki_collection_ids),
-      order_by: [asc: c.name]
+    Repo.all(
+      from(c in Collection,
+        where: c.user_id == ^user_id or c.id in subquery(shared_wiki_collection_ids),
+        order_by: [asc: c.name]
+      )
     )
-    |> Repo.all()
   end
 
   def get_collection(id, user_id) do
@@ -216,7 +214,7 @@ defmodule Liteskill.Rag do
                plug_opts
            ) do
         {:ok, embeddings} ->
-          now = DateTime.utc_now() |> DateTime.truncate(:second)
+          now = DateTime.truncate(DateTime.utc_now(), :second)
 
           chunk_rows =
             chunks
@@ -466,8 +464,7 @@ defmodule Liteskill.Rag do
   def find_or_create_wiki_source(collection_id, user_id) do
     case Repo.one(
            from(s in Source,
-             where:
-               s.name == "wiki" and s.collection_id == ^collection_id and s.user_id == ^user_id
+             where: s.name == "wiki" and s.collection_id == ^collection_id and s.user_id == ^user_id
            )
          ) do
       %Source{} = source -> {:ok, source}
@@ -483,9 +480,7 @@ defmodule Liteskill.Rag do
              where:
                fragment("? ->> 'wiki_document_id' = ?", d.metadata, ^wiki_document_id) and
                  (d.user_id == ^user_id or
-                    fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(
-                      wiki_space_ids
-                    ))
+                    fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(wiki_space_ids))
            )
          ) do
       %Document{} = doc ->
@@ -493,11 +488,10 @@ defmodule Liteskill.Rag do
 
       nil ->
         # Fallback for docs missing wiki_space_id metadata (pre-backfill data)
-        Repo.one(
-          from(d in Document,
-            where: fragment("? ->> 'wiki_document_id' = ?", d.metadata, ^wiki_document_id)
-          )
+        from(d in Document,
+          where: fragment("? ->> 'wiki_document_id' = ?", d.metadata, ^wiki_document_id)
         )
+        |> Repo.one()
         |> resolve_wiki_acl(user_id)
     end
   end
@@ -511,9 +505,7 @@ defmodule Liteskill.Rag do
                (fragment("? ->> 'wiki_document_id' = ?", d.metadata, ^document_id) or
                   fragment("? ->> 'source_document_id' = ?", d.metadata, ^document_id)) and
                  (d.user_id == ^user_id or
-                    fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(
-                      wiki_space_ids
-                    ))
+                    fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(wiki_space_ids))
            )
          ) do
       %Document{} = doc ->
@@ -521,13 +513,12 @@ defmodule Liteskill.Rag do
 
       nil ->
         # Fallback for docs missing wiki_space_id metadata (pre-backfill data)
-        Repo.one(
-          from(d in Document,
-            where:
-              fragment("? ->> 'wiki_document_id' = ?", d.metadata, ^document_id) or
-                fragment("? ->> 'source_document_id' = ?", d.metadata, ^document_id)
-          )
+        from(d in Document,
+          where:
+            fragment("? ->> 'wiki_document_id' = ?", d.metadata, ^document_id) or
+              fragment("? ->> 'source_document_id' = ?", d.metadata, ^document_id)
         )
+        |> Repo.one()
         |> resolve_wiki_acl(user_id)
     end
   end
@@ -540,9 +531,7 @@ defmodule Liteskill.Rag do
              where:
                d.id == ^rag_document_id and
                  (d.user_id == ^user_id or
-                    fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(
-                      wiki_space_ids
-                    ))
+                    fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(wiki_space_ids))
            )
          ) do
       %Document{} ->
@@ -557,9 +546,7 @@ defmodule Liteskill.Rag do
   end
 
   def delete_document_chunks(document_id) do
-    {count, _} =
-      from(c in Chunk, where: c.document_id == ^document_id)
-      |> Repo.delete_all()
+    {count, _} = Repo.delete_all(from(c in Chunk, where: c.document_id == ^document_id))
 
     {:ok, count}
   end
@@ -598,9 +585,7 @@ defmodule Liteskill.Rag do
              where:
                fragment("? ->> 'source_document_id' = ?", d.metadata, ^source_document_id) and
                  (d.user_id == ^user_id or
-                    fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(
-                      wiki_space_ids
-                    ))
+                    fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(wiki_space_ids))
            )
          ) do
       %Document{} = doc ->
@@ -608,11 +593,10 @@ defmodule Liteskill.Rag do
 
       nil ->
         # Fallback for docs missing wiki_space_id metadata (pre-backfill data)
-        Repo.one(
-          from(d in Document,
-            where: fragment("? ->> 'source_document_id' = ?", d.metadata, ^source_document_id)
-          )
+        from(d in Document,
+          where: fragment("? ->> 'source_document_id' = ?", d.metadata, ^source_document_id)
         )
+        |> Repo.one()
         |> resolve_wiki_acl(user_id)
     end
   end
@@ -643,7 +627,7 @@ defmodule Liteskill.Rag do
         "plug" => plug
       }
 
-      IngestWorker.new(args) |> Oban.insert()
+      args |> IngestWorker.new() |> Oban.insert()
     end
   end
 
@@ -684,65 +668,66 @@ defmodule Liteskill.Rag do
     query_vector = Pgvector.new(query_embedding)
     wiki_space_ids = Liteskill.Authorization.accessible_entity_ids("wiki_space", user_id)
 
-    from(c in Chunk,
-      join: d in Document,
-      on: d.id == c.document_id,
-      join: s in Source,
-      on: s.id == d.source_id,
-      join: coll in Collection,
-      on: coll.id == s.collection_id,
-      where:
-        coll.user_id == ^user_id or
-          fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(wiki_space_ids),
-      where: not is_nil(c.embedding),
-      order_by: fragment("embedding <=> ?", ^query_vector),
-      limit: ^limit,
-      select: %{chunk: c, distance: fragment("embedding <=> ?", ^query_vector)}
+    Repo.all(
+      from(c in Chunk,
+        join: d in Document,
+        on: d.id == c.document_id,
+        join: s in Source,
+        on: s.id == d.source_id,
+        join: coll in Collection,
+        on: coll.id == s.collection_id,
+        where:
+          coll.user_id == ^user_id or fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(wiki_space_ids),
+        where: not is_nil(c.embedding),
+        order_by: fragment("embedding <=> ?", ^query_vector),
+        limit: ^limit,
+        select: %{chunk: c, distance: fragment("embedding <=> ?", ^query_vector)}
+      )
     )
-    |> Repo.all()
   end
 
   defp vector_search_accessible(collection_id, user_id, query_embedding, limit) do
     query_vector = Pgvector.new(query_embedding)
     wiki_space_ids = Liteskill.Authorization.accessible_entity_ids("wiki_space", user_id)
 
-    from(c in Chunk,
-      join: d in Document,
-      on: d.id == c.document_id,
-      join: s in Source,
-      on: s.id == d.source_id,
-      join: coll in Collection,
-      on: coll.id == s.collection_id,
-      where: s.collection_id == ^collection_id,
-      where:
-        coll.user_id == ^user_id or
-          fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(wiki_space_ids),
-      where: not is_nil(c.embedding),
-      order_by: fragment("embedding <=> ?", ^query_vector),
-      limit: ^limit,
-      select: %{chunk: c, distance: fragment("embedding <=> ?", ^query_vector)}
+    Repo.all(
+      from(c in Chunk,
+        join: d in Document,
+        on: d.id == c.document_id,
+        join: s in Source,
+        on: s.id == d.source_id,
+        join: coll in Collection,
+        on: coll.id == s.collection_id,
+        where: s.collection_id == ^collection_id,
+        where:
+          coll.user_id == ^user_id or fragment("(?->>'wiki_space_id')::uuid", d.metadata) in subquery(wiki_space_ids),
+        where: not is_nil(c.embedding),
+        order_by: fragment("embedding <=> ?", ^query_vector),
+        limit: ^limit,
+        select: %{chunk: c, distance: fragment("embedding <=> ?", ^query_vector)}
+      )
     )
-    |> Repo.all()
   end
 
   defp vector_search(collection_id, query_embedding, limit) do
     query_vector = Pgvector.new(query_embedding)
 
-    from(c in Chunk,
-      join: d in Document,
-      on: d.id == c.document_id,
-      join: s in Source,
-      on: s.id == d.source_id,
-      where: s.collection_id == ^collection_id,
-      where: not is_nil(c.embedding),
-      order_by: fragment("embedding <=> ?", ^query_vector),
-      limit: ^limit,
-      select: %{chunk: c, distance: fragment("embedding <=> ?", ^query_vector)}
+    Repo.all(
+      from(c in Chunk,
+        join: d in Document,
+        on: d.id == c.document_id,
+        join: s in Source,
+        on: s.id == d.source_id,
+        where: s.collection_id == ^collection_id,
+        where: not is_nil(c.embedding),
+        order_by: fragment("embedding <=> ?", ^query_vector),
+        limit: ^limit,
+        select: %{chunk: c, distance: fragment("embedding <=> ?", ^query_vector)}
+      )
     )
-    |> Repo.all()
   end
 
-  defp content_hash(content), do: :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+  defp content_hash(content), do: :sha256 |> :crypto.hash(content) |> Base.encode16(case: :lower)
 
   defp maybe_hash_content(%{content: content} = attrs) when is_binary(content) do
     Map.put(attrs, :content_hash, content_hash(content))
@@ -754,13 +739,14 @@ defmodule Liteskill.Rag do
   Returns the number of documents in a collection (across all its sources).
   """
   def collection_document_count(collection_id) do
-    from(d in Document,
-      join: s in Source,
-      on: s.id == d.source_id,
-      where: s.collection_id == ^collection_id,
-      select: count(d.id)
+    Repo.one(
+      from(d in Document,
+        join: s in Source,
+        on: s.id == d.source_id,
+        where: s.collection_id == ^collection_id,
+        select: count(d.id)
+      )
     )
-    |> Repo.one()
   end
 
   # --- Re-embedding support ---
@@ -777,13 +763,9 @@ defmodule Liteskill.Rag do
   Returns `{:ok, %{chunks_cleared: n, documents_reset: n}}`.
   """
   def clear_all_embeddings do
-    {chunks_cleared, _} =
-      from(c in Chunk, where: not is_nil(c.embedding))
-      |> Repo.update_all(set: [embedding: nil])
+    {chunks_cleared, _} = Repo.update_all(from(c in Chunk, where: not is_nil(c.embedding)), set: [embedding: nil])
 
-    {documents_reset, _} =
-      from(d in Document, where: d.status == "embedded")
-      |> Repo.update_all(set: [status: "pending"])
+    {documents_reset, _} = Repo.update_all(from(d in Document, where: d.status == "embedded"), set: [status: "pending"])
 
     {:ok, %{chunks_cleared: chunks_cleared, documents_reset: documents_reset}}
   end
@@ -792,21 +774,20 @@ defmodule Liteskill.Rag do
   Returns documents that need re-embedding (pending status with chunks), paginated.
   """
   def list_documents_for_reembedding(limit, offset) do
-    from(d in Document,
-      where: d.status == "pending" and d.chunk_count > 0,
-      order_by: [asc: d.inserted_at],
-      limit: ^limit,
-      offset: ^offset
+    Repo.all(
+      from(d in Document,
+        where: d.status == "pending" and d.chunk_count > 0,
+        order_by: [asc: d.inserted_at],
+        limit: ^limit,
+        offset: ^offset
+      )
     )
-    |> Repo.all()
   end
 
   # coveralls-ignore-start
-  defp format_embed_error(%{status: status, body: %{"Message" => msg}}),
-    do: "HTTP #{status}: #{msg}"
+  defp format_embed_error(%{status: status, body: %{"Message" => msg}}), do: "HTTP #{status}: #{msg}"
 
-  defp format_embed_error(%{status: status, body: %{"message" => msg}}),
-    do: "HTTP #{status}: #{msg}"
+  defp format_embed_error(%{status: status, body: %{"message" => msg}}), do: "HTTP #{status}: #{msg}"
 
   defp format_embed_error(%{status: status}), do: "HTTP #{status}"
   defp format_embed_error(reason) when is_binary(reason), do: reason

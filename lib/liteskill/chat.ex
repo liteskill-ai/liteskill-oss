@@ -1,4 +1,11 @@
 defmodule Liteskill.Chat do
+  @moduledoc """
+  The Chat context. Provides write and read APIs for conversations.
+
+  Write path: Context -> Aggregate -> EventStore -> PubSub -> Projector
+  Read path: Context -> Ecto queries on projection tables
+  """
+
   use Boundary,
     top_level?: true,
     deps: [
@@ -20,22 +27,19 @@ defmodule Liteskill.Chat do
       ToolCall
     ]
 
-  @moduledoc """
-  The Chat context. Provides write and read APIs for conversations.
-
-  Write path: Context -> Aggregate -> EventStore -> PubSub -> Projector
-  Read path: Context -> Ecto queries on projection tables
-  """
-
-  require Logger
+  import Ecto.Query
 
   alias Liteskill.Aggregate.Loader
   alias Liteskill.Authorization
-  alias Liteskill.Chat.{Conversation, ConversationAggregate, Message, MessageChunk, Projector}
+  alias Liteskill.Chat.Conversation
+  alias Liteskill.Chat.ConversationAggregate
+  alias Liteskill.Chat.Message
+  alias Liteskill.Chat.MessageChunk
+  alias Liteskill.Chat.Projector
   alias Liteskill.EventStore.Postgres, as: Store
   alias Liteskill.Repo
 
-  import Ecto.Query
+  require Logger
 
   @max_replay_events 10_000
 
@@ -127,7 +131,7 @@ defmodule Liteskill.Chat do
       new_stream_id = "conversation-#{new_conversation_id}"
 
       # Build fork event + copied events
-      now = DateTime.utc_now() |> DateTime.to_iso8601()
+      now = DateTime.to_iso8601(DateTime.utc_now())
 
       fork_event = %{
         event_type: "ConversationForked",
@@ -317,8 +321,7 @@ defmodule Liteskill.Chat do
   retrying a failed stream.
   """
   def delete_message_chunks(message_id) do
-    from(c in MessageChunk, where: c.message_id == ^message_id)
-    |> Repo.delete_all()
+    Repo.delete_all(from(c in MessageChunk, where: c.message_id == ^message_id))
   end
 
   def get_conversation_tree(conversation_id, user_id) do
@@ -378,8 +381,7 @@ defmodule Liteskill.Chat do
   @doc """
   Broadcasts a tool call decision (approve/reject) to the streaming process.
   """
-  def broadcast_tool_decision(stream_id, tool_use_id, decision)
-      when decision in [:approved, :rejected] do
+  def broadcast_tool_decision(stream_id, tool_use_id, decision) when decision in [:approved, :rejected] do
     Phoenix.PubSub.broadcast(
       Liteskill.PubSub,
       "tool_approval:#{stream_id}",
@@ -392,7 +394,7 @@ defmodule Liteskill.Chat do
   Used by the periodic sweeper to recover orphaned streams.
   """
   def list_stuck_streaming(threshold_minutes \\ 5) do
-    cutoff = DateTime.utc_now() |> DateTime.add(-threshold_minutes * 60, :second)
+    cutoff = DateTime.add(DateTime.utc_now(), -threshold_minutes * 60, :second)
 
     Repo.all(
       from c in Conversation,
@@ -410,9 +412,7 @@ defmodule Liteskill.Chat do
            "Stream recovered by periodic sweep — no active handler"
          ) do
       {:error, reason} ->
-        Logger.warning(
-          "Orphaned stream recovery failed: conversation=#{conversation_id} reason=#{inspect(reason)}"
-        )
+        Logger.warning("Orphaned stream recovery failed: conversation=#{conversation_id} reason=#{inspect(reason)}")
 
         :error
 
@@ -446,9 +446,7 @@ defmodule Liteskill.Chat do
           Projector.project_events(conversation.stream_id, events)
 
         {:error, reason} ->
-          Logger.warning(
-            "Stream recovery failed: stream=#{conversation.stream_id} reason=#{inspect(reason)}"
-          )
+          Logger.warning("Stream recovery failed: stream=#{conversation.stream_id} reason=#{inspect(reason)}")
 
           {:error, reason}
       end
@@ -571,11 +569,7 @@ defmodule Liteskill.Chat do
   end
 
   defp remap_event_data(%{event_type: type, data: data}, _new_conv_id, id_map)
-       when type in [
-              "AssistantChunkReceived",
-              "AssistantStreamCompleted",
-              "AssistantStreamFailed"
-            ] do
+       when type in ["AssistantChunkReceived", "AssistantStreamCompleted", "AssistantStreamFailed"] do
     {new_msg_id, id_map} = resolve_mapped_id(id_map, data["message_id"])
     {Map.put(data, "message_id", new_msg_id), id_map}
   end
@@ -623,9 +617,7 @@ defmodule Liteskill.Chat do
       :error ->
         new_id = Ecto.UUID.generate()
 
-        Logger.warning(
-          "Fork: unmapped ID #{inspect(original_id)}, generating replacement #{new_id}"
-        )
+        Logger.warning("Fork: unmapped ID #{inspect(original_id)}, generating replacement #{new_id}")
 
         {new_id, Map.put(id_map, original_id, new_id)}
         # coveralls-ignore-stop

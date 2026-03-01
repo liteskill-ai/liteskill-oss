@@ -2,6 +2,7 @@ defmodule Liteskill.BuiltinTools.ReportsTest do
   use Liteskill.DataCase, async: true
 
   alias Liteskill.BuiltinTools.Reports, as: ReportsTool
+  alias Liteskill.Reports.Report
 
   setup do
     {:ok, user} =
@@ -68,7 +69,7 @@ defmodule Liteskill.BuiltinTools.ReportsTest do
                ReportsTool.call_tool("reports__create", %{"title" => "Run Report"}, ctx)
 
       data = decode_content(result)
-      report = Liteskill.Repo.get!(Liteskill.Reports.Report, data["id"])
+      report = Liteskill.Repo.get!(Report, data["id"])
       assert report.run_id == run.id
     end
 
@@ -79,7 +80,7 @@ defmodule Liteskill.BuiltinTools.ReportsTest do
                ReportsTool.call_tool("reports__create", %{"title" => "User Report"}, ctx)
 
       data = decode_content(result)
-      report = Liteskill.Repo.get!(Liteskill.Reports.Report, data["id"])
+      report = Liteskill.Repo.get!(Report, data["id"])
       assert report.run_id == nil
     end
 
@@ -187,7 +188,7 @@ defmodule Liteskill.BuiltinTools.ReportsTest do
       data = decode_content(result)
       assert length(data["results"]) == 1
       assert hd(data["results"])["action"] == "add"
-      assert hd(data["results"])["comment_id"] != nil
+      assert hd(data["results"])["comment_id"]
     end
 
     test "comment resolve flow", %{user: user} do
@@ -240,7 +241,7 @@ defmodule Liteskill.BuiltinTools.ReportsTest do
 
       data = decode_content(result)
       assert hd(data["results"])["action"] == "resolve"
-      assert hd(data["results"])["reply_id"] != nil
+      assert hd(data["results"])["reply_id"]
     end
 
     test "comment resolve without body returns error", %{user: user} do
@@ -383,7 +384,7 @@ defmodule Liteskill.BuiltinTools.ReportsTest do
       {:ok, result} =
         ReportsTool.call_tool("reports__delete", %{"report_id" => Ecto.UUID.generate()}, ctx)
 
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
     end
 
     test "comment on non-existent report returns error", %{user: user} do
@@ -406,19 +407,19 @@ defmodule Liteskill.BuiltinTools.ReportsTest do
       ctx = [user_id: user.id]
 
       {:ok, result} = ReportsTool.call_tool("reports__create", %{}, ctx)
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
 
       {:ok, result} = ReportsTool.call_tool("reports__get", %{}, ctx)
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
 
       {:ok, result} = ReportsTool.call_tool("reports__modify_sections", %{}, ctx)
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
 
       {:ok, result} = ReportsTool.call_tool("reports__comment", %{}, ctx)
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
 
       {:ok, result} = ReportsTool.call_tool("reports__delete", %{}, ctx)
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
     end
   end
 

@@ -2,6 +2,9 @@ defmodule Liteskill.ChatTest do
   use Liteskill.DataCase, async: false
 
   alias Liteskill.Chat
+  alias Liteskill.Chat.Message
+  alias Liteskill.Chat.ToolCall
+  alias Liteskill.EventStore.Postgres
 
   setup do
     {:ok, user} =
@@ -31,7 +34,7 @@ defmodule Liteskill.ChatTest do
       assert conversation.title == "My Chat"
       assert conversation.status == "active"
       assert conversation.user_id == user.id
-      assert conversation.stream_id != nil
+      assert conversation.stream_id
     end
 
     test "creates with default title", %{user: user} do
@@ -637,14 +640,14 @@ defmodule Liteskill.ChatTest do
       Liteskill.Chat.Projector.project_events(stream_id, tool_events)
 
       # Verify the event has input
-      all_events = Liteskill.EventStore.Postgres.read_stream_forward(stream_id)
+      all_events = Postgres.read_stream_forward(stream_id)
       tc_event = Enum.find(all_events, &(&1.event_type == "ToolCallStarted"))
       assert tc_event.data["input"] == %{"location" => "NYC"}
 
       # Verify projected tool call has input
       tc =
         Liteskill.Repo.one!(
-          from tc in Liteskill.Chat.ToolCall,
+          from tc in ToolCall,
             where: tc.tool_use_id == "tooluse_123"
         )
 
@@ -804,13 +807,14 @@ defmodule Liteskill.ChatTest do
 
   describe "recover_stream/2" do
     test "recovers a conversation stuck in streaming state", %{user: user} do
+      alias Chat.ConversationAggregate
+      alias Chat.Projector
+      alias Liteskill.Aggregate.Loader
+
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Stuck Stream"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
 
       # Simulate a stuck streaming message via the aggregate
-      alias Liteskill.Aggregate.Loader
-      alias Liteskill.Chat.{ConversationAggregate, Projector}
-
       message_id = Ecto.UUID.generate()
 
       command =
@@ -836,10 +840,12 @@ defmodule Liteskill.ChatTest do
 
     test "returns error when aggregate is not streaming but projection has streaming message",
          %{user: user} do
+      import ExUnit.CaptureLog
+
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Mismatched"})
 
       # Insert a fake streaming message — aggregate is active, not streaming
-      Repo.insert!(%Liteskill.Chat.Message{
+      Repo.insert!(%Message{
         id: Ecto.UUID.generate(),
         conversation_id: conv.id,
         role: "assistant",
@@ -848,7 +854,6 @@ defmodule Liteskill.ChatTest do
         content: ""
       })
 
-      import ExUnit.CaptureLog
       log = capture_log(fn -> assert {:error, _} = Chat.recover_stream(conv.id, user.id) end)
       assert log =~ "recovery failed" or log =~ "not_streaming"
     end
@@ -856,11 +861,13 @@ defmodule Liteskill.ChatTest do
 
   describe "list_stuck_streaming/1" do
     test "returns conversations stuck in streaming for longer than threshold", %{user: user} do
+      alias Chat.Conversation
+      alias Chat.ConversationAggregate
+      alias Chat.Projector
+      alias Liteskill.Aggregate.Loader
+
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Stuck"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
-
-      alias Liteskill.Aggregate.Loader
-      alias Liteskill.Chat.{Conversation, ConversationAggregate, Projector}
 
       message_id = Ecto.UUID.generate()
       command = {:start_assistant_stream, %{message_id: message_id, model_id: "test-model"}}
@@ -868,10 +875,9 @@ defmodule Liteskill.ChatTest do
       Projector.project_events(conv.stream_id, events)
 
       # Backdate updated_at to 10 minutes ago so it exceeds the threshold
-      ten_min_ago = DateTime.utc_now() |> DateTime.add(-600, :second)
+      ten_min_ago = DateTime.add(DateTime.utc_now(), -600, :second)
 
-      from(c in Conversation, where: c.id == ^conv.id)
-      |> Repo.update_all(set: [updated_at: ten_min_ago])
+      Repo.update_all(from(c in Conversation, where: c.id == ^conv.id), set: [updated_at: ten_min_ago])
 
       # With threshold=5, it should appear (stuck for 10 min > 5 min)
       stuck = Chat.list_stuck_streaming(5)
@@ -892,11 +898,12 @@ defmodule Liteskill.ChatTest do
 
   describe "recover_stream_by_id/1" do
     test "recovers a stuck streaming conversation without user context", %{user: user} do
+      alias Chat.ConversationAggregate
+      alias Chat.Projector
+      alias Liteskill.Aggregate.Loader
+
       {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Orphaned"})
       {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
-
-      alias Liteskill.Aggregate.Loader
-      alias Liteskill.Chat.{ConversationAggregate, Projector}
 
       message_id = Ecto.UUID.generate()
       command = {:start_assistant_stream, %{message_id: message_id, model_id: "test-model"}}
@@ -1048,7 +1055,7 @@ defmodule Liteskill.ChatTest do
       ]
 
       # Append to event store and project
-      {:ok, stored} = Liteskill.EventStore.Postgres.append_events(stream_id, 3, events)
+      {:ok, stored} = Postgres.append_events(stream_id, 3, events)
       Liteskill.Chat.Projector.project_events(stream_id, stored)
 
       # Fork at position 2 (after user message + assistant stream complete = 2 messages)
@@ -1083,7 +1090,7 @@ defmodule Liteskill.ChatTest do
             "tool_use_id" => tool_use_id,
             "tool_name" => "search",
             "input" => %{"query" => "test"},
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         },
         %{
@@ -1095,7 +1102,7 @@ defmodule Liteskill.ChatTest do
             "input" => %{"query" => "test"},
             "output" => %{"result" => "found"},
             "duration_ms" => 100,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         },
         %{
@@ -1109,14 +1116,12 @@ defmodule Liteskill.ChatTest do
         }
       ]
 
-      {:ok, stored} = Liteskill.EventStore.Postgres.append_events(stream_id, 3, events)
+      {:ok, stored} = Postgres.append_events(stream_id, 3, events)
       Liteskill.Chat.Projector.project_events(stream_id, stored)
 
       # Verify parent tool call exists
       parent_tc =
-        Liteskill.Repo.one!(
-          from tc in Liteskill.Chat.ToolCall, where: tc.tool_use_id == ^tool_use_id
-        )
+        Liteskill.Repo.one!(from tc in ToolCall, where: tc.tool_use_id == ^tool_use_id)
 
       assert parent_tc.status == "completed"
 
@@ -1130,9 +1135,7 @@ defmodule Liteskill.ChatTest do
       forked_msg = Enum.find(forked_conv.messages, &(&1.role == "assistant"))
 
       forked_tool_calls =
-        Liteskill.Repo.all(
-          from tc in Liteskill.Chat.ToolCall, where: tc.message_id == ^forked_msg.id
-        )
+        Liteskill.Repo.all(from tc in ToolCall, where: tc.message_id == ^forked_msg.id)
 
       assert length(forked_tool_calls) == 1
       forked_tc = hd(forked_tool_calls)
@@ -1169,7 +1172,7 @@ defmodule Liteskill.ChatTest do
         }
       ]
 
-      {:ok, stored} = Liteskill.EventStore.Postgres.append_events(stream_id, 3, assistant_events)
+      {:ok, stored} = Postgres.append_events(stream_id, 3, assistant_events)
       Liteskill.Chat.Projector.project_events(stream_id, stored)
 
       # Send another user message (version 5), then truncate (version 6)
@@ -1194,7 +1197,7 @@ defmodule Liteskill.ChatTest do
 
       # Verify the fork succeeded (ConversationTruncated message_id was remapped correctly)
       {:ok, forked_conv} = Chat.get_conversation(forked.id, user.id)
-      assert forked_conv.title != nil
+      assert forked_conv.title
     end
   end
 
@@ -1206,7 +1209,7 @@ defmodule Liteskill.ChatTest do
 
       # Insert a fake "streaming" message in the DB so do_recover_stream finds it.
       # The aggregate is in :active state, so fail_stream will return {:error, :not_streaming}.
-      Repo.insert!(%Liteskill.Chat.Message{
+      Repo.insert!(%Message{
         id: Ecto.UUID.generate(),
         conversation_id: conv.id,
         role: "assistant",

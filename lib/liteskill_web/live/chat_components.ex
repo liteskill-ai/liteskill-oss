@@ -226,8 +226,7 @@ defmodule LiteskillWeb.ChatComponents do
     """
   end
 
-  defp tool_servers_from_message(%{tool_config: %{"servers" => servers}}) when is_list(servers),
-    do: servers
+  defp tool_servers_from_message(%{tool_config: %{"servers" => servers}}) when is_list(servers), do: servers
 
   defp tool_servers_from_message(_), do: []
 end

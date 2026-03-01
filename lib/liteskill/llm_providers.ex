@@ -1,9 +1,4 @@
 defmodule Liteskill.LlmProviders do
-  use Boundary,
-    top_level?: true,
-    deps: [Liteskill.Accounts, Liteskill.Authorization, Liteskill.Rbac],
-    exports: [LlmProvider]
-
   @moduledoc """
   Context for managing LLM provider configurations.
 
@@ -11,11 +6,16 @@ defmodule Liteskill.LlmProviders do
   Admin-only CRUD; access via instance_wide flag or entity ACLs.
   """
 
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Accounts, Liteskill.Authorization, Liteskill.Rbac],
+    exports: [LlmProvider]
+
+  import Ecto.Query
+
   alias Liteskill.Authorization
   alias Liteskill.LlmProviders.LlmProvider
   alias Liteskill.Repo
-
-  import Ecto.Query
 
   # --- CRUD ---
 
@@ -118,7 +118,8 @@ defmodule Liteskill.LlmProviders do
   """
   def grant_usage(provider_id, grantee_user_id, admin_user_id) do
     with :ok <- authorize_admin(admin_user_id) do
-      Authorization.EntityAcl.changeset(%Authorization.EntityAcl{}, %{
+      %Authorization.EntityAcl{}
+      |> Authorization.EntityAcl.changeset(%{
         entity_type: "llm_provider",
         entity_id: provider_id,
         user_id: grantee_user_id,
@@ -259,6 +260,5 @@ defmodule Liteskill.LlmProviders do
 
   defp authorize_admin_or_owner(%LlmProvider{user_id: uid}, uid), do: :ok
 
-  defp authorize_admin_or_owner(%LlmProvider{}, user_id),
-    do: authorize_admin(user_id)
+  defp authorize_admin_or_owner(%LlmProvider{}, user_id), do: authorize_admin(user_id)
 end

@@ -1,9 +1,4 @@
 defmodule Liteskill.Usage do
-  use Boundary,
-    top_level?: true,
-    deps: [Liteskill.Groups, Liteskill.LlmModels, Liteskill.Rag],
-    exports: [UsageRecord, CostCalculator]
-
   @moduledoc """
   Context for recording and querying LLM token usage.
 
@@ -12,8 +7,16 @@ defmodule Liteskill.Usage do
   conversation, model, and time period.
   """
 
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Groups, Liteskill.LlmModels, Liteskill.Rag],
+    exports: [UsageRecord, CostCalculator]
+
   import Ecto.Query
 
+  alias Liteskill.Groups.GroupMembership
+  alias Liteskill.LlmModels.LlmModel
+  alias Liteskill.Rag.EmbeddingRequest
   alias Liteskill.Repo
   alias Liteskill.Usage.CostCalculator
   alias Liteskill.Usage.UsageRecord
@@ -245,7 +248,7 @@ defmodule Liteskill.Usage do
   """
   def usage_by_group(group_id, opts \\ []) do
     member_subquery =
-      from(gm in Liteskill.Groups.GroupMembership,
+      from(gm in GroupMembership,
         where: gm.group_id == ^group_id,
         select: gm.user_id
       )
@@ -274,9 +277,7 @@ defmodule Liteskill.Usage do
     else
       results =
         UsageRecord
-        |> join(:inner, [r], gm in Liteskill.Groups.GroupMembership,
-          on: r.user_id == gm.user_id and gm.group_id in ^group_ids
-        )
+        |> join(:inner, [r], gm in GroupMembership, on: r.user_id == gm.user_id and gm.group_id in ^group_ids)
         |> apply_time_filters(opts)
         |> group_by([r, gm], gm.group_id)
         |> usage_select_full()
@@ -424,8 +425,7 @@ defmodule Liteskill.Usage do
   defp maybe_filter(query, _field, nil), do: query
   defp maybe_filter(query, :user_id, val), do: where(query, [r], r.user_id == ^val)
 
-  defp maybe_filter(query, :conversation_id, val),
-    do: where(query, [r], r.conversation_id == ^val)
+  defp maybe_filter(query, :conversation_id, val), do: where(query, [r], r.conversation_id == ^val)
 
   defp maybe_filter(query, :model_id, val), do: where(query, [r], r.model_id == ^val)
 
@@ -442,9 +442,6 @@ defmodule Liteskill.Usage do
   defp maybe_to(query, to), do: where(query, [r], r.inserted_at < ^to)
 
   # --- Embedding Usage ---
-
-  alias Liteskill.LlmModels.LlmModel
-  alias Liteskill.Rag.EmbeddingRequest
 
   @doc """
   Returns aggregate embedding usage totals.

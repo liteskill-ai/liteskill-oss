@@ -1,4 +1,5 @@
 defmodule LiteskillWeb.ConversationController do
+  @moduledoc false
   use LiteskillWeb, :controller
 
   alias Liteskill.Chat
@@ -117,10 +118,7 @@ defmodule LiteskillWeb.ConversationController do
   defp validate_grantable_role(role) when role in @grantable_roles, do: {:ok, role}
   defp validate_grantable_role(_), do: {:error, :bad_request}
 
-  def revoke_access(conn, %{
-        "conversation_id" => conversation_id,
-        "target_user_id" => target_user_id
-      }) do
+  def revoke_access(conn, %{"conversation_id" => conversation_id, "target_user_id" => target_user_id}) do
     user = conn.assigns.current_user
 
     case Chat.revoke_conversation_access(conversation_id, user.id, target_user_id) do

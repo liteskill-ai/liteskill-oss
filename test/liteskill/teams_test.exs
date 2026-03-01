@@ -1,9 +1,10 @@
 defmodule Liteskill.TeamsTest do
   use Liteskill.DataCase, async: true
 
-  alias Liteskill.Teams
-  alias Liteskill.Teams.{TeamDefinition, TeamMember}
   alias Liteskill.Agents
+  alias Liteskill.Teams
+  alias Liteskill.Teams.TeamDefinition
+  alias Liteskill.Teams.TeamMember
 
   setup do
     {:ok, owner} =

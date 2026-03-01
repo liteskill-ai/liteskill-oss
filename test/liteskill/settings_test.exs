@@ -15,7 +15,7 @@ defmodule Liteskill.SettingsTest do
 
       assert %ServerSettings{} = settings
       assert settings.registration_open == true
-      assert settings.id != nil
+      assert settings.id
     end
 
     test "is idempotent — returns same row on second call" do
@@ -194,10 +194,10 @@ defmodule Liteskill.SettingsTest do
   describe "update/1 error paths" do
     test "returns error for invalid changeset" do
       # Ensure settings exists
-      _settings = Liteskill.Settings.get()
+      _settings = Settings.get()
 
       # Try to update with embedding_model_id pointing to nonexistent model
-      result = Liteskill.Settings.update(%{embedding_model_id: Ecto.UUID.generate()})
+      result = Settings.update(%{embedding_model_id: Ecto.UUID.generate()})
 
       assert {:error, _} = result
     end

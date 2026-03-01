@@ -1,4 +1,15 @@
 defmodule Liteskill.LLM do
+  @moduledoc """
+  Public API for LLM interactions.
+
+  Uses ReqLLM for transport. `complete/2` is used for non-streaming calls
+  (e.g. conversation title generation). Streaming is handled by
+  `StreamHandler` directly.
+
+  Models are configured in the database via admin UI — there are no
+  hardcoded model IDs or env-var fallbacks for model selection.
+  """
+
   use Boundary,
     top_level?: true,
     deps: [
@@ -12,17 +23,6 @@ defmodule Liteskill.LLM do
       Liteskill.Retry
     ],
     exports: [StreamHandler, ToolUtils, RagContext]
-
-  @moduledoc """
-  Public API for LLM interactions.
-
-  Uses ReqLLM for transport. `complete/2` is used for non-streaming calls
-  (e.g. conversation title generation). Streaming is handled by
-  `StreamHandler` directly.
-
-  Models are configured in the database via admin UI — there are no
-  hardcoded model IDs or env-var fallbacks for model selection.
-  """
 
   alias Liteskill.LLM.StreamHandler
   alias Liteskill.Usage
@@ -84,8 +84,7 @@ defmodule Liteskill.LLM do
         text = ReqLLM.Response.text(response) || ""
         maybe_record_complete_usage(response, model, opts)
 
-        {:ok,
-         %{"output" => %{"message" => %{"role" => "assistant", "content" => [%{"text" => text}]}}}}
+        {:ok, %{"output" => %{"message" => %{"role" => "assistant", "content" => [%{"text" => text}]}}}}
 
       {:error, reason} ->
         {:error, reason}

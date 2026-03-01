@@ -3,8 +3,8 @@ defmodule LiteskillWeb.AdminLive.GroupsTab do
 
   use LiteskillWeb, :html
 
-  import Phoenix.LiveView, only: [put_flash: 3]
   import LiteskillWeb.AdminLive.Helpers, only: [require_admin: 2]
+  import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Liteskill.Accounts
   alias Liteskill.Groups

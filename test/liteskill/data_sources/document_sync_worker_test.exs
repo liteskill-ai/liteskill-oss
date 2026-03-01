@@ -2,12 +2,13 @@ defmodule Liteskill.DataSources.DocumentSyncWorkerTest do
   use Liteskill.DataCase, async: false
   use Oban.Testing, repo: Liteskill.Repo
 
-  alias Liteskill.Rag
-  alias Liteskill.Rag.{EmbeddingClient, Chunk}
-  alias Liteskill.DataSources
-  alias Liteskill.Rag.DocumentSyncWorker
-
   import Ecto.Query
+
+  alias Liteskill.DataSources
+  alias Liteskill.Rag
+  alias Liteskill.Rag.Chunk
+  alias Liteskill.Rag.DocumentSyncWorker
+  alias Liteskill.Rag.EmbeddingClient
 
   setup do
     {:ok, owner} =

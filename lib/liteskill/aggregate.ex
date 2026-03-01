@@ -1,11 +1,11 @@
 defmodule Liteskill.Aggregate do
-  use Boundary, top_level?: true, deps: [Liteskill.EventStore], exports: [Loader]
-
   @moduledoc """
   Behaviour for event-sourced aggregates.
 
   Aggregates handle commands (producing events) and apply events (updating state).
   """
+
+  use Boundary, top_level?: true, deps: [Liteskill.EventStore], exports: [Loader]
 
   @callback init() :: struct()
 

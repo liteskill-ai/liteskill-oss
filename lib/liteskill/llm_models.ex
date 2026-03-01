@@ -1,9 +1,4 @@
 defmodule Liteskill.LlmModels do
-  use Boundary,
-    top_level?: true,
-    deps: [Liteskill.Authorization, Liteskill.LlmProviders, Liteskill.Rbac],
-    exports: [LlmModel]
-
   @moduledoc """
   Context for managing LLM model configurations.
 
@@ -11,12 +6,17 @@ defmodule Liteskill.LlmModels do
   Admin-only CRUD; user access via instance_wide flag or entity ACLs.
   """
 
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Authorization, Liteskill.LlmProviders, Liteskill.Rbac],
+    exports: [LlmModel]
+
+  import Ecto.Query
+
   alias Liteskill.Authorization
   alias Liteskill.LlmModels.LlmModel
   alias Liteskill.LlmProviders.LlmProvider
   alias Liteskill.Repo
-
-  import Ecto.Query
 
   require Logger
 
@@ -107,7 +107,7 @@ defmodule Liteskill.LlmModels do
   end
 
   def get_model(id, user_id) do
-    case Repo.get(LlmModel, id) |> Repo.preload(:provider) do
+    case LlmModel |> Repo.get(id) |> Repo.preload(:provider) do
       nil ->
         {:error, :not_found}
 
@@ -137,7 +137,7 @@ defmodule Liteskill.LlmModels do
 
   @doc "Returns a model only if the user owns it, with preloaded provider."
   def get_model_for_owner(id, user_id) do
-    case Repo.get(LlmModel, id) |> Repo.preload(:provider) do
+    case LlmModel |> Repo.get(id) |> Repo.preload(:provider) do
       nil -> {:error, :not_found}
       %LlmModel{user_id: ^user_id} = model -> {:ok, model}
       %LlmModel{} -> {:error, :forbidden}
@@ -145,7 +145,7 @@ defmodule Liteskill.LlmModels do
   end
 
   def get_model!(id) do
-    Repo.get!(LlmModel, id) |> Repo.preload(:provider)
+    LlmModel |> Repo.get!(id) |> Repo.preload(:provider)
   end
 
   @doc """
@@ -154,7 +154,8 @@ defmodule Liteskill.LlmModels do
   """
   def grant_usage(model_id, grantee_user_id, admin_user_id) do
     with :ok <- authorize_admin(admin_user_id) do
-      Authorization.EntityAcl.changeset(%Authorization.EntityAcl{}, %{
+      %Authorization.EntityAcl{}
+      |> Authorization.EntityAcl.changeset(%{
         entity_type: "llm_model",
         entity_id: model_id,
         user_id: grantee_user_id,
@@ -219,12 +220,14 @@ defmodule Liteskill.LlmModels do
 
         :azure ->
           azure_opts =
-            [
-              {:resource_name, config["resource_name"]},
-              {:deployment_id, config["deployment_id"]},
-              {:api_version, config["api_version"]}
-            ]
-            |> Enum.reject(fn {_, v} -> is_nil(v) end)
+            Enum.reject(
+              [
+                {:resource_name, config["resource_name"]},
+                {:deployment_id, config["deployment_id"]},
+                {:api_version, config["api_version"]}
+              ],
+              fn {_, v} -> is_nil(v) end
+            )
 
           azure_opts ++ base_opts
 
@@ -257,10 +260,7 @@ defmodule Liteskill.LlmModels do
     end
   end
 
-  defp anthropic_bedrock?(%LlmModel{
-         model_id: model_id,
-         provider: %LlmProvider{provider_type: "amazon_bedrock"}
-       })
+  defp anthropic_bedrock?(%LlmModel{model_id: model_id, provider: %LlmProvider{provider_type: "amazon_bedrock"}})
        when is_binary(model_id) do
     String.contains?(model_id, "anthropic")
   end
@@ -311,7 +311,7 @@ defmodule Liteskill.LlmModels do
 
   @doc "Returns a single model with preloaded provider. No auth — for admin edit forms."
   def get_model_for_admin(id) do
-    case Repo.get(LlmModel, id) |> Repo.preload(:provider) do
+    case LlmModel |> Repo.get(id) |> Repo.preload(:provider) do
       nil -> {:error, :not_found}
       model -> {:ok, model}
     end
@@ -323,8 +323,7 @@ defmodule Liteskill.LlmModels do
 
   defp authorize_admin_or_owner(%LlmModel{user_id: uid}, uid), do: :ok
 
-  defp authorize_admin_or_owner(%LlmModel{}, user_id),
-    do: authorize_admin(user_id)
+  defp authorize_admin_or_owner(%LlmModel{}, user_id), do: authorize_admin(user_id)
 
   defp validate_provider_ownership(attrs) do
     user_id = attrs[:user_id] || attrs["user_id"]

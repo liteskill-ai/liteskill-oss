@@ -13,9 +13,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
         oidc_issuer: "https://test.example.com"
       })
 
-    conn =
-      build_conn()
-      |> init_authenticated_session(user)
+    conn = init_authenticated_session(build_conn(), user)
 
     %{conn: conn, user: user}
   end
@@ -31,9 +29,9 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
 
       assert params["code_challenge_method"] == "S256"
       assert params["callback_url"] =~ "/auth/openrouter/callback"
-      assert params["code_challenge"] != nil
+      assert params["code_challenge"]
 
-      assert get_session(conn, :openrouter_code_verifier) != nil
+      assert get_session(conn, :openrouter_code_verifier)
       assert get_session(conn, :openrouter_return_to) == "/setup"
     end
 
@@ -73,7 +71,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
 
   describe "GET /auth/openrouter/callback (session-based)" do
     test "creates provider on successful exchange", %{conn: conn, user: user} do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(200, Jason.encode!(%{"key" => "sk-or-new-key"}))
@@ -93,7 +91,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "connected"
 
       provider = LlmProviders.get_provider_by_name("OpenRouter", user.id)
-      assert provider != nil
+      assert provider
       assert provider.provider_type == "openrouter"
       assert provider.instance_wide == true
     end
@@ -108,7 +106,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
           user_id: user.id
         })
 
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(200, Jason.encode!(%{"key" => "sk-or-updated-key"}))
@@ -129,7 +127,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
     end
 
     test "shows error on exchange failure", %{conn: conn, user: user} do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(403, Jason.encode!(%{"error" => "forbidden"}))
@@ -175,7 +173,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
 
   describe "GET /auth/openrouter/callback (state-based / desktop — no session)" do
     test "creates provider and shows static HTML when no session", %{user: user} do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(200, Jason.encode!(%{"key" => "sk-or-desktop-key"}))
@@ -195,7 +193,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
       assert conn.resp_body =~ "close this"
 
       provider = LlmProviders.get_provider_by_name("OpenRouter", user.id)
-      assert provider != nil
+      assert provider
       assert provider.provider_type == "openrouter"
     end
 
@@ -203,7 +201,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
       topic = LiteskillWeb.OpenRouterController.openrouter_topic(user.id)
       Phoenix.PubSub.subscribe(Liteskill.PubSub, topic)
 
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(200, Jason.encode!(%{"key" => "sk-or-pubsub-key"}))
@@ -221,7 +219,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
     end
 
     test "shows error when exchange fails via state (no session)", %{user: user} do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(403, Jason.encode!(%{"error" => "forbidden"}))
@@ -253,7 +251,7 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
     end
 
     test "renders static HTML even when session user is present", %{conn: conn, user: user} do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(200, Jason.encode!(%{"key" => "sk-or-session-state-key"}))
@@ -273,11 +271,11 @@ defmodule LiteskillWeb.OpenRouterControllerTest do
       assert conn.resp_body =~ "close this"
 
       provider = LlmProviders.get_provider_by_name("OpenRouter", user.id)
-      assert provider != nil
+      assert provider
     end
 
     test "shows static error HTML even when session user is present", %{conn: conn, user: user} do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(403, Jason.encode!(%{"error" => "forbidden"}))

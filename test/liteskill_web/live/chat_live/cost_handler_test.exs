@@ -133,7 +133,7 @@ defmodule LiteskillWeb.ChatLive.CostHandlerTest do
         )
 
       assert socket.assigns.cost_limit_tokens == 500_000
-      assert socket.assigns.cost_limit != nil
+      assert socket.assigns.cost_limit
       assert socket.assigns.cost_limit_input != ""
     end
 

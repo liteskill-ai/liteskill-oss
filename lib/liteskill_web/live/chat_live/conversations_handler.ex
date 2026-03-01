@@ -32,7 +32,7 @@ defmodule LiteskillWeb.ChatLive.ConversationsHandler do
     search_term = String.trim(search)
     user_id = socket.assigns.current_user.id
     page_size = socket.assigns.conversations_page_size
-    opts = if search_term != "", do: [search: search_term], else: []
+    opts = if search_term == "", do: [], else: [search: search_term]
 
     managed = Chat.list_conversations(user_id, [limit: page_size, offset: 0] ++ opts)
     total = Chat.count_conversations(user_id, opts)
@@ -52,7 +52,7 @@ defmodule LiteskillWeb.ChatLive.ConversationsHandler do
     user_id = socket.assigns.current_user.id
     page_size = socket.assigns.conversations_page_size
     search = socket.assigns.conversations_search
-    opts = if search != "", do: [search: search], else: []
+    opts = if search == "", do: [], else: [search: search]
 
     offset = (page - 1) * page_size
     managed = Chat.list_conversations(user_id, [limit: page_size, offset: offset] ++ opts)
@@ -77,7 +77,7 @@ defmodule LiteskillWeb.ChatLive.ConversationsHandler do
   end
 
   def handle_event("toggle_select_all_conversations", _params, socket) do
-    all_ids = socket.assigns.managed_conversations |> Enum.map(& &1.id) |> MapSet.new()
+    all_ids = MapSet.new(socket.assigns.managed_conversations, & &1.id)
     selected = socket.assigns.conversations_selected
 
     selected =
@@ -159,7 +159,7 @@ defmodule LiteskillWeb.ChatLive.ConversationsHandler do
     user_id = socket.assigns.current_user.id
     page_size = socket.assigns.conversations_page_size
     search = socket.assigns.conversations_search
-    opts = if search != "", do: [search: search], else: []
+    opts = if search == "", do: [], else: [search: search]
 
     offset = (socket.assigns.conversations_page - 1) * page_size
     managed = Chat.list_conversations(user_id, [limit: page_size, offset: offset] ++ opts)

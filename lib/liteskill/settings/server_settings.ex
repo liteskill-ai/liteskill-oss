@@ -1,5 +1,7 @@
 defmodule Liteskill.Settings.ServerSettings do
+  @moduledoc "Schema for instance-wide server configuration settings."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

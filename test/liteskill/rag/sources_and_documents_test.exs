@@ -4,7 +4,9 @@ defmodule Liteskill.Rag.SourcesAndDocumentsTest do
   import Liteskill.RagTestHelpers
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Source, Document, CohereClient}
+  alias Liteskill.Rag.CohereClient
+  alias Liteskill.Rag.Document
+  alias Liteskill.Rag.Source
 
   setup :setup_users
 
@@ -512,7 +514,7 @@ defmodule Liteskill.Rag.SourcesAndDocumentsTest do
         create_document(source.id, owner.id, %{content: "hello world"})
 
       expected_hash =
-        :crypto.hash(:sha256, "hello world") |> Base.encode16(case: :lower)
+        :sha256 |> :crypto.hash("hello world") |> Base.encode16(case: :lower)
 
       assert doc.content_hash == expected_hash
     end
@@ -540,7 +542,7 @@ defmodule Liteskill.Rag.SourcesAndDocumentsTest do
       assert length(db_chunks) == 1
 
       expected_hash =
-        :crypto.hash(:sha256, "chunk content") |> Base.encode16(case: :lower)
+        :sha256 |> :crypto.hash("chunk content") |> Base.encode16(case: :lower)
 
       assert hd(db_chunks).content_hash == expected_hash
     end

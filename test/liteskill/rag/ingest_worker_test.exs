@@ -3,7 +3,10 @@ defmodule Liteskill.Rag.IngestWorkerTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{IngestWorker, EmbeddingClient, Source, Document}
+  alias Liteskill.Rag.Document
+  alias Liteskill.Rag.EmbeddingClient
+  alias Liteskill.Rag.IngestWorker
+  alias Liteskill.Rag.Source
 
   setup do
     {:ok, owner} =
@@ -159,7 +162,8 @@ defmodule Liteskill.Rag.IngestWorkerTest do
       end)
 
       args =
-        base_args(coll.id, owner.id)
+        coll.id
+        |> base_args(owner.id)
         |> Map.put("chunk_opts", %{"chunk_size" => 100, "overlap" => 10})
 
       assert :ok = perform_job(IngestWorker, args)
@@ -183,7 +187,8 @@ defmodule Liteskill.Rag.IngestWorkerTest do
       stub_embed(1)
 
       args =
-        base_args(coll.id, owner.id)
+        coll.id
+        |> base_args(owner.id)
         |> Map.put("headers", %{"Authorization" => "Bearer test-token"})
 
       assert :ok = perform_job(IngestWorker, args)
@@ -202,8 +207,7 @@ defmodule Liteskill.Rag.IngestWorkerTest do
     test "handles missing content-type header", %{owner: owner, collection: coll} do
       Req.Test.stub(IngestWorker, fn conn ->
         # Send response without explicit content-type (Plug defaults vary)
-        conn
-        |> Plug.Conn.send_resp(200, "plain content")
+        Plug.Conn.send_resp(conn, 200, "plain content")
       end)
 
       stub_embed(1)
@@ -289,7 +293,7 @@ defmodule Liteskill.Rag.IngestWorkerTest do
       args = Map.put(args, "method", "PROPFIND")
 
       assert_raise ArgumentError, ~r/unsupported HTTP method/, fn ->
-        perform_job(Liteskill.Rag.IngestWorker, args)
+        perform_job(IngestWorker, args)
       end
     end
   end

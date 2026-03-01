@@ -3,6 +3,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.BuiltinTools.Wiki, as: WikiTool
+  alias Liteskill.Rag.WikiSyncWorker
 
   setup do
     {:ok, user} =
@@ -120,7 +121,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
 
     test "returns error when space_id is missing", %{user: user} do
       {:ok, result} = WikiTool.call_tool("wiki__read", %{"mode" => "tree"}, user_id: user.id)
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
     end
   end
 
@@ -211,7 +212,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
       {:ok, result} =
         WikiTool.call_tool("wiki__read", %{"mode" => "articles"}, user_id: user.id)
 
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
     end
   end
 
@@ -289,21 +290,21 @@ defmodule Liteskill.BuiltinTools.WikiTest do
       {:ok, result} =
         WikiTool.call_tool("wiki__read", %{"mode" => "search"}, user_id: user.id)
 
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
     end
   end
 
   describe "wiki__read invalid mode" do
     test "returns error for missing mode", %{user: user} do
       {:ok, result} = WikiTool.call_tool("wiki__read", %{}, user_id: user.id)
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
     end
 
     test "returns error for invalid mode", %{user: user} do
       {:ok, result} =
         WikiTool.call_tool("wiki__read", %{"mode" => "bogus"}, user_id: user.id)
 
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
     end
   end
 
@@ -662,7 +663,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
   describe "wiki__write missing actions" do
     test "returns error when actions field is missing", %{user: user} do
       {:ok, result} = WikiTool.call_tool("wiki__write", %{}, user_id: user.id)
-      assert decode_content(result)["error"] != nil
+      assert decode_content(result)["error"]
     end
   end
 
@@ -857,7 +858,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
       [%{"status" => "ok", "id" => space_id}] = data["results"]
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => space_id, "action" => "upsert"}
       )
     end
@@ -873,8 +874,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
       {:ok, space_result} =
         WikiTool.call_tool("wiki__read", %{"mode" => "spaces"}, user_id: user.id)
 
-      space =
-        decode_content(space_result)["spaces"] |> Enum.find(&(&1["title"] == "Parent Space"))
+      space = Enum.find(decode_content(space_result)["spaces"], &(&1["title"] == "Parent Space"))
 
       {:ok, result} =
         WikiTool.call_tool(
@@ -896,7 +896,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
       [%{"status" => "ok", "id" => article_id}] = data["results"]
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => article_id, "action" => "upsert"}
       )
     end
@@ -923,7 +923,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
         )
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => space_id, "action" => "upsert"}
       )
     end
@@ -946,7 +946,7 @@ defmodule Liteskill.BuiltinTools.WikiTest do
         )
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => space_id, "action" => "delete"}
       )
     end

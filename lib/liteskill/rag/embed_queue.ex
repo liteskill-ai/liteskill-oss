@@ -73,10 +73,7 @@ defmodule Liteskill.Rag.EmbedQueue do
     total_texts = Enum.sum(Enum.map(new_queue, fn {t, _, _} -> length(t) end))
 
     # Don't flush while a retry is in progress — queue up and wait
-    if state.retry != nil do
-      cancel_timer(state.timer_ref)
-      {:noreply, %{state | queue: new_queue, timer_ref: nil}}
-    else
+    if state.retry == nil do
       if total_texts >= state.batch_size do
         cancel_timer(state.timer_ref)
         flush_batch(%{state | queue: new_queue, timer_ref: nil})
@@ -84,6 +81,9 @@ defmodule Liteskill.Rag.EmbedQueue do
         timer_ref = state.timer_ref || Process.send_after(self(), :flush, state.flush_ms)
         {:noreply, %{state | queue: new_queue, timer_ref: timer_ref}}
       end
+    else
+      cancel_timer(state.timer_ref)
+      {:noreply, %{state | queue: new_queue, timer_ref: nil}}
     end
   end
 
@@ -91,11 +91,11 @@ defmodule Liteskill.Rag.EmbedQueue do
   def handle_info(:flush, state) do
     # coveralls-ignore-start — defensive: cancel_timer flushes the mailbox,
     # so a stale :flush should never arrive during retry
-    if state.retry != nil do
-      {:noreply, %{state | timer_ref: nil}}
+    if state.retry == nil do
       # coveralls-ignore-stop
-    else
       flush_batch(%{state | timer_ref: nil})
+    else
+      {:noreply, %{state | timer_ref: nil}}
     end
   end
 
@@ -193,13 +193,13 @@ defmodule Liteskill.Rag.EmbedQueue do
   end
 
   defp maybe_schedule_flush(state) do
-    if state.queue != [] do
+    # Schedule an immediate flush for the pending queue
+    if state.queue == [] do
+      {:noreply, state}
+    else
       cancel_timer(state.timer_ref)
-      # Schedule an immediate flush for the pending queue
       timer_ref = Process.send_after(self(), :flush, 0)
       {:noreply, %{state | timer_ref: timer_ref}}
-    else
-      {:noreply, state}
     end
   end
 

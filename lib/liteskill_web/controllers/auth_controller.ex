@@ -1,10 +1,11 @@
 defmodule LiteskillWeb.AuthController do
+  @moduledoc false
   use LiteskillWeb, :controller
-
-  plug Ueberauth
 
   alias Liteskill.Accounts
   alias LiteskillWeb.Plugs.SessionHelpers
+
+  plug Ueberauth
 
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
     user_attrs = %{

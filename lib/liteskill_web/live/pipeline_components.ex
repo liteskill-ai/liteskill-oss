@@ -275,7 +275,8 @@ defmodule LiteskillWeb.PipelineComponents do
     neighbors = [current - 1, current, current + 1]
 
     pages =
-      Enum.uniq([1] ++ neighbors ++ [total])
+      ([1] ++ neighbors ++ [total])
+      |> Enum.uniq()
       |> Enum.filter(&(&1 >= 1 and &1 <= total))
       |> Enum.sort()
 

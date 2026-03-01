@@ -32,7 +32,7 @@ defmodule LiteskillWeb.ChatLive.EditHandler do
       server_ids =
         case message.tool_config do
           %{"servers" => servers} when is_list(servers) ->
-            servers |> Enum.map(& &1["id"]) |> MapSet.new()
+            MapSet.new(servers, & &1["id"])
 
           _ ->
             MapSet.new()
@@ -122,9 +122,7 @@ defmodule LiteskillWeb.ChatLive.EditHandler do
       message_id = socket.assigns.editing_message_id
       tool_config = build_edit_tool_config(socket)
 
-      case Chat.edit_message(conversation.id, user_id, message_id, content,
-             tool_config: tool_config
-           ) do
+      case Chat.edit_message(conversation.id, user_id, message_id, content, tool_config: tool_config) do
         {:ok, _message} ->
           {:ok, updated_conv} = Chat.get_conversation(conversation.id, user_id)
 

@@ -6,7 +6,8 @@ defmodule LiteskillWeb.ChatLive.ToolHandler do
   import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Liteskill.Chat
-  alias Liteskill.Chat.{MessageBuilder, ToolCall}
+  alias Liteskill.Chat.MessageBuilder
+  alias Liteskill.Chat.ToolCall
   alias Liteskill.McpServers
   alias Liteskill.McpServers.Client, as: McpClient
   alias LiteskillWeb.ChatLive.Helpers, as: ChatHelpers
@@ -137,20 +138,20 @@ defmodule LiteskillWeb.ChatLive.ToolHandler do
 
           {:error, reason} ->
             require Logger
+
             Logger.warning("Failed to fetch tools from #{server.name}: #{inspect(reason)}")
 
-            {tools_acc,
-             errors_acc ++ ["#{server.name}: #{ChatHelpers.format_tool_error(reason)}"]}
+            {tools_acc, errors_acc ++ ["#{server.name}: #{ChatHelpers.format_tool_error(reason)}"]}
         end
       end)
 
     socket = assign(socket, available_tools: builtin_tools ++ mcp_tools, tools_loading: false)
 
     socket =
-      if errors != [] do
-        put_flash(socket, :error, "Tool fetch failed: " <> Enum.join(errors, "; "))
-      else
+      if errors == [] do
         socket
+      else
+        put_flash(socket, :error, "Tool fetch failed: " <> Enum.join(errors, "; "))
       end
 
     {:noreply, socket}
@@ -171,14 +172,14 @@ defmodule LiteskillWeb.ChatLive.ToolHandler do
         # hasn't completed with stop_reason: "tool_use" yet. Keep the in-memory
         # pending_tool_calls built from PubSub events in that case.
         pending =
-          if db_pending != [] do
-            db_pending
-          else
+          if db_pending == [] do
             if socket.assigns.streaming && socket.assigns.pending_tool_calls != [] do
               socket.assigns.pending_tool_calls
             else
               []
             end
+          else
+            db_pending
           end
 
         {:noreply, assign(socket, messages: messages, pending_tool_calls: pending)}
@@ -316,7 +317,8 @@ defmodule LiteskillWeb.ChatLive.ToolHandler do
   def load_pending_tool_calls(messages) do
     case List.last(messages) do
       %{role: "assistant", stop_reason: "tool_use"} = msg ->
-        MessageBuilder.tool_calls_for_message(msg)
+        msg
+        |> MessageBuilder.tool_calls_for_message()
         |> Enum.filter(&(&1.status == "started"))
 
       _ ->

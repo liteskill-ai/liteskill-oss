@@ -5,8 +5,13 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
   alias Liteskill.Chat
   alias Liteskill.EventStore.Postgres, as: Store
+  alias Liteskill.LLM.FakeToolServer
   alias Liteskill.LLM.StreamHandler
+  alias Liteskill.LlmGateway.ProviderGate
+  alias Liteskill.LlmModels.LlmModel
+  alias Liteskill.LlmProviders.LlmProvider
   alias Liteskill.Usage.UsageRecord
+  alias ReqLLM.Error.API.Request
 
   setup do
     Application.put_env(:liteskill, Liteskill.LLM,
@@ -125,23 +130,19 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     {:ok, _} = Chat.archive_conversation(conv.id, user.id)
 
     assert {:error, :conversation_archived} =
-             StreamHandler.handle_stream(conv.stream_id, [%{role: :user, content: "test"}],
-               model_id: "test-model"
-             )
+             StreamHandler.handle_stream(conv.stream_id, [%{role: :user, content: "test"}], model_id: "test-model")
   end
 
   test "raises when no model specified", %{conversation: conv} do
     assert_raise RuntimeError, ~r/No model specified/, fn ->
-      StreamHandler.handle_stream(conv.stream_id, [%{role: :user, content: "test"}],
-        stream_fn: text_stream_fn("")
-      )
+      StreamHandler.handle_stream(conv.stream_id, [%{role: :user, content: "test"}], stream_fn: text_stream_fn(""))
     end
   end
 
   test "uses llm_model for model_id and provider options", %{conversation: conv} do
-    llm_model = %Liteskill.LlmModels.LlmModel{
+    llm_model = %LlmModel{
       model_id: "claude-custom",
-      provider: %Liteskill.LlmProviders.LlmProvider{
+      provider: %LlmProvider{
         provider_type: "anthropic",
         api_key: "test-key",
         provider_config: %{}
@@ -238,7 +239,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     events = Store.read_stream_forward(stream_id)
     completed = Enum.find(events, &(&1.event_type == "AssistantStreamCompleted"))
-    assert completed != nil
+    assert completed
     assert completed.data["full_content"] == "response text"
     assert completed.data["stop_reason"] == "end_turn"
   end
@@ -405,7 +406,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
       count = next_count(counter)
 
       if count < 1 do
-        {:error, %ReqLLM.Error.API.Request{reason: "timeout", status: nil}}
+        {:error, %Request{reason: "timeout", status: nil}}
       else
         on_chunk.("ok")
         {:ok, "ok", []}
@@ -629,7 +630,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
                  model_id: "test-model",
                  stream_fn: tool_call_stream_fn("Let me check that.", tool_calls),
                  tools: tools,
-                 tool_servers: %{"get_weather" => %{builtin: Liteskill.LLM.FakeToolServer}},
+                 tool_servers: %{"get_weather" => %{builtin: FakeToolServer}},
                  auto_confirm: true
                )
 
@@ -662,7 +663,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
                  model_id: "test-model",
                  stream_fn: tool_call_stream_fn("Let me search.", tool_calls),
                  tools: tools,
-                 tool_servers: %{"search" => %{builtin: Liteskill.LLM.FakeToolServer}},
+                 tool_servers: %{"search" => %{builtin: FakeToolServer}},
                  auto_confirm: true
                )
 
@@ -712,7 +713,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
                  model_id: "test-model",
                  stream_fn: tool_call_stream_fn("", tool_calls),
                  tools: tools,
-                 tool_servers: %{"failing_tool" => %{builtin: Liteskill.LLM.FakeToolServer}},
+                 tool_servers: %{"failing_tool" => %{builtin: FakeToolServer}},
                  auto_confirm: true
                )
 
@@ -785,7 +786,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
         wait = fn wait ->
           receive do
             {:events, _, events} ->
-              unless Enum.any?(events, &(&1.event_type == "ToolCallStarted")) do
+              if !Enum.any?(events, &(&1.event_type == "ToolCallStarted")) do
                 wait.(wait)
               end
           after
@@ -812,7 +813,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
                  model_id: "test-model",
                  stream_fn: tool_call_stream_fn("", tool_calls),
                  tools: tools,
-                 tool_servers: %{"approved_tool" => %{builtin: Liteskill.LLM.FakeToolServer}},
+                 tool_servers: %{"approved_tool" => %{builtin: FakeToolServer}},
                  auto_confirm: false,
                  tool_approval_timeout_ms: 5000
                )
@@ -850,9 +851,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
   describe "format_tool_output/1" do
     test "formats MCP content list" do
       result =
-        StreamHandler.format_tool_output(
-          {:ok, %{"content" => [%{"text" => "line1"}, %{"text" => "line2"}]}}
-        )
+        StreamHandler.format_tool_output({:ok, %{"content" => [%{"text" => "line1"}, %{"text" => "line2"}]}})
 
       assert result == "line1\nline2"
     end
@@ -861,12 +860,12 @@ defmodule Liteskill.LLM.StreamHandlerTest do
       result =
         StreamHandler.format_tool_output({:ok, %{"content" => [%{"image" => "data"}]}})
 
-      assert result == "{\"image\":\"data\"}"
+      assert result == ~s({"image":"data"})
     end
 
     test "formats plain map as JSON" do
       result = StreamHandler.format_tool_output({:ok, %{"key" => "value"}})
-      assert result == "{\"key\":\"value\"}"
+      assert result == ~s({"key":"value"})
     end
 
     test "formats non-map data with inspect" do
@@ -956,8 +955,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "handles RuntimeError from Finch connection pool exhaustion" do
       error = %RuntimeError{
-        message:
-          "Finch was unable to provide a connection within the timeout due to excess queuing for connections."
+        message: "Finch was unable to provide a connection within the timeout due to excess queuing for connections."
       }
 
       assert StreamHandler.extract_error_message(error) =~
@@ -1021,7 +1019,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "returns true for structs/maps with reason: timeout" do
       # ReqLLM.Error.API.Request with status: nil but reason: "timeout"
-      assert StreamHandler.retryable_error?(%ReqLLM.Error.API.Request{
+      assert StreamHandler.retryable_error?(%Request{
                reason: "timeout",
                status: nil
              })
@@ -1045,9 +1043,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     end
 
     test "returns true for GenServer call timeout tuples" do
-      assert StreamHandler.retryable_error?(
-               {:timeout, {GenServer, :call, [self(), {:next, 30_000}, 31_000]}}
-             )
+      assert StreamHandler.retryable_error?({:timeout, {GenServer, :call, [self(), {:next, 30_000}, 31_000]}})
 
       assert StreamHandler.retryable_error?({:timeout, :some_ref})
     end
@@ -1076,9 +1072,9 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     end
 
     test "converts LlmModel struct to model spec" do
-      llm_model = %Liteskill.LlmModels.LlmModel{
+      llm_model = %LlmModel{
         model_id: "gpt-4o",
-        provider: %Liteskill.LlmProviders.LlmProvider{provider_type: "openai"}
+        provider: %LlmProvider{provider_type: "openai"}
       }
 
       assert StreamHandler.to_req_llm_model(llm_model) == %{id: "gpt-4o", provider: :openai}
@@ -1176,9 +1172,9 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     end
 
     test "records usage with llm_model model_id", %{user: user, conversation: conv} do
-      llm_model = %Liteskill.LlmModels.LlmModel{
+      llm_model = %LlmModel{
         model_id: "claude-custom",
-        provider: %Liteskill.LlmProviders.LlmProvider{
+        provider: %LlmProvider{
           provider_type: "anthropic",
           api_key: "test-key",
           provider_config: %{}
@@ -1208,11 +1204,11 @@ defmodule Liteskill.LLM.StreamHandlerTest do
       user: user,
       conversation: conv
     } do
-      llm_model = %Liteskill.LlmModels.LlmModel{
+      llm_model = %LlmModel{
         model_id: "claude-rated",
         input_cost_per_million: Decimal.new("3"),
         output_cost_per_million: Decimal.new("15"),
-        provider: %Liteskill.LlmProviders.LlmProvider{
+        provider: %LlmProvider{
           provider_type: "anthropic",
           api_key: "test-key",
           provider_config: %{}
@@ -1243,11 +1239,11 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     end
 
     test "prefers API costs over model rates", %{user: user, conversation: conv} do
-      llm_model = %Liteskill.LlmModels.LlmModel{
+      llm_model = %LlmModel{
         model_id: "claude-rated",
         input_cost_per_million: Decimal.new("3"),
         output_cost_per_million: Decimal.new("15"),
-        provider: %Liteskill.LlmProviders.LlmProvider{
+        provider: %LlmProvider{
           provider_type: "anthropic",
           api_key: "test-key",
           provider_config: %{}
@@ -1534,7 +1530,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
                  model_id: "test-model",
                  stream_fn: tool_call_stream_fn("Searching.", tool_calls),
                  tools: tools,
-                 tool_servers: %{"search" => %{builtin: Liteskill.LLM.FakeToolServer}},
+                 tool_servers: %{"search" => %{builtin: FakeToolServer}},
                  auto_confirm: true,
                  cost_limit: Decimal.new("100.00"),
                  conversation_id: conv.id,
@@ -1583,9 +1579,9 @@ defmodule Liteskill.LLM.StreamHandlerTest do
         end
       end
 
-      llm_model = %Liteskill.LlmModels.LlmModel{
+      llm_model = %LlmModel{
         model_id: "test-model",
-        provider: %Liteskill.LlmProviders.LlmProvider{
+        provider: %LlmProvider{
           provider_type: "anthropic",
           api_key: "test-key",
           provider_config: %{}
@@ -1599,7 +1595,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
                  llm_model: llm_model,
                  stream_fn: stream_fn,
                  tools: tools,
-                 tool_servers: %{"search" => %{builtin: Liteskill.LLM.FakeToolServer}},
+                 tool_servers: %{"search" => %{builtin: FakeToolServer}},
                  auto_confirm: true,
                  cost_limit: Decimal.new("0.0001"),
                  conversation_id: conv.id,
@@ -1638,7 +1634,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
           instance_wide: true
         })
 
-      captured_opts = Agent.start_link(fn -> nil end) |> elem(1)
+      captured_opts = fn -> nil end |> Agent.start_link() |> elem(1)
 
       stream_fn = fn _model, _messages, _on_chunk, opts ->
         Agent.update(captured_opts, fn _ -> opts end)
@@ -1794,10 +1790,12 @@ defmodule Liteskill.LLM.StreamHandlerTest do
   end
 
   defmodule BareStatusError do
+    @moduledoc false
     defstruct [:status]
   end
 
   defmodule StatusBodyError do
+    @moduledoc false
     defstruct [:status, :body]
   end
 
@@ -1809,7 +1807,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "extracts status and response_body from struct" do
       error =
-        ReqLLM.Error.API.Request.exception(
+        Request.exception(
           status: 500,
           response_body: %{"error" => "server error"},
           reason: "server error"
@@ -1826,7 +1824,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "unwraps nested error tuple {outer, {inner, struct}}" do
       inner_error =
-        ReqLLM.Error.API.Request.exception(
+        Request.exception(
           status: 503,
           response_body: %{"error" => "unavailable"},
           reason: "unavailable"
@@ -1839,7 +1837,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "unwraps single-level error tuple {outer, struct}" do
       inner_error =
-        ReqLLM.Error.API.Request.exception(
+        Request.exception(
           status: 502,
           response_body: %{"error" => "bad gateway"},
           reason: "bad gateway"
@@ -1863,7 +1861,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "extracts reason when no response_body or body" do
       error =
-        ReqLLM.Error.API.Request.exception(
+        Request.exception(
           status: 408,
           reason: "timeout"
         )
@@ -1903,7 +1901,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
     test "calls ProviderGate.checkin when provider_id and ref present" do
       # Start a real ProviderGate for this test
       provider_id = "checkin-test-#{System.unique_integer([:positive])}"
-      {:ok, ref} = Liteskill.LlmGateway.ProviderGate.checkout(provider_id)
+      {:ok, ref} = ProviderGate.checkout(provider_id)
 
       opts = [gateway_provider_id: provider_id, gateway_checkout_ref: ref]
       assert StreamHandler.gateway_checkin(opts, :ok) == :ok
@@ -2003,7 +2001,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "returns circuit_open error when circuit is tripped" do
       provider_id = "circuit-test-#{System.unique_integer([:positive])}"
-      gate = Liteskill.LlmGateway.ProviderGate
+      gate = ProviderGate
 
       # Trip the circuit: checkout+checkin with errors to trigger open state
       # Stop when circuit opens (checkout returns error)
@@ -2024,7 +2022,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "returns concurrency_limit error when all slots taken" do
       provider_id = "concurrency-test-#{System.unique_integer([:positive])}"
-      gate = Liteskill.LlmGateway.ProviderGate
+      gate = ProviderGate
 
       # Exhaust concurrency (default 25)
       refs =
@@ -2042,7 +2040,7 @@ defmodule Liteskill.LLM.StreamHandlerTest do
 
     test "returns rate_limited error when retry_after is active" do
       provider_id = "retry-after-test-#{System.unique_integer([:positive])}"
-      gate = Liteskill.LlmGateway.ProviderGate
+      gate = ProviderGate
 
       {:ok, ref} = gate.checkout(provider_id)
       gate.checkin(provider_id, ref, {:error, :retryable, 60_000})

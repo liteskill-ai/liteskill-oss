@@ -5,6 +5,7 @@ defmodule Liteskill.DataSourcesTest do
   alias Liteskill.Authorization
   alias Liteskill.Authorization.EntityAcl
   alias Liteskill.DataSources
+  alias Liteskill.Rag.WikiSyncWorker
 
   setup do
     {:ok, owner} =
@@ -1604,7 +1605,7 @@ defmodule Liteskill.DataSourcesTest do
         )
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => doc.id, "action" => "upsert"}
       )
     end
@@ -1613,7 +1614,7 @@ defmodule Liteskill.DataSourcesTest do
       {:ok, _doc} =
         DataSources.create_document("builtin:wiki", %{title: "Empty"}, owner.id)
 
-      refute_enqueued(worker: Liteskill.Rag.WikiSyncWorker)
+      refute_enqueued(worker: WikiSyncWorker)
     end
 
     test "create_document for non-wiki source does not enqueue", %{owner: owner} do
@@ -1627,7 +1628,7 @@ defmodule Liteskill.DataSourcesTest do
           owner.id
         )
 
-      refute_enqueued(worker: Liteskill.Rag.WikiSyncWorker)
+      refute_enqueued(worker: WikiSyncWorker)
     end
 
     test "create_child_document with content enqueues wiki sync", %{owner: owner} do
@@ -1646,7 +1647,7 @@ defmodule Liteskill.DataSourcesTest do
         )
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => child.id, "action" => "upsert"}
       )
     end
@@ -1659,7 +1660,7 @@ defmodule Liteskill.DataSourcesTest do
         DataSources.update_document(doc.id, %{content: "New content"}, owner.id)
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => doc.id, "action" => "upsert"}
       )
     end
@@ -1671,7 +1672,7 @@ defmodule Liteskill.DataSourcesTest do
       {:ok, _} = DataSources.delete_document(doc.id, owner.id)
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => doc.id, "action" => "delete"}
       )
     end
@@ -1695,7 +1696,7 @@ defmodule Liteskill.DataSourcesTest do
       assert {:ok, 1} = DataSources.enqueue_index_source("builtin:wiki", owner.id)
 
       assert_enqueued(
-        worker: Liteskill.Rag.WikiSyncWorker,
+        worker: WikiSyncWorker,
         args: %{"wiki_document_id" => with_content.id, "action" => "upsert"}
       )
     end

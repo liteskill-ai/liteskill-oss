@@ -2,17 +2,19 @@ defmodule LiteskillWeb.AuthControllerTest do
   use LiteskillWeb.ConnCase, async: true
 
   alias Liteskill.Accounts
+  alias Ueberauth.Auth.Extra
+  alias Ueberauth.Auth.Info
 
   describe "callback/2" do
     test "creates user and sets session on successful auth", %{conn: conn} do
       auth = %Ueberauth.Auth{
         uid: "oidc-sub-#{System.unique_integer([:positive])}",
-        info: %Ueberauth.Auth.Info{
+        info: %Info{
           email: "user-#{System.unique_integer([:positive])}@example.com",
           name: "Test User",
           image: "https://example.com/avatar.png"
         },
-        extra: %Ueberauth.Auth.Extra{
+        extra: %Extra{
           raw_info: %{
             userinfo: %{"iss" => "https://idp.example.com", "email_verified" => true}
           }
@@ -25,7 +27,7 @@ defmodule LiteskillWeb.AuthControllerTest do
         |> post("/auth/oidc/callback")
 
       assert %{"ok" => true, "user_id" => user_id} = json_response(conn, 200)
-      assert user_id != nil
+      assert user_id
 
       user = Accounts.get_user!(user_id)
       assert user.email == auth.info.email
@@ -49,12 +51,12 @@ defmodule LiteskillWeb.AuthControllerTest do
       # Missing email will cause changeset validation failure
       auth = %Ueberauth.Auth{
         uid: "oidc-sub-changeset-#{System.unique_integer([:positive])}",
-        info: %Ueberauth.Auth.Info{
+        info: %Info{
           email: nil,
           name: "Test User",
           image: nil
         },
-        extra: %Ueberauth.Auth.Extra{
+        extra: %Extra{
           raw_info: %{
             userinfo: %{"iss" => "https://idp.example.com"}
           }

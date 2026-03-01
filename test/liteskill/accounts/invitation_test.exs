@@ -8,8 +8,8 @@ defmodule Liteskill.Accounts.InvitationTest do
       changeset = Invitation.changeset(%Invitation{}, %{email: "test@example.com"})
 
       assert changeset.valid?
-      assert Ecto.Changeset.get_change(changeset, :token) != nil
-      assert Ecto.Changeset.get_change(changeset, :expires_at) != nil
+      assert Ecto.Changeset.get_change(changeset, :token)
+      assert Ecto.Changeset.get_change(changeset, :expires_at)
     end
 
     test "downcases email" do
@@ -72,12 +72,12 @@ defmodule Liteskill.Accounts.InvitationTest do
 
   describe "expired?/1" do
     test "returns false for future expiry" do
-      expires = DateTime.utc_now() |> DateTime.add(3600)
+      expires = DateTime.add(DateTime.utc_now(), 3600)
       refute Invitation.expired?(%Invitation{expires_at: expires})
     end
 
     test "returns true for past expiry" do
-      expires = DateTime.utc_now() |> DateTime.add(-3600)
+      expires = DateTime.add(DateTime.utc_now(), -3600)
       assert Invitation.expired?(%Invitation{expires_at: expires})
     end
   end

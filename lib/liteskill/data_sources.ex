@@ -1,4 +1,11 @@
 defmodule Liteskill.DataSources do
+  @moduledoc """
+  Context for managing data sources and documents.
+
+  Data sources can be either DB-backed (user-created) or built-in
+  (defined in code, like Wiki). Documents are always in the DB.
+  """
+
   use Boundary,
     top_level?: true,
     deps: [Liteskill.Authorization, Liteskill.Rbac, Liteskill.BuiltinSources, Liteskill.Reports],
@@ -15,18 +22,13 @@ defmodule Liteskill.DataSources do
       WikiImport
     ]
 
-  @moduledoc """
-  Context for managing data sources and documents.
-
-  Data sources can be either DB-backed (user-created) or built-in
-  (defined in code, like Wiki). Documents are always in the DB.
-  """
+  import Ecto.Query
 
   alias Liteskill.Authorization
-  alias Liteskill.DataSources.{Source, Document, SyncWorker}
+  alias Liteskill.DataSources.Document
+  alias Liteskill.DataSources.Source
+  alias Liteskill.DataSources.SyncWorker
   alias Liteskill.Repo
-
-  import Ecto.Query
 
   # --- Source Config Fields ---
 
@@ -273,7 +275,7 @@ defmodule Liteskill.DataSources do
 
       %Source{} ->
         Repo.transaction(fn ->
-          from(d in Document, where: d.source_ref == ^source.id) |> Repo.delete_all()
+          Repo.delete_all(from(d in Document, where: d.source_ref == ^source.id))
           Repo.delete!(source)
         end)
     end
@@ -342,8 +344,7 @@ defmodule Liteskill.DataSources do
   defp maybe_filter_parent(query, :unset), do: query
   defp maybe_filter_parent(query, nil), do: where(query, [d], is_nil(d.parent_document_id))
 
-  defp maybe_filter_parent(query, parent_id),
-    do: where(query, [d], d.parent_document_id == ^parent_id)
+  defp maybe_filter_parent(query, parent_id), do: where(query, [d], d.parent_document_id == ^parent_id)
 
   def get_document(id, user_id) do
     case Repo.get(Document, id) do
@@ -610,8 +611,7 @@ defmodule Liteskill.DataSources do
     end
   end
 
-  def create_child_document("builtin:wiki" = source_ref, parent_id, attrs, user_id)
-      when not is_nil(parent_id) do
+  def create_child_document("builtin:wiki" = source_ref, parent_id, attrs, user_id) when not is_nil(parent_id) do
     with {:ok, space} <- find_root_ancestor_by_id(parent_id) do
       if space.user_id == user_id or
            Authorization.can_edit?("wiki_space", space.id, user_id) do
@@ -702,7 +702,8 @@ defmodule Liteskill.DataSources do
   # --- Sync Pipeline ---
 
   def start_sync(source_id, user_id) do
-    SyncWorker.new(%{"source_id" => source_id, "user_id" => user_id})
+    %{"source_id" => source_id, "user_id" => user_id}
+    |> SyncWorker.new()
     |> Oban.insert()
   end
 
@@ -779,7 +780,7 @@ defmodule Liteskill.DataSources do
 
     attrs =
       if status == "complete" do
-        Map.put(attrs, :last_synced_at, DateTime.utc_now() |> DateTime.truncate(:second))
+        Map.put(attrs, :last_synced_at, DateTime.truncate(DateTime.utc_now(), :second))
       else
         attrs
       end
@@ -824,8 +825,7 @@ defmodule Liteskill.DataSources do
     end
   end
 
-  def enqueue_wiki_sync(wiki_document_id, user_id, action)
-      when action in ["upsert", "delete"] do
+  def enqueue_wiki_sync(wiki_document_id, user_id, action) when action in ["upsert", "delete"] do
     %{
       "wiki_document_id" => wiki_document_id,
       "user_id" => user_id,
@@ -837,7 +837,8 @@ defmodule Liteskill.DataSources do
 
   def enqueue_index_source(source_ref, user_id) do
     count =
-      list_documents(source_ref, user_id)
+      source_ref
+      |> list_documents(user_id)
       |> Enum.filter(&(&1.content not in [nil, ""]))
       |> Enum.reduce(0, fn doc, acc ->
         enqueue_wiki_sync(doc.id, user_id, "upsert")
@@ -861,5 +862,5 @@ defmodule Liteskill.DataSources do
 
   # coveralls-ignore-next-line
   defp content_hash(nil), do: nil
-  defp content_hash(content), do: :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+  defp content_hash(content), do: :sha256 |> :crypto.hash(content) |> Base.encode16(case: :lower)
 end

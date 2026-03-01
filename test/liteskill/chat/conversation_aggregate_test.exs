@@ -121,7 +121,7 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
 
       state = apply_commands(state, [{:start_assistant_stream, %{model_id: "claude"}}])
       assert state.status == :streaming
-      assert state.current_stream != nil
+      assert state.current_stream
       assert state.current_stream.model_id == "claude"
       assert state.current_stream.chunks == []
       assert state.current_stream.tool_calls == []
@@ -166,8 +166,7 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
 
       state =
         apply_commands(state, [
-          {:receive_chunk,
-           %{message_id: state.current_stream.message_id, chunk_index: 0, delta_text: "Hello"}}
+          {:receive_chunk, %{message_id: state.current_stream.message_id, chunk_index: 0, delta_text: "Hello"}}
         ])
 
       assert length(state.current_stream.chunks) == 1
@@ -431,8 +430,7 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
           {:create_conversation, create_params()},
           {:add_user_message, %{message_id: "msg-1", content: "hello"}},
           {:start_assistant_stream, %{message_id: "asst-1", model_id: "claude"}},
-          {:complete_stream,
-           %{message_id: "asst-1", full_content: "hi", stop_reason: "end_turn"}},
+          {:complete_stream, %{message_id: "asst-1", full_content: "hi", stop_reason: "end_turn"}},
           {:add_user_message, %{message_id: "msg-2", content: "followup"}}
         ])
 
@@ -624,12 +622,10 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
           {:create_conversation, create_params()},
           {:add_user_message, %{message_id: "msg-1", content: "first"}},
           {:start_assistant_stream, %{message_id: "asst-1", model_id: "claude"}},
-          {:complete_stream,
-           %{message_id: "asst-1", full_content: "response", stop_reason: "end_turn"}},
+          {:complete_stream, %{message_id: "asst-1", full_content: "response", stop_reason: "end_turn"}},
           {:add_user_message, %{message_id: "msg-2", content: "second"}},
           {:start_assistant_stream, %{message_id: "asst-2", model_id: "claude"}},
-          {:complete_stream,
-           %{message_id: "asst-2", full_content: "response 2", stop_reason: "end_turn"}},
+          {:complete_stream, %{message_id: "asst-2", full_content: "response 2", stop_reason: "end_turn"}},
           {:add_user_message, %{message_id: "msg-3", content: "third"}}
         ])
 

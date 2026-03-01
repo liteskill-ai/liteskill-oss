@@ -8,15 +8,15 @@ defmodule Liteskill.DemoSeeds do
 
   use Boundary, top_level?: true, deps: [Liteskill.Accounts, Liteskill.Agents, Liteskill.Teams]
 
-  require Logger
+  import Ecto.Query
 
   alias Liteskill.Accounts
   alias Liteskill.Accounts.User
   alias Liteskill.Agents.AgentDefinition
-  alias Liteskill.Teams.TeamDefinition
   alias Liteskill.Repo
+  alias Liteskill.Teams.TeamDefinition
 
-  import Ecto.Query
+  require Logger
 
   @agent_specs [
     %{
@@ -84,8 +84,7 @@ defmodule Liteskill.DemoSeeds do
     %{
       name: "Execution Planner",
       strategy: "chain_of_thought",
-      description:
-        "Generates step-by-step preparation instructions from the recipe and substitutions.",
+      description: "Generates step-by-step preparation instructions from the recipe and substitutions.",
       backstory:
         "You are a culinary execution planner. You transform recipes and substitution lists " <>
           "into clear, ordered preparation steps that anyone can follow.",
@@ -102,8 +101,7 @@ defmodule Liteskill.DemoSeeds do
     %{
       name: "Quality Reviewer",
       strategy: "react",
-      description:
-        "Validates nutrition constraints, checks for missing steps, and returns a validation score.",
+      description: "Validates nutrition constraints, checks for missing steps, and returns a validation score.",
       backstory:
         "You are a quality assurance reviewer for sandwich recipes. You validate that the final " <>
           "execution plan meets all original constraints and contains no logical gaps.",
@@ -120,8 +118,7 @@ defmodule Liteskill.DemoSeeds do
 
   @team_spec %{
     name: "Sandwich Builder Pipeline",
-    description:
-      "A multi-agent pipeline that builds custom sandwich recipes from user preferences.",
+    description: "A multi-agent pipeline that builds custom sandwich recipes from user preferences.",
     default_topology: "pipeline",
     aggregation_strategy: "last",
     shared_context:
@@ -147,7 +144,8 @@ defmodule Liteskill.DemoSeeds do
   end
 
   defp ensure_agents(user_id) do
-    Enum.map(@agent_specs, fn spec ->
+    @agent_specs
+    |> Enum.map(fn spec ->
       case find_agent(spec.name, user_id) do
         nil ->
           case Liteskill.Agents.create_agent(%{
@@ -160,7 +158,7 @@ defmodule Liteskill.DemoSeeds do
                }) do
             {:ok, agent} ->
               Logger.info("Demo seeds: created agent #{spec.name}")
-              Map.merge(spec, %{id: agent.id})
+              Map.put(spec, :id, agent.id)
 
             {:error, reason} ->
               Logger.error("Demo seeds: failed to create agent #{spec.name}: #{inspect(reason)}")
@@ -168,7 +166,7 @@ defmodule Liteskill.DemoSeeds do
           end
 
         existing ->
-          Map.merge(spec, %{id: existing.id})
+          Map.put(spec, :id, existing.id)
       end
     end)
     |> Enum.reject(&is_nil/1)

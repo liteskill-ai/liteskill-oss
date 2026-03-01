@@ -1,4 +1,5 @@
 defmodule LiteskillWeb.AuthLive do
+  @moduledoc false
   use LiteskillWeb, :live_view
 
   alias Liteskill.Accounts
@@ -229,8 +230,7 @@ defmodule LiteskillWeb.AuthLive do
     """
   end
 
-  defp render_form(%{live_action: :invite, invitation: invitation} = assigns)
-       when not is_nil(invitation) do
+  defp render_form(%{live_action: :invite, invitation: invitation} = assigns) when not is_nil(invitation) do
     ~H"""
     <.form for={@form} phx-submit="submit" class="space-y-4">
       <div class="form-control">

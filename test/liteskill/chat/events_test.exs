@@ -2,7 +2,9 @@ defmodule Liteskill.Chat.EventsTest do
   use ExUnit.Case, async: true
 
   alias Liteskill.Chat.Events
-  alias Liteskill.Chat.Events.{ConversationCreated, UserMessageAdded, ConversationArchived}
+  alias Liteskill.Chat.Events.ConversationArchived
+  alias Liteskill.Chat.Events.ConversationCreated
+  alias Liteskill.Chat.Events.UserMessageAdded
 
   describe "serialize/1" do
     test "converts a ConversationCreated struct to event store format" do
@@ -18,7 +20,7 @@ defmodule Liteskill.Chat.EventsTest do
       assert result.event_type == "ConversationCreated"
       assert result.data["conversation_id"] == "c1"
       assert result.data["user_id"] == "u1"
-      assert is_binary(Map.keys(result.data) |> Enum.at(0))
+      assert is_binary(result.data |> Map.keys() |> Enum.at(0))
     end
 
     test "converts a ConversationArchived struct" do

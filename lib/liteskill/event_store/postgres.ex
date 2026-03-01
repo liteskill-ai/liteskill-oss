@@ -8,10 +8,11 @@ defmodule Liteskill.EventStore.Postgres do
 
   @behaviour Liteskill.EventStore
 
-  alias Liteskill.EventStore.{Event, Snapshot}
-  alias Liteskill.Repo
-
   import Ecto.Query
+
+  alias Liteskill.EventStore.Event
+  alias Liteskill.EventStore.Snapshot
+  alias Liteskill.Repo
 
   @pubsub Liteskill.PubSub
   @topic_prefix "event_store:"
@@ -23,14 +24,13 @@ defmodule Liteskill.EventStore.Postgres do
         events_data
         |> Enum.with_index(expected_version + 1)
         |> Enum.map(fn {event_data, version} ->
-          %Event{
+          Repo.insert!(%Event{
             stream_id: stream_id,
             stream_version: version,
             event_type: Map.fetch!(event_data, :event_type),
             data: Map.fetch!(event_data, :data),
             metadata: Map.get(event_data, :metadata, %{})
-          }
-          |> Repo.insert!()
+          })
         end)
       end)
 
@@ -92,13 +92,7 @@ defmodule Liteskill.EventStore.Postgres do
 
   @impl true
   def save_snapshot(stream_id, stream_version, snapshot_type, data) do
-    %Snapshot{
-      stream_id: stream_id,
-      stream_version: stream_version,
-      snapshot_type: snapshot_type,
-      data: data
-    }
-    |> Repo.insert()
+    Repo.insert(%Snapshot{stream_id: stream_id, stream_version: stream_version, snapshot_type: snapshot_type, data: data})
   end
 
   @impl true

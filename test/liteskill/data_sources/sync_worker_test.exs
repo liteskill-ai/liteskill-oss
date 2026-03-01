@@ -46,7 +46,8 @@ defmodule Liteskill.DataSources.SyncWorkerTest do
 
       # A DocumentSyncWorker job should be enqueued
       assert [_job] =
-               all_enqueued(worker: DocumentSyncWorker)
+               [worker: DocumentSyncWorker]
+               |> all_enqueued()
                |> Enum.filter(fn j ->
                  j.args["source_name"] == "Sync Source" and j.args["action"] == "upsert"
                end)

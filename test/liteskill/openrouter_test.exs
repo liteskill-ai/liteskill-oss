@@ -21,7 +21,8 @@ defmodule Liteskill.OpenRouterTest do
       {verifier, challenge} = OpenRouter.generate_pkce()
 
       expected =
-        :crypto.hash(:sha256, verifier)
+        :sha256
+        |> :crypto.hash(verifier)
         |> Base.url_encode64(padding: false)
 
       assert challenge == expected
@@ -53,7 +54,7 @@ defmodule Liteskill.OpenRouterTest do
 
   describe "exchange_code/3" do
     test "returns {:ok, key} on success" do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -67,33 +68,27 @@ defmodule Liteskill.OpenRouterTest do
       end)
 
       assert {:ok, "sk-or-test-key"} =
-               OpenRouter.exchange_code("test_code", "test_verifier",
-                 plug: {Req.Test, Liteskill.OpenRouter}
-               )
+               OpenRouter.exchange_code("test_code", "test_verifier", plug: {Req.Test, OpenRouter})
     end
 
     test "returns {:error, msg} on non-200 status" do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.send_resp(403, Jason.encode!(%{"error" => "forbidden"}))
       end)
 
       assert {:error, "OpenRouter returned status 403"} =
-               OpenRouter.exchange_code("bad_code", "verifier",
-                 plug: {Req.Test, Liteskill.OpenRouter}
-               )
+               OpenRouter.exchange_code("bad_code", "verifier", plug: {Req.Test, OpenRouter})
     end
 
     test "returns {:error, msg} on transport error" do
-      Req.Test.stub(Liteskill.OpenRouter, fn conn ->
+      Req.Test.stub(OpenRouter, fn conn ->
         Req.Test.transport_error(conn, :timeout)
       end)
 
       assert {:error, "OpenRouter request failed: " <> _} =
-               OpenRouter.exchange_code("code", "verifier",
-                 plug: {Req.Test, Liteskill.OpenRouter}
-               )
+               OpenRouter.exchange_code("code", "verifier", plug: {Req.Test, OpenRouter})
     end
   end
 end

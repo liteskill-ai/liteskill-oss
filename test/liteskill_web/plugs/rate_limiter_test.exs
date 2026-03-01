@@ -6,12 +6,14 @@ defmodule LiteskillWeb.Plugs.RateLimiterTest do
   # The ETS table is created by Application.start in test env.
 
   defp build_conn(ip) do
-    Plug.Test.conn(:get, "/")
+    :get
+    |> Plug.Test.conn("/")
     |> Map.put(:remote_ip, ip)
   end
 
   defp build_conn_with_user(user_id) do
-    Plug.Test.conn(:get, "/")
+    :get
+    |> Plug.Test.conn("/")
     |> Plug.Conn.assign(:current_user, %{id: user_id})
   end
 
@@ -53,7 +55,7 @@ defmodule LiteskillWeb.Plugs.RateLimiterTest do
   describe "call/2" do
     test "allows requests under the limit" do
       opts = RateLimiter.init(limit: 100, window_ms: 60_000)
-      ip = {10, 0, System.unique_integer([:positive]) |> rem(254), 1}
+      ip = {10, 0, [:positive] |> System.unique_integer() |> rem(254), 1}
       conn = build_conn(ip)
 
       result = RateLimiter.call(conn, opts)
@@ -61,7 +63,7 @@ defmodule LiteskillWeb.Plugs.RateLimiterTest do
     end
 
     test "blocks requests over the limit with JSON content-type" do
-      ip = {10, 99, System.unique_integer([:positive]) |> rem(254), 1}
+      ip = {10, 99, [:positive] |> System.unique_integer() |> rem(254), 1}
       opts = RateLimiter.init(limit: 3, window_ms: 60_000)
 
       # Make 3 requests (all should pass)
@@ -76,7 +78,7 @@ defmodule LiteskillWeb.Plugs.RateLimiterTest do
       result = RateLimiter.call(conn, opts)
       assert result.halted
       assert result.status == 429
-      assert Plug.Conn.get_resp_header(result, "content-type") |> hd() =~ "application/json"
+      assert result |> Plug.Conn.get_resp_header("content-type") |> hd() =~ "application/json"
     end
 
     test "uses user_id key when authenticated" do
@@ -110,7 +112,7 @@ defmodule LiteskillWeb.Plugs.RateLimiterTest do
     end
 
     test "includes retry-after header when rate limited" do
-      ip = {10, 88, System.unique_integer([:positive]) |> rem(254), 1}
+      ip = {10, 88, [:positive] |> System.unique_integer() |> rem(254), 1}
       opts = RateLimiter.init(limit: 1, window_ms: 60_000)
 
       # Exhaust limit

@@ -6,9 +6,7 @@ defmodule Liteskill.LlmGateway.TokenBucket.SweeperTest do
   describe "GenServer lifecycle" do
     test "starts and responds to :sweep" do
       pid =
-        start_supervised!(
-          {Sweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000}
-        )
+        start_supervised!({Sweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000})
 
       send(pid, :sweep)
       state = :sys.get_state(pid)
@@ -19,9 +17,7 @@ defmodule Liteskill.LlmGateway.TokenBucket.SweeperTest do
 
     test "ignores unknown messages" do
       pid =
-        start_supervised!(
-          {Sweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000}
-        )
+        start_supervised!({Sweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000})
 
       send(pid, :unknown_message)
       _ = :sys.get_state(pid)
@@ -31,9 +27,7 @@ defmodule Liteskill.LlmGateway.TokenBucket.SweeperTest do
 
     test "schedules periodic sweeps" do
       pid =
-        start_supervised!(
-          {Sweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 50}
-        )
+        start_supervised!({Sweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 50})
 
       # Wait for at least one sweep cycle
       Process.sleep(100)

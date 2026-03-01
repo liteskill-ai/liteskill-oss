@@ -4,6 +4,7 @@ defmodule LiteskillWeb.SharingComponents do
   """
 
   use Phoenix.Component
+
   import LiteskillWeb.CoreComponents, only: [icon: 1]
 
   attr :show, :boolean, required: true

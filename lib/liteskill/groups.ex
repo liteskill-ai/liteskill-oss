@@ -1,14 +1,15 @@
 defmodule Liteskill.Groups do
-  use Boundary, top_level?: true, deps: [], exports: [Group, GroupMembership]
-
   @moduledoc """
   The Groups context. Manages groups and their memberships.
   """
 
-  alias Liteskill.Groups.{Group, GroupMembership}
-  alias Liteskill.Repo
+  use Boundary, top_level?: true, deps: [], exports: [Group, GroupMembership]
 
   import Ecto.Query
+
+  alias Liteskill.Groups.Group
+  alias Liteskill.Groups.GroupMembership
+  alias Liteskill.Repo
 
   def create_group(name, creator_id) do
     Repo.transaction(fn ->

@@ -1,12 +1,12 @@
 defmodule Liteskill.SingleUserTest do
   use Liteskill.DataCase, async: false
 
-  alias Liteskill.SingleUser
   alias Liteskill.Accounts
   alias Liteskill.Accounts.User
   alias Liteskill.LlmModels
   alias Liteskill.LlmProviders
   alias Liteskill.Settings
+  alias Liteskill.SingleUser
 
   describe "enabled?/0" do
     test "returns false by default" do
@@ -41,14 +41,14 @@ defmodule Liteskill.SingleUserTest do
 
       assert {:ok, updated} = SingleUser.auto_provision_admin()
       refute User.setup_required?(updated)
-      assert updated.password_hash != nil
+      assert updated.password_hash
     end
 
     test "returns :noop when admin user does not exist" do
       # Delete the admin user so auto_user() returns nil
-      admin_email = Liteskill.Accounts.User.admin_email()
+      admin_email = User.admin_email()
 
-      case Liteskill.Repo.get_by(Liteskill.Accounts.User, email: admin_email) do
+      case Liteskill.Repo.get_by(User, email: admin_email) do
         nil -> :ok
         user -> Liteskill.Repo.delete!(user)
       end

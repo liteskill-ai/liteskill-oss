@@ -7,11 +7,14 @@ defmodule Liteskill.Runs.Runner do
   task, producing per-agent report sections with handoff context between stages.
   """
 
-  alias Liteskill.{Runs, Teams}
   alias Liteskill.Agents
-  alias Liteskill.Agents.{JidoAgent, ToolResolver}
   alias Liteskill.Agents.Actions.LlmGenerate
-  alias Liteskill.Runs.{ReportBuilder, ResumeHandler}
+  alias Liteskill.Agents.JidoAgent
+  alias Liteskill.Agents.ToolResolver
+  alias Liteskill.Runs
+  alias Liteskill.Runs.ReportBuilder
+  alias Liteskill.Runs.ResumeHandler
+  alias Liteskill.Teams
 
   require Logger
 
@@ -99,12 +102,12 @@ defmodule Liteskill.Runs.Runner do
     # Find first position that needs to run
     resume_from =
       Enum.find_value(0..(length(agents) - 1), length(agents), fn idx ->
-        unless Map.has_key?(completed_tasks, idx), do: idx
+        if !Map.has_key?(completed_tasks, idx), do: idx
       end)
 
     is_resume = resume_from > 0
 
-    unless is_resume do
+    if !is_resume do
       overview = ReportBuilder.section("Overview", ReportBuilder.overview_content(run, agents))
       :ok = ReportBuilder.write_sections(report_id, [overview], context)
     end
@@ -183,7 +186,7 @@ defmodule Liteskill.Runs.Runner do
       "agent" => agent.name,
       "role" => role,
       "strategy" => agent.strategy,
-      "model" => if(agent.llm_model, do: agent.llm_model.name, else: nil),
+      "model" => if(agent.llm_model, do: agent.llm_model.name),
       "position" => position
     })
 
@@ -297,7 +300,7 @@ defmodule Liteskill.Runs.Runner do
     user_id = Keyword.fetch!(context, :user_id)
     role = member.role || "worker"
 
-    unless agent.llm_model do
+    if !agent.llm_model do
       raise "Agent '#{agent.name}' has no LLM model configured"
     end
 
@@ -355,8 +358,7 @@ defmodule Liteskill.Runs.Runner do
 
     case LlmGenerate.run(%{}, %{state: jido_agent.state}) do
       {:ok, result} ->
-        {:ok,
-         %{analysis: result.analysis, output: result.output, messages: result[:messages] || []}}
+        {:ok, %{analysis: result.analysis, output: result.output, messages: result[:messages] || []}}
 
       {:error, %{reason: reason, messages: messages}} ->
         {:error, "Agent '#{agent.name}' LLM call failed: #{reason}", messages}

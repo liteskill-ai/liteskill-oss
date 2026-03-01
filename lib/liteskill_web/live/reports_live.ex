@@ -6,8 +6,12 @@ defmodule LiteskillWeb.ReportsLive do
   use LiteskillWeb, :live_view
 
   alias Liteskill.Chat
-  alias LiteskillWeb.{ChatComponents, Layouts, ReportComponents}
-  alias LiteskillWeb.{SharingComponents, SharingLive, WikiComponents}
+  alias LiteskillWeb.ChatComponents
+  alias LiteskillWeb.Layouts
+  alias LiteskillWeb.ReportComponents
+  alias LiteskillWeb.SharingComponents
+  alias LiteskillWeb.SharingLive
+  alias LiteskillWeb.WikiComponents
 
   @reports_actions [:reports, :report_show]
 
@@ -56,7 +60,7 @@ defmodule LiteskillWeb.ReportsLive do
        sharing_user_search_query: "",
        sharing_groups: [],
        sharing_error: nil
-     ), layout: {LiteskillWeb.Layouts, :chat}}
+     ), layout: {Layouts, :chat}}
   end
 
   @impl true

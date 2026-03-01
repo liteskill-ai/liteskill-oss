@@ -9,13 +9,15 @@ defmodule LiteskillWeb.AgentStudioLive do
   alias Liteskill.Agents
   alias Liteskill.Chat
   alias Liteskill.LlmModels
+  alias Liteskill.McpServers
   alias Liteskill.Runs
   alias Liteskill.Runs.Runner
-  alias Liteskill.McpServers
   alias Liteskill.Schedules
   alias Liteskill.Teams
-  alias LiteskillWeb.{AgentStudioComponents, Layouts}
-  alias LiteskillWeb.{SharingComponents, SharingLive}
+  alias LiteskillWeb.AgentStudioComponents
+  alias LiteskillWeb.Layouts
+  alias LiteskillWeb.SharingComponents
+  alias LiteskillWeb.SharingLive
 
   @studio_actions [
     :agent_studio,
@@ -180,7 +182,7 @@ defmodule LiteskillWeb.AgentStudioLive do
        sharing_user_search_query: "",
        sharing_groups: [],
        sharing_error: nil
-     ), layout: {LiteskillWeb.Layouts, :chat}}
+     ), layout: {Layouts, :chat}}
   end
 
   @impl true
@@ -542,10 +544,7 @@ defmodule LiteskillWeb.AgentStudioLive do
     end
   end
 
-  def apply_studio_action(socket, :run_log_show, %{
-        "run_id" => run_id,
-        "log_id" => log_id
-      }) do
+  def apply_studio_action(socket, :run_log_show, %{"run_id" => run_id, "log_id" => log_id}) do
     user_id = socket.assigns.current_user.id
 
     with {:ok, run} <- Runs.get_run(run_id, user_id),
@@ -633,7 +632,7 @@ defmodule LiteskillWeb.AgentStudioLive do
   @impl true
   def handle_event("save_agent", %{"agent" => params}, socket) do
     user_id = socket.assigns.current_user.id
-    params = params |> decode_opinions()
+    params = decode_opinions(params)
 
     result =
       if socket.assigns.editing_agent do
@@ -902,9 +901,7 @@ defmodule LiteskillWeb.AgentStudioLive do
     user_id = socket.assigns.current_user.id
     run = socket.assigns.studio_run
 
-    if run.status != "pending" do
-      {:noreply, put_flash(socket, :error, "Run can only be started when pending")}
-    else
+    if run.status == "pending" do
       Task.Supervisor.start_child(Liteskill.TaskSupervisor, fn ->
         Runner.run(run.id, user_id)
       end)
@@ -913,6 +910,8 @@ defmodule LiteskillWeb.AgentStudioLive do
        socket
        |> put_flash(:info, "Run started.")
        |> assign(studio_run: %{run | status: "running"})}
+    else
+      {:noreply, put_flash(socket, :error, "Run can only be started when pending")}
     end
   end
 
@@ -1096,7 +1095,7 @@ defmodule LiteskillWeb.AgentStudioLive do
       |> Enum.sort_by(fn {idx, _} -> String.to_integer(idx) end)
       |> Enum.reduce(%{}, fn {_idx, %{"key" => k, "value" => v}}, acc ->
         key = String.trim(k)
-        if key != "", do: Map.put(acc, key, String.trim(v)), else: acc
+        if key == "", do: acc, else: Map.put(acc, key, String.trim(v))
       end)
 
     Map.put(params, "opinions", opinions)
@@ -1126,8 +1125,7 @@ defmodule LiteskillWeb.AgentStudioLive do
 
   defp parse_timeout_param(params), do: params
 
-  defp parse_cost_limit_param(%{"cost_limit" => ""} = params),
-    do: Map.delete(params, "cost_limit")
+  defp parse_cost_limit_param(%{"cost_limit" => ""} = params), do: Map.delete(params, "cost_limit")
 
   defp parse_cost_limit_param(%{"cost_limit" => val} = params) when is_binary(val) do
     case Decimal.parse(val) do

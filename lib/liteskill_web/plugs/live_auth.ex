@@ -5,8 +5,8 @@ defmodule LiteskillWeb.Plugs.LiveAuth do
   Used in live_session to protect LiveView routes.
   """
 
-  import Phoenix.LiveView
   import Phoenix.Component
+  import Phoenix.LiveView
 
   alias Liteskill.Accounts
   alias Liteskill.Accounts.User
@@ -124,7 +124,7 @@ defmodule LiteskillWeb.Plugs.LiveAuth do
   end
 
   defp maybe_touch_session(%{last_active_at: last_active_at} = session) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = DateTime.truncate(DateTime.utc_now(), :second)
     elapsed = DateTime.diff(now, last_active_at, :second)
 
     if elapsed >= @touch_throttle_seconds do

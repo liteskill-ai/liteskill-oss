@@ -1,4 +1,5 @@
 defmodule LiteskillWeb.Endpoint do
+  @moduledoc false
   use Phoenix.Endpoint, otp_app: :liteskill
 
   # The session is stored in the cookie, signed and encrypted.

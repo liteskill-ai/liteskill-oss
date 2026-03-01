@@ -1,9 +1,10 @@
 defmodule Liteskill.RbacTest do
   use Liteskill.DataCase, async: false
 
-  alias Liteskill.Rbac
-  alias Liteskill.Rbac.{Permissions, Role}
   alias Liteskill.Groups
+  alias Liteskill.Rbac
+  alias Liteskill.Rbac.Permissions
+  alias Liteskill.Rbac.Role
 
   setup do
     {:ok, user} =

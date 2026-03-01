@@ -5,6 +5,7 @@ defmodule Liteskill.Aggregate.LoaderTest do
   alias Liteskill.EventStore.Postgres, as: Store
 
   defmodule Counter do
+    @moduledoc false
     @behaviour Liteskill.Aggregate
 
     defstruct count: 0
@@ -167,7 +168,9 @@ defmodule Liteskill.Aggregate.LoaderTest do
 
   describe "snapshot with nested data and atom fields" do
     defmodule StatefulAggregate do
+      @moduledoc false
       @behaviour Liteskill.Aggregate
+
       defstruct status: :created, items: [], metadata: %{}
 
       @impl true
@@ -212,7 +215,9 @@ defmodule Liteskill.Aggregate.LoaderTest do
 
   describe "snapshot with streaming state and tool_calls" do
     defmodule StreamingAggregate do
+      @moduledoc false
       @behaviour Liteskill.Aggregate
+
       defstruct status: :created, current_stream: nil
 
       @impl true
@@ -253,7 +258,7 @@ defmodule Liteskill.Aggregate.LoaderTest do
       {state, version} = Loader.load(StreamingAggregate, stream)
       assert version == 10
       assert state.status == :streaming
-      assert state.current_stream != nil
+      assert state.current_stream
 
       tcs = state.current_stream.tool_calls
       assert length(tcs) == 3
@@ -294,7 +299,9 @@ defmodule Liteskill.Aggregate.LoaderTest do
 
   describe "recursive stringify_keys for snapshots" do
     defmodule NestedAggregate do
+      @moduledoc false
       @behaviour Liteskill.Aggregate
+
       defstruct status: :created, config: %{}, items: []
 
       @impl true

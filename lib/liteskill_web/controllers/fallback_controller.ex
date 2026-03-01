@@ -1,4 +1,5 @@
 defmodule LiteskillWeb.FallbackController do
+  @moduledoc false
   use LiteskillWeb, :controller
 
   def call(conn, {:error, :bad_request}) do

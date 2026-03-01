@@ -327,7 +327,7 @@ defmodule Liteskill.SchedulesTest do
         Schedules.create_schedule(schedule_attrs(owner, %{cron_expression: "*/5 * * * *"}))
 
       # next_run_at is auto-populated to the next matching time (in the future)
-      assert schedule.next_run_at != nil
+      assert schedule.next_run_at
 
       due = Schedules.list_due_schedules(DateTime.utc_now())
       assert due == []
@@ -407,7 +407,7 @@ defmodule Liteskill.SchedulesTest do
       # Invalid timezone triggers fallback in both shift_to_timezone and shift_from_timezone
       result = Schedules.compute_next_run("*/5 * * * *", "Invalid/Zone", from)
       # Should still compute a result, falling back to UTC
-      assert result != nil
+      assert result
     end
   end
 end

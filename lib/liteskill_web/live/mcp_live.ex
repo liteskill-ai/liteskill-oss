@@ -9,7 +9,9 @@ defmodule LiteskillWeb.McpLive do
   alias Liteskill.Chat
   alias Liteskill.McpServers
   alias Liteskill.McpServers.Client, as: McpClient
-  alias LiteskillWeb.{ChatComponents, Layouts, McpComponents}
+  alias LiteskillWeb.ChatComponents
+  alias LiteskillWeb.Layouts
+  alias LiteskillWeb.McpComponents
 
   # --- LiveView callbacks ---
 
@@ -18,8 +20,7 @@ defmodule LiteskillWeb.McpLive do
     conversations = Chat.list_conversations(socket.assigns.current_user.id)
 
     {:ok,
-     socket
-     |> assign(
+     assign(socket,
        conversations: conversations,
        conversation: nil,
        sidebar_open: true,
@@ -28,22 +29,14 @@ defmodule LiteskillWeb.McpLive do
        mcp_servers: [],
        show_mcp_modal: false,
        mcp_form:
-         to_form(
-           %{
-             "name" => "",
-             "url" => "",
-             "api_key" => "",
-             "description" => "",
-             "headers" => "",
-             "global" => false
-           },
+         to_form(%{"name" => "", "url" => "", "api_key" => "", "description" => "", "headers" => "", "global" => false},
            as: :mcp_server
          ),
        editing_mcp: nil,
        inspecting_server: nil,
        inspecting_tools: [],
        inspecting_tools_loading: false
-     ), layout: {LiteskillWeb.Layouts, :chat}}
+     ), layout: {Layouts, :chat}}
   end
 
   @impl true
@@ -327,9 +320,7 @@ defmodule LiteskillWeb.McpLive do
       {:error, %Ecto.Changeset{} = changeset} ->
         changeset = Map.put(changeset, :action, :validate)
 
-        {:noreply,
-         socket
-         |> assign(mcp_form: to_form(changeset, as: :mcp_server))}
+        {:noreply, assign(socket, mcp_form: to_form(changeset, as: :mcp_server))}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, action_error("save server", reason))}
@@ -394,8 +385,7 @@ defmodule LiteskillWeb.McpLive do
 
   @impl true
   def handle_event("close_tools_modal", _params, socket) do
-    {:noreply,
-     assign(socket, inspecting_server: nil, inspecting_tools: [], inspecting_tools_loading: false)}
+    {:noreply, assign(socket, inspecting_server: nil, inspecting_tools: [], inspecting_tools_loading: false)}
   end
 
   # --- handle_info callbacks ---
@@ -440,8 +430,7 @@ defmodule LiteskillWeb.McpLive do
 
   defp parse_headers(_), do: %{}
 
-  defp mcp_headers_value(val) when is_map(val) and val != %{},
-    do: Jason.encode!(val, pretty: true)
+  defp mcp_headers_value(val) when is_map(val) and val != %{}, do: Jason.encode!(val, pretty: true)
 
   defp mcp_headers_value(val) when is_binary(val), do: val
   defp mcp_headers_value(_), do: ""

@@ -5,7 +5,8 @@ defmodule Liteskill.Rag.SearchTest do
   import Liteskill.RetryTestHelpers
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Chunk, CohereClient}
+  alias Liteskill.Rag.Chunk
+  alias Liteskill.Rag.CohereClient
 
   setup :setup_users
 
@@ -19,7 +20,7 @@ defmodule Liteskill.Rag.SearchTest do
       embedding1 = List.duplicate(0.1, 1024)
       embedding2 = List.duplicate(0.9, 1024)
 
-      agent = Agent.start_link(fn -> :embed end) |> elem(1)
+      agent = fn -> :embed end |> Agent.start_link() |> elem(1)
 
       Req.Test.stub(CohereClient, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -69,7 +70,7 @@ defmodule Liteskill.Rag.SearchTest do
 
       embedding = List.duplicate(0.5, 1024)
 
-      agent = Agent.start_link(fn -> :embed end) |> elem(1)
+      agent = fn -> :embed end |> Agent.start_link() |> elem(1)
 
       Req.Test.stub(CohereClient, fn conn ->
         response =
@@ -153,9 +154,7 @@ defmodule Liteskill.Rag.SearchTest do
       end)
 
       assert {:error, _} =
-               Rag.rerank("query", [%{chunk: %Chunk{content: "x"}, distance: 0.1}],
-                 plug: {Req.Test, CohereClient}
-               )
+               Rag.rerank("query", [%{chunk: %Chunk{content: "x"}, distance: 0.1}], plug: {Req.Test, CohereClient})
     end
   end
 
@@ -296,7 +295,7 @@ defmodule Liteskill.Rag.SearchTest do
 
       embedding = List.duplicate(0.1, 1024)
 
-      agent = Agent.start_link(fn -> :embed end) |> elem(1)
+      agent = fn -> :embed end |> Agent.start_link() |> elem(1)
 
       Req.Test.stub(CohereClient, fn conn ->
         response =
@@ -403,7 +402,7 @@ defmodule Liteskill.Rag.SearchTest do
                Rag.augment_context("test", owner.id, plug: {Req.Test, CohereClient})
 
       assert length(results) == 40
-      assert hd(results).relevance_score != nil
+      assert hd(results).relevance_score
     end
 
     test "falls back when rerank fails with 40+ results", %{owner: owner} do
@@ -528,7 +527,7 @@ defmodule Liteskill.Rag.SearchTest do
 
       embedding = List.duplicate(0.1, 1024)
 
-      agent = Agent.start_link(fn -> :embed end) |> elem(1)
+      agent = fn -> :embed end |> Agent.start_link() |> elem(1)
 
       Req.Test.stub(CohereClient, fn conn ->
         response =
@@ -576,7 +575,7 @@ defmodule Liteskill.Rag.SearchTest do
 
       embedding = List.duplicate(0.1, 1024)
 
-      agent = Agent.start_link(fn -> :embed end) |> elem(1)
+      agent = fn -> :embed end |> Agent.start_link() |> elem(1)
 
       Req.Test.stub(CohereClient, fn conn ->
         response =
@@ -612,6 +611,8 @@ defmodule Liteskill.Rag.SearchTest do
 
   describe "embedding request logging" do
     test "embed_chunks logs embedding request when user_id provided", %{owner: owner} do
+      alias Liteskill.Rag.EmbeddingRequest
+
       {:ok, coll} = create_collection(owner.id)
       {:ok, source} = create_source(coll.id, owner.id)
       {:ok, doc} = create_document(source.id, owner.id)
@@ -622,8 +623,6 @@ defmodule Liteskill.Rag.SearchTest do
       assert {:ok, _} =
                Rag.embed_chunks(doc.id, chunks, owner.id, plug: {Req.Test, CohereClient})
 
-      alias Liteskill.Rag.EmbeddingRequest
-
       requests =
         EmbeddingRequest
         |> where([e], e.user_id == ^owner.id)
@@ -632,7 +631,7 @@ defmodule Liteskill.Rag.SearchTest do
       assert requests != []
 
       embed_req = Enum.find(requests, &(&1.request_type == "embed"))
-      assert embed_req != nil
+      assert embed_req
       assert embed_req.status == "success"
       assert embed_req.model_id == "us.cohere.embed-v4:0"
       assert embed_req.input_count == 1

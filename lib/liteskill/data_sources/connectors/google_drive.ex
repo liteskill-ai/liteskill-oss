@@ -30,8 +30,8 @@ defmodule Liteskill.DataSources.Connectors.GoogleDrive do
 
   @impl true
   def validate_connection(source, opts) do
-    with {:ok, token} <- get_access_token(source, opts),
-         folder_id <- get_folder_id(source) do
+    with {:ok, token} <- get_access_token(source, opts) do
+      folder_id = get_folder_id(source)
       req_opts = req_opts(opts)
 
       case Req.get(
@@ -40,12 +40,11 @@ defmodule Liteskill.DataSources.Connectors.GoogleDrive do
                url: "#{@drive_base}/files",
                headers: [{"authorization", "Bearer #{token}"}],
                params:
-                 %{
+                 shared_drive_params(%{
                    "q" => "'#{folder_id}' in parents and trashed = false",
                    "pageSize" => "1",
                    "fields" => "files(id)"
-                 }
-                 |> shared_drive_params()
+                 })
              ] ++ req_opts
            ) do
         {:ok, %{status: 200}} -> :ok
@@ -203,7 +202,7 @@ defmodule Liteskill.DataSources.Connectors.GoogleDrive do
 
     jwk = JOSE.JWK.from_pem(pem_key)
     jws = %{"alg" => "RS256"}
-    {_, token} = JOSE.JWT.sign(jwk, jws, claims) |> JOSE.JWS.compact()
+    {_, token} = jwk |> JOSE.JWT.sign(jws, claims) |> JOSE.JWS.compact()
     token
   end
 
@@ -381,5 +380,5 @@ defmodule Liteskill.DataSources.Connectors.GoogleDrive do
 
   # coveralls-ignore-next-line
   defp content_hash(nil), do: nil
-  defp content_hash(content), do: :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+  defp content_hash(content), do: :sha256 |> :crypto.hash(content) |> Base.encode16(case: :lower)
 end

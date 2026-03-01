@@ -14,9 +14,10 @@ defmodule LiteskillWeb.Plugs.RateLimiter do
     * `:window_ms` - window duration in milliseconds (default 60_000)
   """
 
+  @behaviour Plug
+
   import Plug.Conn
 
-  @behaviour Plug
   @table :liteskill_rate_limiter
 
   @default_limit 1000

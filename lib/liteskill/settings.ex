@@ -1,16 +1,16 @@
 defmodule Liteskill.Settings do
-  use Boundary, top_level?: true, deps: [], exports: [ServerSettings]
-
   @moduledoc """
   The Settings context. Manages server-wide settings using a singleton row pattern.
 
   Uses :persistent_term for caching since settings rarely change.
   """
 
-  alias Liteskill.Repo
-  alias Liteskill.Settings.ServerSettings
+  use Boundary, top_level?: true, deps: [], exports: [ServerSettings]
 
   import Ecto.Query
+
+  alias Liteskill.Repo
+  alias Liteskill.Settings.ServerSettings
 
   @cache_key {__MODULE__, :settings}
 
@@ -91,7 +91,8 @@ defmodule Liteskill.Settings do
         )
 
         # Re-query to handle race: another process may have inserted first
-        Repo.one!(from(s in ServerSettings, limit: 1))
+        from(s in ServerSettings, limit: 1)
+        |> Repo.one!()
         |> Repo.preload(:embedding_model)
 
       settings ->

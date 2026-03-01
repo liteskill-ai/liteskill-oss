@@ -1,20 +1,21 @@
 defmodule Liteskill.Teams do
-  use Boundary,
-    top_level?: true,
-    deps: [Liteskill.Authorization, Liteskill.Rbac],
-    exports: [TeamDefinition, TeamMember]
-
   @moduledoc """
   Context for managing team definitions.
 
   Teams are named collections of agents with shared context and execution topology.
   """
 
-  alias Liteskill.Teams.{TeamDefinition, TeamMember}
-  alias Liteskill.Authorization
-  alias Liteskill.Repo
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Authorization, Liteskill.Rbac],
+    exports: [TeamDefinition, TeamMember]
 
   import Ecto.Query
+
+  alias Liteskill.Authorization
+  alias Liteskill.Repo
+  alias Liteskill.Teams.TeamDefinition
+  alias Liteskill.Teams.TeamMember
 
   # --- CRUD ---
 
@@ -71,7 +72,7 @@ defmodule Liteskill.Teams do
   end
 
   def get_team(id, user_id) do
-    case Repo.get(TeamDefinition, id) |> Repo.preload(team_members: :agent_definition) do
+    case TeamDefinition |> Repo.get(id) |> Repo.preload(team_members: :agent_definition) do
       nil ->
         {:error, :not_found}
 
@@ -88,7 +89,7 @@ defmodule Liteskill.Teams do
   end
 
   def get_team!(id) do
-    Repo.get!(TeamDefinition, id) |> Repo.preload(team_members: :agent_definition)
+    TeamDefinition |> Repo.get!(id) |> Repo.preload(team_members: :agent_definition)
   end
 
   # --- Member Management ---
@@ -96,11 +97,12 @@ defmodule Liteskill.Teams do
   def add_member(team_definition_id, agent_definition_id, user_id, attrs \\ %{}) do
     with {:ok, _team} <- authorize_team_owner(team_definition_id, user_id) do
       next_position =
-        from(tm in TeamMember,
-          where: tm.team_definition_id == ^team_definition_id,
-          select: coalesce(max(tm.position), -1) + 1
+        Repo.one(
+          from(tm in TeamMember,
+            where: tm.team_definition_id == ^team_definition_id,
+            select: coalesce(max(tm.position), -1) + 1
+          )
         )
-        |> Repo.one()
 
       %TeamMember{}
       |> TeamMember.changeset(
@@ -130,7 +132,7 @@ defmodule Liteskill.Teams do
   end
 
   def update_member(member_id, user_id, attrs) do
-    case Repo.get(TeamMember, member_id) |> Repo.preload(:team_definition) do
+    case TeamMember |> Repo.get(member_id) |> Repo.preload(:team_definition) do
       nil ->
         {:error, :not_found}
 

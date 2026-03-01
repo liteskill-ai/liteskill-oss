@@ -1,4 +1,11 @@
 defmodule Liteskill.Runs do
+  @moduledoc """
+  Context for managing runs — runtime task executions.
+
+  Each run represents a single execution: it has a prompt, optional team,
+  topology, and tracks its lifecycle from pending through completed/failed.
+  """
+
   use Boundary,
     top_level?: true,
     deps: [
@@ -11,18 +18,13 @@ defmodule Liteskill.Runs do
     ],
     exports: [Run, RunLog, RunTask, Runner, ReportBuilder, ResumeHandler]
 
-  @moduledoc """
-  Context for managing runs — runtime task executions.
+  import Ecto.Query
 
-  Each run represents a single execution: it has a prompt, optional team,
-  topology, and tracks its lifecycle from pending through completed/failed.
-  """
-
-  alias Liteskill.Runs.{Run, RunLog, RunTask}
   alias Liteskill.Authorization
   alias Liteskill.Repo
-
-  import Ecto.Query
+  alias Liteskill.Runs.Run
+  alias Liteskill.Runs.RunLog
+  alias Liteskill.Runs.RunTask
 
   # --- CRUD ---
 
@@ -115,7 +117,8 @@ defmodule Liteskill.Runs do
   end
 
   def get_run(id, user_id) do
-    case Repo.get(Run, id)
+    case Run
+         |> Repo.get(id)
          |> Repo.preload([:team_definition, :run_tasks, :run_logs]) do
       nil ->
         {:error, :not_found}
@@ -133,7 +136,7 @@ defmodule Liteskill.Runs do
   end
 
   def get_run!(id) do
-    Repo.get!(Run, id) |> Repo.preload([:team_definition, :run_tasks, :run_logs])
+    Run |> Repo.get!(id) |> Repo.preload([:team_definition, :run_tasks, :run_logs])
   end
 
   # --- Run Tasks ---
@@ -154,7 +157,7 @@ defmodule Liteskill.Runs do
   # --- Run Logs ---
 
   def get_log(log_id, user_id) do
-    case Repo.get(RunLog, log_id) |> Repo.preload(:run) do
+    case RunLog |> Repo.get(log_id) |> Repo.preload(:run) do
       nil ->
         {:error, :not_found}
 

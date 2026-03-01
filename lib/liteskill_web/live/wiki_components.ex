@@ -278,8 +278,7 @@ defmodule LiteskillWeb.WikiComponents do
 
   # --- Helpers ---
 
-  defp document_url(source, doc),
-    do: ~p"/sources/#{source_url_id(source)}/#{doc.id}"
+  defp document_url(source, doc), do: ~p"/sources/#{source_url_id(source)}/#{doc.id}"
 
   def source_url_id(%{id: "builtin:" <> rest}), do: "builtin-" <> rest
   def source_url_id(%{id: id}), do: id

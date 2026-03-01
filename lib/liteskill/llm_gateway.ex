@@ -1,9 +1,4 @@
 defmodule Liteskill.LlmGateway do
-  use Boundary,
-    top_level?: true,
-    deps: [Liteskill.LlmModels, Liteskill.LlmProviders],
-    exports: [TokenBucket, ProviderGate]
-
   @moduledoc """
   Rate limiting and circuit-breaking gateway for outbound LLM calls.
 
@@ -13,4 +8,8 @@ defmodule Liteskill.LlmGateway do
 
   Orthogonal to `Liteskill.LLM` (which handles streaming/events).
   """
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.LlmModels, Liteskill.LlmProviders],
+    exports: [TokenBucket, ProviderGate]
 end

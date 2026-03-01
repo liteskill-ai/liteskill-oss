@@ -31,7 +31,7 @@ defmodule Liteskill.McpServers.ClientTest do
   end
 
   defp stub_with_init(handler) do
-    Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+    Req.Test.stub(Client, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       decoded = Jason.decode!(body)
 
@@ -77,7 +77,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, tools} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
 
       assert length(tools) == 1
       assert hd(tools)["name"] == "get_weather"
@@ -100,32 +100,30 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:error, %{"code" => -32_601}} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "returns error on HTTP failure during initialization" do
       server = build_server()
 
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
-        conn
-        |> Plug.Conn.send_resp(500, "Internal Server Error")
+      Req.Test.stub(Client, fn conn ->
+        Plug.Conn.send_resp(conn, 500, "Internal Server Error")
       end)
 
       assert {:error, %{status: 500}} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "returns error on HTTP failure after successful initialization" do
       server = build_server()
 
       stub_with_init(fn conn, _decoded ->
-        conn
-        |> Plug.Conn.send_resp(500, "Internal Server Error")
+        Plug.Conn.send_resp(conn, 500, "Internal Server Error")
       end)
 
       assert {:error, %{status: 500}} =
                Client.list_tools(server,
-                 plug: {Req.Test, Liteskill.McpServers.Client},
+                 plug: {Req.Test, Client},
                  mcp_backoff_ms: 1
                )
     end
@@ -146,7 +144,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, []} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
   end
 
@@ -178,7 +176,7 @@ defmodule Liteskill.McpServers.ClientTest do
                  server,
                  "get_weather",
                  %{"location" => "NYC"},
-                 plug: {Req.Test, Liteskill.McpServers.Client}
+                 plug: {Req.Test, Client}
                )
 
       assert result["content"] == [%{"type" => "text", "text" => "Sunny, 72F"}]
@@ -204,16 +202,15 @@ defmodule Liteskill.McpServers.ClientTest do
                  server,
                  "bad_tool",
                  %{},
-                 plug: {Req.Test, Liteskill.McpServers.Client}
+                 plug: {Req.Test, Client}
                )
     end
 
     test "returns error on HTTP failure during initialization" do
       server = build_server()
 
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
-        conn
-        |> Plug.Conn.send_resp(502, "Bad Gateway")
+      Req.Test.stub(Client, fn conn ->
+        Plug.Conn.send_resp(conn, 502, "Bad Gateway")
       end)
 
       assert {:error, %{status: 502}} =
@@ -221,7 +218,7 @@ defmodule Liteskill.McpServers.ClientTest do
                  server,
                  "some_tool",
                  %{},
-                 plug: {Req.Test, Liteskill.McpServers.Client}
+                 plug: {Req.Test, Client}
                )
     end
   end
@@ -230,7 +227,7 @@ defmodule Liteskill.McpServers.ClientTest do
     test "sends initialize request with correct protocol version" do
       server = build_server()
 
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+      Req.Test.stub(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -253,13 +250,13 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, []} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "works when server does not return a session ID" do
       server = build_server()
 
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+      Req.Test.stub(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -292,13 +289,13 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, []} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "includes session ID in subsequent requests" do
       server = build_server()
 
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+      Req.Test.stub(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -308,16 +305,14 @@ defmodule Liteskill.McpServers.ClientTest do
 
           "notifications/initialized" ->
             session =
-              conn.req_headers
-              |> Enum.find(fn {k, _} -> k == "mcp-session-id" end)
+              Enum.find(conn.req_headers, fn {k, _} -> k == "mcp-session-id" end)
 
             assert session == {"mcp-session-id", "test-session"}
             Plug.Conn.send_resp(conn, 200, "")
 
           "tools/list" ->
             session =
-              conn.req_headers
-              |> Enum.find(fn {k, _} -> k == "mcp-session-id" end)
+              Enum.find(conn.req_headers, fn {k, _} -> k == "mcp-session-id" end)
 
             assert session == {"mcp-session-id", "test-session"}
 
@@ -330,7 +325,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, []} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
   end
 
@@ -338,7 +333,7 @@ defmodule Liteskill.McpServers.ClientTest do
     test "parses SSE text/event-stream responses" do
       server = build_server()
 
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+      Req.Test.stub(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -388,7 +383,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, [tool]} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
 
       assert tool["name"] == "sse_tool"
     end
@@ -400,8 +395,7 @@ defmodule Liteskill.McpServers.ClientTest do
 
       stub_with_init(fn conn, _decoded ->
         auth_header =
-          conn.req_headers
-          |> Enum.find(fn {k, _} -> k == "authorization" end)
+          Enum.find(conn.req_headers, fn {k, _} -> k == "authorization" end)
 
         assert auth_header == {"authorization", "Bearer my-secret-key"}
 
@@ -412,7 +406,7 @@ defmodule Liteskill.McpServers.ClientTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(resp))
       end)
 
-      Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+      Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "merges custom headers" do
@@ -420,8 +414,7 @@ defmodule Liteskill.McpServers.ClientTest do
 
       stub_with_init(fn conn, _decoded ->
         custom_header =
-          conn.req_headers
-          |> Enum.find(fn {k, _} -> k == "x-custom" end)
+          Enum.find(conn.req_headers, fn {k, _} -> k == "x-custom" end)
 
         assert custom_header == {"x-custom", "custom-val"}
 
@@ -432,7 +425,7 @@ defmodule Liteskill.McpServers.ClientTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(resp))
       end)
 
-      Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+      Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "skips authorization when api_key is nil" do
@@ -440,8 +433,7 @@ defmodule Liteskill.McpServers.ClientTest do
 
       stub_with_init(fn conn, _decoded ->
         auth_header =
-          conn.req_headers
-          |> Enum.find(fn {k, _} -> k == "authorization" end)
+          Enum.find(conn.req_headers, fn {k, _} -> k == "authorization" end)
 
         assert auth_header == nil
 
@@ -452,7 +444,7 @@ defmodule Liteskill.McpServers.ClientTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(resp))
       end)
 
-      Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+      Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "skips authorization when api_key is empty string" do
@@ -460,8 +452,7 @@ defmodule Liteskill.McpServers.ClientTest do
 
       stub_with_init(fn conn, _decoded ->
         auth_header =
-          conn.req_headers
-          |> Enum.find(fn {k, _} -> k == "authorization" end)
+          Enum.find(conn.req_headers, fn {k, _} -> k == "authorization" end)
 
         assert auth_header == nil
 
@@ -472,7 +463,7 @@ defmodule Liteskill.McpServers.ClientTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(resp))
       end)
 
-      Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+      Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "strips blocked headers from custom headers" do
@@ -511,7 +502,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, []} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "strips headers with CRLF injection in values" do
@@ -539,7 +530,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, []} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "strips headers with CRLF injection in keys" do
@@ -565,7 +556,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, []} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "handles nil headers" do
@@ -580,7 +571,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:ok, []} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
   end
 
@@ -593,7 +584,7 @@ defmodule Liteskill.McpServers.ClientTest do
         attempt = Agent.get_and_update(counter, fn n -> {n, n + 1} end)
 
         if attempt == 0 do
-          conn |> Plug.Conn.send_resp(429, "Rate limited")
+          Plug.Conn.send_resp(conn, 429, "Rate limited")
         else
           resp = %{"jsonrpc" => "2.0", "result" => %{"tools" => []}, "id" => 1}
 
@@ -605,7 +596,7 @@ defmodule Liteskill.McpServers.ClientTest do
 
       assert {:ok, []} =
                Client.list_tools(server,
-                 plug: {Req.Test, Liteskill.McpServers.Client},
+                 plug: {Req.Test, Client},
                  mcp_backoff_ms: 1
                )
 
@@ -620,7 +611,7 @@ defmodule Liteskill.McpServers.ClientTest do
         attempt = Agent.get_and_update(counter, fn n -> {n, n + 1} end)
 
         if attempt == 0 do
-          conn |> Plug.Conn.send_resp(503, "Service Unavailable")
+          Plug.Conn.send_resp(conn, 503, "Service Unavailable")
         else
           resp = %{
             "jsonrpc" => "2.0",
@@ -641,7 +632,7 @@ defmodule Liteskill.McpServers.ClientTest do
                  server,
                  "some_tool",
                  %{},
-                 plug: {Req.Test, Liteskill.McpServers.Client},
+                 plug: {Req.Test, Client},
                  mcp_backoff_ms: 1
                )
 
@@ -652,12 +643,12 @@ defmodule Liteskill.McpServers.ClientTest do
       server = build_server()
 
       stub_with_init(fn conn, _decoded ->
-        conn |> Plug.Conn.send_resp(429, "Rate limited")
+        Plug.Conn.send_resp(conn, 429, "Rate limited")
       end)
 
       assert {:error, %{status: 429}} =
                Client.list_tools(server,
-                 plug: {Req.Test, Liteskill.McpServers.Client},
+                 plug: {Req.Test, Client},
                  mcp_backoff_ms: 1
                )
     end
@@ -668,7 +659,7 @@ defmodule Liteskill.McpServers.ClientTest do
 
       stub_with_init(fn conn, _decoded ->
         Agent.update(counter, &(&1 + 1))
-        conn |> Plug.Conn.send_resp(400, "Bad Request")
+        Plug.Conn.send_resp(conn, 400, "Bad Request")
       end)
 
       assert {:error, %{status: 400}} =
@@ -676,7 +667,7 @@ defmodule Liteskill.McpServers.ClientTest do
                  server,
                  "some_tool",
                  %{},
-                 plug: {Req.Test, Liteskill.McpServers.Client},
+                 plug: {Req.Test, Client},
                  mcp_backoff_ms: 1
                )
 
@@ -689,19 +680,19 @@ defmodule Liteskill.McpServers.ClientTest do
     test "initialize returns error on transport failure" do
       server = build_server()
 
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+      Req.Test.stub(Client, fn conn ->
         Req.Test.transport_error(conn, :timeout)
       end)
 
       assert {:error, %Req.TransportError{reason: :timeout}} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
 
     test "send_request returns error on transport failure after init" do
       server = build_server()
       {:ok, counter} = Agent.start_link(fn -> 0 end)
 
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+      Req.Test.stub(Client, fn conn ->
         call = Agent.get_and_update(counter, fn n -> {n, n + 1} end)
 
         case call do
@@ -712,7 +703,7 @@ defmodule Liteskill.McpServers.ClientTest do
       end)
 
       assert {:error, %Req.TransportError{reason: :closed}} =
-               Client.list_tools(server, plug: {Req.Test, Liteskill.McpServers.Client})
+               Client.list_tools(server, plug: {Req.Test, Client})
     end
   end
 end

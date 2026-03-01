@@ -95,7 +95,7 @@ defmodule LiteskillWeb.MarkdownTest do
       """
 
       {:safe, html} = Markdown.render(md)
-      ids = Regex.scan(~r/id="(jr-\d+)"/, html) |> Enum.map(&List.last/1)
+      ids = ~r/id="(jr-\d+)"/ |> Regex.scan(html) |> Enum.map(&List.last/1)
       assert length(ids) == 2
       assert Enum.uniq(ids) == ids
     end
@@ -183,7 +183,7 @@ defmodule LiteskillWeb.MarkdownTest do
       """
 
       {:safe, html} = Markdown.render(md)
-      ids = Regex.scan(~r/id="(jr-\d+)"/, html) |> Enum.map(&List.last/1)
+      ids = ~r/id="(jr-\d+)"/ |> Regex.scan(html) |> Enum.map(&List.last/1)
       assert length(ids) == 2
       assert Enum.uniq(ids) == ids
     end

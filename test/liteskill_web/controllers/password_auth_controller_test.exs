@@ -18,8 +18,8 @@ defmodule LiteskillWeb.PasswordAuthControllerTest do
       assert %{"data" => data} = json_response(conn, 201)
       assert data["email"] == "newuser@example.com"
       assert data["name"] == "New User"
-      assert data["id"] != nil
-      assert get_session(conn, :session_token) != nil
+      assert data["id"]
+      assert get_session(conn, :session_token)
     end
 
     test "returns error for duplicate email", %{conn: conn} do
@@ -103,7 +103,7 @@ defmodule LiteskillWeb.PasswordAuthControllerTest do
 
       assert %{"data" => data} = json_response(conn, 200)
       assert data["email"] == email
-      assert get_session(conn, :session_token) != nil
+      assert get_session(conn, :session_token)
     end
 
     test "returns error for wrong password", %{conn: conn, email: email} do

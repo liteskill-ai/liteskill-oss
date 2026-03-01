@@ -2,7 +2,9 @@ defmodule Liteskill.Rag.PipelineTest do
   use Liteskill.DataCase, async: false
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{CohereClient, EmbeddingRequest, Pipeline}
+  alias Liteskill.Rag.CohereClient
+  alias Liteskill.Rag.EmbeddingRequest
+  alias Liteskill.Rag.Pipeline
   alias Liteskill.Repo
 
   setup do

@@ -30,8 +30,7 @@ defmodule LiteskillWeb.ChatLive.SourcesHandler do
       if socket.assigns.show_sources_sidebar do
         {:noreply, assign(socket, show_sources_sidebar: false, sidebar_sources: [])}
       else
-        {:noreply,
-         assign(socket, show_sources_sidebar: true, sidebar_sources: message.rag_sources)}
+        {:noreply, assign(socket, show_sources_sidebar: true, sidebar_sources: message.rag_sources)}
       end
     else
       {:noreply, socket}
@@ -124,21 +123,23 @@ defmodule LiteskillWeb.ChatLive.SourcesHandler do
   def lookup_source_from_db(doc_id, user_id) do
     alias Liteskill.Rag
 
-    with {:ok, doc} <- Rag.get_document_with_source(doc_id, user_id) do
-      wiki_doc_id = get_in(doc.metadata || %{}, ["wiki_document_id"])
+    case Rag.get_document_with_source(doc_id, user_id) do
+      {:ok, doc} ->
+        wiki_doc_id = get_in(doc.metadata || %{}, ["wiki_document_id"])
 
-      %{
-        "chunk_id" => nil,
-        "document_id" => doc.id,
-        "document_title" => doc.title,
-        "source_name" => doc.source.name,
-        "content" => doc.content,
-        "position" => nil,
-        "relevance_score" => nil,
-        "source_uri" => if(wiki_doc_id, do: "/wiki/#{wiki_doc_id}")
-      }
-    else
-      _ -> nil
+        %{
+          "chunk_id" => nil,
+          "document_id" => doc.id,
+          "document_title" => doc.title,
+          "source_name" => doc.source.name,
+          "content" => doc.content,
+          "position" => nil,
+          "relevance_score" => nil,
+          "source_uri" => if(wiki_doc_id, do: "/wiki/#{wiki_doc_id}")
+        }
+
+      _ ->
+        nil
     end
   end
 end

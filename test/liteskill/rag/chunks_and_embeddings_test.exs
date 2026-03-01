@@ -4,7 +4,9 @@ defmodule Liteskill.Rag.ChunksAndEmbeddingsTest do
   import Liteskill.RagTestHelpers
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Chunk, CohereClient, Document}
+  alias Liteskill.Rag.Chunk
+  alias Liteskill.Rag.CohereClient
+  alias Liteskill.Rag.Document
 
   setup :setup_users
 
@@ -61,7 +63,7 @@ defmodule Liteskill.Rag.ChunksAndEmbeddingsTest do
       assert Enum.at(db_chunks, 0).content == "chunk one"
       assert Enum.at(db_chunks, 0).position == 0
       assert Enum.at(db_chunks, 0).token_count == 10
-      assert Enum.at(db_chunks, 0).embedding != nil
+      assert Enum.at(db_chunks, 0).embedding
       assert Enum.at(db_chunks, 1).content == "chunk two"
     end
 

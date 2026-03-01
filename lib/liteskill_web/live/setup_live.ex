@@ -1,4 +1,5 @@
 defmodule LiteskillWeb.SetupLive do
+  @moduledoc false
   use LiteskillWeb, :live_view
 
   import LiteskillWeb.ErrorHelpers
@@ -10,6 +11,7 @@ defmodule LiteskillWeb.SetupLive do
   alias Liteskill.LlmProviders
   alias Liteskill.LlmProviders.LlmProvider
   alias Liteskill.OpenRouter
+  alias Liteskill.OpenRouter.Models
   alias Liteskill.Rbac
   alias Liteskill.Settings
   alias Liteskill.SingleUser
@@ -77,11 +79,8 @@ defmodule LiteskillWeb.SetupLive do
       |> Enum.filter(&DataSources.get_source_by_type(user_id, &1))
       |> MapSet.new()
 
-    default_perms =
-      case Rbac.get_role_by_name!("Default") do
-        %{permissions: perms} -> MapSet.new(perms)
-      end
-
+    %{permissions: perms} = Rbac.get_role_by_name!("Default")
+    default_perms = MapSet.new(perms)
     settings = Settings.get()
 
     steps =
@@ -1052,14 +1051,15 @@ defmodule LiteskillWeb.SetupLive do
   end
 
   defp finish_wizard(%{assigns: %{wizard_mode: :admin_rerun}} = socket) do
-    assign(socket, step: socket.assigns.step)
+    socket
+    |> assign(step: socket.assigns.step)
     |> push_navigate(to: ~p"/admin/servers")
   end
 
   defp finish_wizard(socket) do
     if socket.assigns.mode == :single_user, do: Settings.dismiss_setup()
     finish_url = if socket.assigns.mode == :single_user, do: "/", else: "/login"
-    assign(socket, step: socket.assigns.step) |> redirect(to: finish_url)
+    socket |> assign(step: socket.assigns.step) |> redirect(to: finish_url)
   end
 
   # --- Event handlers: Welcome ---
@@ -1215,7 +1215,7 @@ defmodule LiteskillWeb.SetupLive do
   def handle_event("or_search", %{"or_query" => query}, socket) do
     socket =
       if is_nil(socket.assigns.or_models) do
-        case Liteskill.OpenRouter.Models.list_models() do
+        case Models.list_models() do
           {:ok, models} -> assign(socket, or_models: models, or_loading: false)
           {:error, _} -> assign(socket, or_models: [], or_loading: false)
         end
@@ -1227,7 +1227,7 @@ defmodule LiteskillWeb.SetupLive do
       if String.trim(query) == "" do
         []
       else
-        Liteskill.OpenRouter.Models.search_models(socket.assigns.or_models, query)
+        Models.search_models(socket.assigns.or_models, query)
       end
 
     {:noreply, assign(socket, or_search: query, or_results: results)}
@@ -1465,8 +1465,7 @@ defmodule LiteskillWeb.SetupLive do
           end
 
         {:noreply,
-         socket
-         |> assign(
+         assign(socket,
            step: :configure_source,
            steps: socket.assigns.steps ++ [:configure_source],
            sources_to_configure: sources,
@@ -1550,12 +1549,7 @@ defmodule LiteskillWeb.SetupLive do
           to_form(%{}, as: :config)
         end
 
-      {:noreply,
-       socket
-       |> assign(
-         current_config_index: next_index,
-         config_form: config_form
-       )}
+      {:noreply, assign(socket, current_config_index: next_index, config_form: config_form)}
     end
   end
 
@@ -1587,7 +1581,6 @@ defmodule LiteskillWeb.SetupLive do
   defp fetch_embed_models(providers) do
     provider_types = Enum.map(providers, & &1.provider_type)
 
-    Liteskill.EmbeddingCatalog.fetch_models()
-    |> Liteskill.EmbeddingCatalog.filter_for_providers(provider_types)
+    Liteskill.EmbeddingCatalog.filter_for_providers(Liteskill.EmbeddingCatalog.fetch_models(), provider_types)
   end
 end

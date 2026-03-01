@@ -1,4 +1,5 @@
 defmodule LiteskillWeb.WikiExportController do
+  @moduledoc false
   use LiteskillWeb, :controller
 
   alias Liteskill.DataSources.WikiExport

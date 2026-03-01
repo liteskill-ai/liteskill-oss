@@ -11,7 +11,7 @@ defmodule Liteskill.Chat.StreamRecovery do
 
   require Logger
 
-  @sweep_interval_ms :timer.minutes(2)
+  @sweep_interval_ms to_timeout(minute: 2)
   @threshold_minutes 5
 
   def start_link(opts \\ []) do

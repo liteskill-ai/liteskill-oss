@@ -4,6 +4,7 @@ defmodule Liteskill.Accounts.User do
   """
 
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -78,8 +79,7 @@ defmodule Liteskill.Accounts.User do
     |> validate_accent_color()
   end
 
-  def valid_password?(%__MODULE__{password_hash: hash}, password)
-      when is_binary(hash) and is_binary(password) do
+  def valid_password?(%__MODULE__{password_hash: hash}, password) when is_binary(hash) and is_binary(password) do
     Argon2.verify_pass(password, hash)
   end
 

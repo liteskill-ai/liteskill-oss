@@ -8,13 +8,16 @@ defmodule Liteskill.Chat.Projector do
 
   use GenServer
 
-  require Logger
+  import Ecto.Query
 
-  alias Liteskill.Chat.{Conversation, Message, MessageChunk, ToolCall}
+  alias Liteskill.Chat.Conversation
+  alias Liteskill.Chat.Message
+  alias Liteskill.Chat.MessageChunk
+  alias Liteskill.Chat.ToolCall
   alias Liteskill.EventStore.Event
   alias Liteskill.Repo
 
-  import Ecto.Query
+  require Logger
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -108,8 +111,7 @@ defmodule Liteskill.Chat.Projector do
   end
 
   # coveralls-ignore-start - retry/failure paths require transient DB errors
-  defp handle_projection_error(stream_id, event, attempt, error)
-       when attempt < @max_projection_retries do
+  defp handle_projection_error(stream_id, event, attempt, error) when attempt < @max_projection_retries do
     if retryable_projection_error?(error) do
       backoff_ms = retry_backoff_ms(attempt)
 
@@ -187,12 +189,7 @@ defmodule Liteskill.Chat.Projector do
     |> Repo.insert!(on_conflict: :nothing)
   end
 
-  defp project_event(%Event{
-         event_type: "UserMessageAdded",
-         data: data,
-         stream_id: stream_id,
-         stream_version: version
-       }) do
+  defp project_event(%Event{event_type: "UserMessageAdded", data: data, stream_id: stream_id, stream_version: version}) do
     with_conversation(stream_id, fn conversation ->
       Repo.transaction(fn ->
         message_count = increment_message_count(conversation.id)
@@ -210,9 +207,8 @@ defmodule Liteskill.Chat.Projector do
         })
         |> Repo.insert!(on_conflict: :nothing)
 
-        from(c in Conversation, where: c.id == ^conversation.id)
-        |> Repo.update_all(
-          set: [last_message_at: DateTime.utc_now() |> DateTime.truncate(:second)]
+        Repo.update_all(from(c in Conversation, where: c.id == ^conversation.id),
+          set: [last_message_at: DateTime.truncate(DateTime.utc_now(), :second)]
         )
       end)
     end)
@@ -242,8 +238,7 @@ defmodule Liteskill.Chat.Projector do
         })
         |> Repo.insert!(on_conflict: :nothing)
 
-        from(c in Conversation, where: c.id == ^conversation.id)
-        |> Repo.update_all(set: [status: "streaming"])
+        Repo.update_all(from(c in Conversation, where: c.id == ^conversation.id), set: [status: "streaming"])
       end)
     end)
   end
@@ -268,11 +263,7 @@ defmodule Liteskill.Chat.Projector do
 
   @uuid_re ~r/\[uuid:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/
 
-  defp project_event(%Event{
-         event_type: "AssistantStreamCompleted",
-         data: data,
-         stream_id: stream_id
-       }) do
+  defp project_event(%Event{event_type: "AssistantStreamCompleted", data: data, stream_id: stream_id}) do
     case Repo.get(Message, data["message_id"]) do
       nil ->
         Logger.warning("Projector: message not found for stream completion, skipping")
@@ -282,7 +273,7 @@ defmodule Liteskill.Chat.Projector do
         output_tokens = data["output_tokens"]
 
         total_tokens =
-          if input_tokens && output_tokens, do: input_tokens + output_tokens, else: nil
+          if input_tokens && output_tokens, do: input_tokens + output_tokens
 
         filtered_sources = filter_cited_sources(message.rag_sources, data["full_content"])
 
@@ -304,7 +295,7 @@ defmodule Liteskill.Chat.Projector do
             conversation
             |> Conversation.changeset(%{
               status: "active",
-              last_message_at: DateTime.utc_now() |> DateTime.truncate(:second)
+              last_message_at: DateTime.truncate(DateTime.utc_now(), :second)
             })
             |> Repo.update!()
           end)
@@ -312,11 +303,7 @@ defmodule Liteskill.Chat.Projector do
     end
   end
 
-  defp project_event(%Event{
-         event_type: "AssistantStreamFailed",
-         data: data,
-         stream_id: stream_id
-       }) do
+  defp project_event(%Event{event_type: "AssistantStreamFailed", data: data, stream_id: stream_id}) do
     with_conversation(stream_id, fn conversation ->
       Repo.transaction(fn ->
         conversation
@@ -389,11 +376,7 @@ defmodule Liteskill.Chat.Projector do
     end)
   end
 
-  defp project_event(%Event{
-         event_type: "ConversationTitleUpdated",
-         data: data,
-         stream_id: stream_id
-       }) do
+  defp project_event(%Event{event_type: "ConversationTitleUpdated", data: data, stream_id: stream_id}) do
     with_conversation(stream_id, fn conversation ->
       conversation
       |> Conversation.changeset(%{title: data["title"]})
@@ -409,29 +392,22 @@ defmodule Liteskill.Chat.Projector do
     end)
   end
 
-  defp project_event(%Event{
-         event_type: "ConversationTruncated",
-         data: data,
-         stream_id: stream_id
-       }) do
+  defp project_event(%Event{event_type: "ConversationTruncated", data: data, stream_id: stream_id}) do
     with_conversation(stream_id, fn conversation ->
       case Repo.get(Message, data["message_id"]) do
         nil ->
-          Logger.warning(
-            "Projector: truncation target message #{data["message_id"]} not found, skipping"
-          )
+          Logger.warning("Projector: truncation target message #{data["message_id"]} not found, skipping")
 
         target_message ->
           {:ok, _} =
             Repo.transaction(fn ->
               # Delete target message and everything after it (cascade deletes chunks + tool_calls)
               {deleted, _} =
-                from(m in Message,
-                  where:
-                    m.conversation_id == ^conversation.id and
-                      m.position >= ^target_message.position
+                Repo.delete_all(
+                  from(m in Message,
+                    where: m.conversation_id == ^conversation.id and m.position >= ^target_message.position
+                  )
                 )
-                |> Repo.delete_all()
 
               Logger.info(
                 # coveralls-ignore-next-line
@@ -471,9 +447,7 @@ defmodule Liteskill.Chat.Projector do
   defp with_conversation(stream_id, fun) do
     case Repo.one(from c in Conversation, where: c.stream_id == ^stream_id) do
       nil ->
-        Logger.warning(
-          "Projector: conversation not found for stream=#{stream_id}, skipping event"
-        )
+        Logger.warning("Projector: conversation not found for stream=#{stream_id}, skipping event")
 
         :telemetry.execute(
           [:liteskill, :projector, :conversation_not_found],
@@ -489,12 +463,14 @@ defmodule Liteskill.Chat.Projector do
   # Atomically increment message_count and return the new value.
   # Uses a single UPDATE ... RETURNING to avoid read-modify-write races.
   defp increment_message_count(conversation_id) do
-    {1, [%{message_count: new_count}]} =
+    query =
       from(c in Conversation,
         where: c.id == ^conversation_id,
         select: %{message_count: c.message_count}
       )
-      |> Repo.update_all(inc: [message_count: 1])
+
+    {1, [%{message_count: new_count}]} =
+      Repo.update_all(query, inc: [message_count: 1])
 
     new_count
   end
@@ -507,8 +483,7 @@ defmodule Liteskill.Chat.Projector do
     cited_ids =
       @uuid_re
       |> Regex.scan(content)
-      |> Enum.map(fn [_full, uuid] -> uuid end)
-      |> MapSet.new()
+      |> MapSet.new(fn [_full, uuid] -> uuid end)
 
     case Enum.filter(sources, &MapSet.member?(cited_ids, &1["document_id"])) do
       [] -> nil

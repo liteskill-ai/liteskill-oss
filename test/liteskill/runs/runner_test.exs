@@ -1,12 +1,13 @@
 defmodule Liteskill.Runs.RunnerTest do
   use Liteskill.DataCase, async: false
 
+  alias Liteskill.Agents
+  alias Liteskill.LlmModels
+  alias Liteskill.LlmProviders
   alias Liteskill.Runs
   alias Liteskill.Runs.Runner
+  alias Liteskill.Runs.RunnerTest
   alias Liteskill.Teams
-  alias Liteskill.Agents
-  alias Liteskill.LlmProviders
-  alias Liteskill.LlmModels
 
   setup do
     {:ok, owner} =
@@ -143,7 +144,7 @@ defmodule Liteskill.Runs.RunnerTest do
       {:ok, updated} = Runs.get_run(run.id, owner.id)
       assert updated.status == "failed"
       assert updated.error =~ "No agents assigned"
-      assert updated.completed_at != nil
+      assert updated.completed_at
     end
 
     test "transitions through running before failing", %{owner: owner} do
@@ -153,8 +154,8 @@ defmodule Liteskill.Runs.RunnerTest do
 
       {:ok, updated} = Runs.get_run(run.id, owner.id)
       # Started, then failed
-      assert updated.started_at != nil
-      assert updated.completed_at != nil
+      assert updated.started_at
+      assert updated.completed_at
       assert updated.status == "failed"
     end
 
@@ -222,7 +223,7 @@ defmodule Liteskill.Runs.RunnerTest do
       model = create_provider_and_model(owner)
       {team, agent} = create_team_with_agent(owner, llm_model_id: model.id)
 
-      Req.Test.stub(Liteskill.Runs.RunnerTest, fn conn ->
+      Req.Test.stub(RunnerTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         _decoded = Jason.decode!(body)
 
@@ -241,9 +242,7 @@ defmodule Liteskill.Runs.RunnerTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -262,8 +261,8 @@ defmodule Liteskill.Runs.RunnerTest do
 
       {:ok, updated} = Runs.get_run(run.id, owner.id)
       assert updated.status == "completed"
-      assert updated.completed_at != nil
-      assert updated.deliverables["report_id"] != nil
+      assert updated.completed_at
+      assert updated.deliverables["report_id"]
     end
 
     test "creates and completes agent tasks", %{owner: owner, team: team, agent: agent} do
@@ -277,7 +276,7 @@ defmodule Liteskill.Runs.RunnerTest do
       task = hd(updated.run_tasks)
       assert task.name =~ agent.name
       assert task.status == "completed"
-      assert task.duration_ms != nil
+      assert task.duration_ms
       assert task.output_summary =~ agent.name
     end
 
@@ -309,7 +308,7 @@ defmodule Liteskill.Runs.RunnerTest do
       agent_complete_log =
         Enum.find(updated.run_logs, &(&1.step == "agent_complete"))
 
-      assert agent_complete_log != nil
+      assert agent_complete_log
       usage = agent_complete_log.metadata["usage"]
       assert is_map(usage)
       assert Map.has_key?(usage, "input_tokens")
@@ -327,7 +326,7 @@ defmodule Liteskill.Runs.RunnerTest do
 
       # Stub that blocks indefinitely so the task is stuck here (not mid-DB-op)
       # when killed by timeout, preventing sandbox corruption
-      Req.Test.stub(Liteskill.Runs.RunnerTest, fn conn ->
+      Req.Test.stub(RunnerTest, fn conn ->
         receive do
         end
 
@@ -346,9 +345,7 @@ defmodule Liteskill.Runs.RunnerTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -406,7 +403,7 @@ defmodule Liteskill.Runs.RunnerTest do
       {:ok, _m2} = Teams.add_member(team.id, agent2.id, owner.id, %{role: "writer"})
       {:ok, team} = Teams.get_team(team.id, owner.id)
 
-      Req.Test.stub(Liteskill.Runs.RunnerTest, fn conn ->
+      Req.Test.stub(RunnerTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         _decoded = Jason.decode!(body)
 
@@ -430,9 +427,7 @@ defmodule Liteskill.Runs.RunnerTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 
@@ -451,7 +446,7 @@ defmodule Liteskill.Runs.RunnerTest do
 
       {:ok, updated} = Runs.get_run(run.id, owner.id)
       assert updated.status == "completed"
-      assert updated.deliverables["report_id"] != nil
+      assert updated.deliverables["report_id"]
 
       # Both agents produced tasks
       assert length(updated.run_tasks) == 2
@@ -483,7 +478,7 @@ defmodule Liteskill.Runs.RunnerTest do
       # Use a stateful stub to track what the second LLM call receives
       call_counter = :counters.new(1, [:atomics])
 
-      Req.Test.stub(Liteskill.Runs.RunnerTest, fn conn ->
+      Req.Test.stub(RunnerTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
         :counters.add(call_counter, 1, 1)
@@ -539,8 +534,7 @@ defmodule Liteskill.Runs.RunnerTest do
           "content" => [
             %{
               "type" => "text",
-              "text" =>
-                "Output from call #{call_number}.\n\n## Handoff Summary\n- Finding #{call_number}"
+              "text" => "Output from call #{call_number}.\n\n## Handoff Summary\n- Finding #{call_number}"
             }
           ],
           "model" => "claude-3-5-sonnet-20241022",
@@ -596,7 +590,7 @@ defmodule Liteskill.Runs.RunnerTest do
       {:ok, _m2} = Teams.add_member(team.id, agent2.id, owner.id, %{role: "reviewer"})
       {:ok, team} = Teams.get_team(team.id, owner.id)
 
-      Req.Test.stub(Liteskill.Runs.RunnerTest, fn conn ->
+      Req.Test.stub(RunnerTest, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         _decoded = Jason.decode!(body)
 
@@ -615,9 +609,7 @@ defmodule Liteskill.Runs.RunnerTest do
         |> Plug.Conn.send_resp(200, Jason.encode!(response))
       end)
 
-      Application.put_env(:liteskill, :test_req_opts,
-        req_http_options: [plug: {Req.Test, __MODULE__}]
-      )
+      Application.put_env(:liteskill, :test_req_opts, req_http_options: [plug: {Req.Test, __MODULE__}])
 
       Application.put_env(:req_llm, :anthropic_api_key, "test-api-key")
 

@@ -67,7 +67,7 @@ defmodule LiteskillWeb.AdminLive do
        single_user_mode: Liteskill.SingleUser.enabled?(),
        has_admin_access: true,
        settings_mode: false
-     ), layout: {LiteskillWeb.Layouts, :chat}}
+     ), layout: {Layouts, :chat}}
   end
 
   @impl true

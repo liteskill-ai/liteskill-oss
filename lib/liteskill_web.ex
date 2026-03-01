@@ -1,4 +1,22 @@
 defmodule LiteskillWeb do
+  @moduledoc """
+  The entrypoint for defining your web interface, such
+  as controllers, components, channels, and so on.
+
+  This can be used in your application as:
+
+      use LiteskillWeb, :controller
+      use LiteskillWeb, :html
+
+  The definitions below will be executed for every controller,
+  component, etc, so keep them short and clean, focused
+  on imports, uses and aliases.
+
+  Do NOT define functions inside the quoted expressions
+  below. Instead, define additional modules and import
+  those modules here.
+  """
+
   use Boundary,
     deps: [
       Liteskill.Accounts,
@@ -28,34 +46,17 @@ defmodule LiteskillWeb do
     ],
     exports: []
 
-  @moduledoc """
-  The entrypoint for defining your web interface, such
-  as controllers, components, channels, and so on.
-
-  This can be used in your application as:
-
-      use LiteskillWeb, :controller
-      use LiteskillWeb, :html
-
-  The definitions below will be executed for every controller,
-  component, etc, so keep them short and clean, focused
-  on imports, uses and aliases.
-
-  Do NOT define functions inside the quoted expressions
-  below. Instead, define additional modules and import
-  those modules here.
-  """
-
   def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
 
   def router do
     quote do
       use Phoenix.Router, helpers: false
 
-      # Import common connection and controller functions to use in pipelines
-      import Plug.Conn
       import Phoenix.Controller
       import Phoenix.LiveView.Router
+
+      # Import common connection and controller functions to use in pipelines
+      import Plug.Conn
     end
   end
 
@@ -68,11 +69,10 @@ defmodule LiteskillWeb do
   def controller do
     quote do
       use Phoenix.Controller, formats: [:html, :json]
-
       use Gettext, backend: LiteskillWeb.Gettext
 
-      import Plug.Conn
       import LiteskillWeb.ErrorHelpers
+      import Plug.Conn
 
       unquote(verified_routes())
     end
@@ -81,6 +81,7 @@ defmodule LiteskillWeb do
   def live_view do
     quote do
       use Phoenix.LiveView
+
       import LiteskillWeb.ErrorHelpers
 
       unquote(html_helpers())
@@ -99,11 +100,11 @@ defmodule LiteskillWeb do
     quote do
       use Phoenix.Component
 
+      import LiteskillWeb.ErrorHelpers
+
       # Import convenience functions from controllers
       import Phoenix.Controller,
         only: [get_csrf_token: 0, view_module: 1, view_template: 1]
-
-      import LiteskillWeb.ErrorHelpers
 
       # Include general helpers for rendering HTML
       unquote(html_helpers())
@@ -115,14 +116,15 @@ defmodule LiteskillWeb do
       # Translation
       use Gettext, backend: LiteskillWeb.Gettext
 
+      import LiteskillWeb.CoreComponents
+
       # HTML escaping functionality
       import Phoenix.HTML
       # Core UI components
-      import LiteskillWeb.CoreComponents
+      alias LiteskillWeb.Layouts
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS
-      alias LiteskillWeb.Layouts
 
       # Routes generation with the ~p sigil
       unquote(verified_routes())

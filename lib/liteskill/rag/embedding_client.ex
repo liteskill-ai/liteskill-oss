@@ -6,8 +6,10 @@ defmodule Liteskill.Rag.EmbeddingClient do
   Falls back to Bedrock Cohere embed-v4 when no model is configured.
   """
 
+  alias Liteskill.LlmModels
+  alias Liteskill.LlmProviders
   alias Liteskill.Rag.RequestLogger
-  alias Liteskill.{LlmModels, LlmProviders, Settings}
+  alias Liteskill.Settings
 
   require Logger
 

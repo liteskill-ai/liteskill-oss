@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 mix setup                    # Install deps, create DB, run migrations, build assets
-mix precommit                # Compile (warnings-as-errors) + deps.unlock --unused + format + test
+mix precommit                # Compile + deps.unlock + audit + format + credo + sobelow + doctor + dialyzer + test + mdbook
 mix test                     # Run all tests (auto-creates/migrates DB)
 mix test test/path_test.exs  # Run a single test file
 mix test --failed            # Re-run previously failed tests

@@ -1,5 +1,10 @@
 defmodule LiteskillWeb.Router do
+  @moduledoc false
   use LiteskillWeb, :router
+
+  alias LiteskillWeb.Plugs.Auth
+  alias LiteskillWeb.Plugs.LiveAuth
+  alias LiteskillWeb.Plugs.RateLimiter
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -13,16 +18,16 @@ defmodule LiteskillWeb.Router do
   pipeline :api do
     plug :accepts, ["json"]
     plug :fetch_session
-    plug LiteskillWeb.Plugs.Auth, :fetch_current_user
-    plug LiteskillWeb.Plugs.RateLimiter, limit: 1000, window_ms: 60_000
+    plug Auth, :fetch_current_user
+    plug RateLimiter, limit: 1000, window_ms: 60_000
   end
 
   pipeline :require_auth do
-    plug LiteskillWeb.Plugs.Auth, :require_authenticated_user
+    plug Auth, :require_authenticated_user
   end
 
   pipeline :auth_rate_limit do
-    plug LiteskillWeb.Plugs.RateLimiter, limit: 60, window_ms: 60_000
+    plug RateLimiter, limit: 60, window_ms: 60_000
   end
 
   # SAML SSO routes (Samly handles auth flow)
@@ -57,7 +62,7 @@ defmodule LiteskillWeb.Router do
     pipe_through [:browser]
 
     live_session :auth,
-      on_mount: [{LiteskillWeb.Plugs.LiveAuth, :redirect_if_authenticated}] do
+      on_mount: [{LiveAuth, :redirect_if_authenticated}] do
       live "/login", AuthLive, :login
       live "/register", AuthLive, :register
       live "/invite/:token", AuthLive, :invite
@@ -69,7 +74,7 @@ defmodule LiteskillWeb.Router do
     pipe_through [:browser]
 
     live_session :setup,
-      on_mount: [{LiteskillWeb.Plugs.LiveAuth, :require_setup_needed}] do
+      on_mount: [{LiveAuth, :require_setup_needed}] do
       live "/setup", SetupLive
     end
   end
@@ -79,7 +84,7 @@ defmodule LiteskillWeb.Router do
     pipe_through [:browser]
 
     live_session :admin,
-      on_mount: [{LiteskillWeb.Plugs.LiveAuth, :require_admin}] do
+      on_mount: [{LiveAuth, :require_admin}] do
       live "/admin", AdminLive, :admin_usage
       live "/admin/usage", AdminLive, :admin_usage
       live "/admin/servers", AdminLive, :admin_servers
@@ -112,7 +117,7 @@ defmodule LiteskillWeb.Router do
     pipe_through [:browser]
 
     live_session :chat,
-      on_mount: [{LiteskillWeb.Plugs.LiveAuth, :require_authenticated}] do
+      on_mount: [{LiveAuth, :require_authenticated}] do
       live "/", ChatLive, :index
       live "/conversations", ChatLive, :conversations
       live "/c/:conversation_id", ChatLive, :show

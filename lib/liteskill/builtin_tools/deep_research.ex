@@ -67,12 +67,14 @@ defmodule Liteskill.BuiltinTools.DeepResearch do
     user_id = Keyword.fetch!(context, :user_id)
     plug_opts = Keyword.take(context, [:plug])
 
-    case tool_name do
-      "deep_research__query_sources" -> do_query_sources(user_id)
-      "deep_research__query_vector" -> do_query_vector(user_id, input, plug_opts)
-      _ -> {:error, "Unknown tool: #{tool_name}"}
-    end
-    |> wrap_result()
+    case_result =
+      case tool_name do
+        "deep_research__query_sources" -> do_query_sources(user_id)
+        "deep_research__query_vector" -> do_query_vector(user_id, input, plug_opts)
+        _ -> {:error, "Unknown tool: #{tool_name}"}
+      end
+
+    wrap_result(case_result)
   end
 
   # --- query_sources ---
@@ -95,8 +97,7 @@ defmodule Liteskill.BuiltinTools.DeepResearch do
 
   # --- query_vector ---
 
-  defp do_query_vector(_user_id, %{"query" => query}, _plug_opts)
-       when not is_binary(query) or byte_size(query) == 0 do
+  defp do_query_vector(_user_id, %{"query" => query}, _plug_opts) when not is_binary(query) or byte_size(query) == 0 do
     {:error, "query must be a non-empty string"}
   end
 
@@ -120,12 +121,10 @@ defmodule Liteskill.BuiltinTools.DeepResearch do
   end
 
   defp search_all(query, user_id, plug_opts) do
-    case Rag.augment_context(query, user_id, plug_opts) do
-      {:ok, results} ->
-        chunks = Enum.map(results, & &1.chunk)
-        preloaded = Repo.preload(chunks, document: [source: :collection])
-        Enum.zip_with(results, preloaded, fn r, c -> %{r | chunk: c} end)
-    end
+    {:ok, results} = Rag.augment_context(query, user_id, plug_opts)
+    chunks = Enum.map(results, & &1.chunk)
+    preloaded = Repo.preload(chunks, document: [source: :collection])
+    Enum.zip_with(results, preloaded, fn r, c -> %{r | chunk: c} end)
   end
 
   defp search_collections(collection_ids, query, user_id, top_n, plug_opts) do
@@ -149,17 +148,17 @@ defmodule Liteskill.BuiltinTools.DeepResearch do
 
   defp format_result(result) do
     chunk = result.chunk
-    doc = if Ecto.assoc_loaded?(chunk.document), do: chunk.document, else: nil
-    source = if doc && Ecto.assoc_loaded?(doc.source), do: doc.source, else: nil
+    doc = if Ecto.assoc_loaded?(chunk.document), do: chunk.document
+    source = if doc && Ecto.assoc_loaded?(doc.source), do: doc.source
 
     collection =
-      if source && Ecto.assoc_loaded?(source.collection), do: source.collection, else: nil
+      if source && Ecto.assoc_loaded?(source.collection), do: source.collection
 
     %{
       "content" => chunk.content,
-      "document_title" => if(doc, do: doc.title, else: nil),
-      "source_name" => if(source, do: source.name, else: nil),
-      "collection_name" => if(collection, do: collection.name, else: nil),
+      "document_title" => if(doc, do: doc.title),
+      "source_name" => if(source, do: source.name),
+      "collection_name" => if(collection, do: collection.name),
       "relevance_score" => result[:relevance_score]
     }
   end

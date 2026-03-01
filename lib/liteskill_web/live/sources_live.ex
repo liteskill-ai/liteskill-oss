@@ -7,15 +7,12 @@ defmodule LiteskillWeb.SourcesLive do
   use LiteskillWeb, :live_view
 
   alias Liteskill.Chat
-
-  alias LiteskillWeb.{
-    ChatComponents,
-    Layouts,
-    SharingComponents,
-    SharingLive,
-    SourcesComponents,
-    WikiComponents
-  }
+  alias LiteskillWeb.ChatComponents
+  alias LiteskillWeb.Layouts
+  alias LiteskillWeb.SharingComponents
+  alias LiteskillWeb.SharingLive
+  alias LiteskillWeb.SourcesComponents
+  alias LiteskillWeb.WikiComponents
 
   # --- Assigns ---
 
@@ -63,7 +60,7 @@ defmodule LiteskillWeb.SourcesLive do
        sidebar_open: true,
        has_admin_access: Liteskill.Rbac.has_any_admin_permission?(socket.assigns.current_user.id),
        single_user_mode: Liteskill.SingleUser.enabled?()
-     ), layout: {LiteskillWeb.Layouts, :chat}}
+     ), layout: {Layouts, :chat}}
   end
 
   @impl true
@@ -118,10 +115,7 @@ defmodule LiteskillWeb.SourcesLive do
     end
   end
 
-  defp apply_action(socket, :source_document_show, %{
-         "source_id" => source_url_id,
-         "document_id" => doc_id
-       }) do
+  defp apply_action(socket, :source_document_show, %{"source_id" => source_url_id, "document_id" => doc_id}) do
     user_id = socket.assigns.current_user.id
     source_id = source_id_from_url(source_url_id)
 
@@ -551,8 +545,7 @@ defmodule LiteskillWeb.SourcesLive do
 
         # Pre-fill form with existing metadata (skip password fields for security)
         prefill =
-          (source.metadata || %{})
-          |> Map.filter(fn {k, _v} ->
+          Map.filter(source.metadata || %{}, fn {k, _v} ->
             field = Enum.find(fields, &(&1.key == k))
             field != nil && field.type != :password
           end)
@@ -582,11 +575,7 @@ defmodule LiteskillWeb.SourcesLive do
   end
 
   @impl true
-  def handle_event(
-        "save_source_config",
-        %{"source_id" => source_id, "config" => config_params},
-        socket
-      ) do
+  def handle_event("save_source_config", %{"source_id" => source_id, "config" => config_params}, socket) do
     user_id = socket.assigns.current_user.id
 
     metadata =
@@ -595,10 +584,10 @@ defmodule LiteskillWeb.SourcesLive do
       |> Map.new()
 
     result =
-      if metadata != %{} do
-        Liteskill.DataSources.update_source(source_id, %{metadata: metadata}, user_id)
-      else
+      if metadata == %{} do
         {:ok, :noop}
+      else
+        Liteskill.DataSources.update_source(source_id, %{metadata: metadata}, user_id)
       end
 
     case result do
@@ -773,8 +762,7 @@ defmodule LiteskillWeb.SourcesLive do
         send(lv, {:rag_search_result, result})
       end)
 
-      {:noreply,
-       assign(socket, rag_query_loading: true, rag_query_results: [], rag_query_error: nil)}
+      {:noreply, assign(socket, rag_query_loading: true, rag_query_results: [], rag_query_error: nil)}
     end
   end
 
@@ -795,8 +783,7 @@ defmodule LiteskillWeb.SourcesLive do
         _ -> "Search failed"
       end
 
-    {:noreply,
-     assign(socket, rag_query_loading: false, rag_query_results: [], rag_query_error: message)}
+    {:noreply, assign(socket, rag_query_loading: false, rag_query_results: [], rag_query_error: message)}
   end
 
   @impl true

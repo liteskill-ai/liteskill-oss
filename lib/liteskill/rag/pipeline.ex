@@ -4,10 +4,14 @@ defmodule Liteskill.Rag.Pipeline do
   Provides aggregate stats, windowed rates, chart data, and job listing.
   """
 
-  alias Liteskill.Rag.{Collection, Source, Document, Chunk, EmbeddingRequest}
-  alias Liteskill.Repo
-
   import Ecto.Query
+
+  alias Liteskill.Rag.Chunk
+  alias Liteskill.Rag.Collection
+  alias Liteskill.Rag.Document
+  alias Liteskill.Rag.EmbeddingRequest
+  alias Liteskill.Rag.Source
+  alias Liteskill.Repo
 
   @doc """
   Returns aggregate counts for the pipeline dashboard.
@@ -151,59 +155,51 @@ defmodule Liteskill.Rag.Pipeline do
   # --- Private ---
 
   defp count_sources(user_id, :user) do
-    from(s in Source,
-      join: c in Collection,
-      on: c.id == s.collection_id,
-      where: c.user_id == ^user_id
+    Repo.aggregate(
+      from(s in Source, join: c in Collection, on: c.id == s.collection_id, where: c.user_id == ^user_id),
+      :count,
+      :id
     )
-    |> Repo.aggregate(:count, :id)
   end
 
   defp count_sources(_user_id, :all), do: Repo.aggregate(Source, :count, :id)
 
   defp count_documents(user_id, :user) do
-    from(d in Document, where: d.user_id == ^user_id)
-    |> Repo.aggregate(:count, :id)
+    Repo.aggregate(from(d in Document, where: d.user_id == ^user_id), :count, :id)
   end
 
   defp count_documents(_user_id, :all), do: Repo.aggregate(Document, :count, :id)
 
   defp count_chunks(user_id, :user) do
-    from(c in Chunk,
-      join: d in Document,
-      on: d.id == c.document_id,
-      where: d.user_id == ^user_id
+    Repo.aggregate(
+      from(c in Chunk, join: d in Document, on: d.id == c.document_id, where: d.user_id == ^user_id),
+      :count,
+      :id
     )
-    |> Repo.aggregate(:count, :id)
   end
 
   defp count_chunks(_user_id, :all), do: Repo.aggregate(Chunk, :count, :id)
 
   defp count_jobs(user_id, :user, state) do
-    from(j in "oban_jobs",
-      where:
-        j.queue == "rag_ingest" and
-          j.state == ^state and
-          fragment("?->>'user_id' = ?", j.args, ^user_id)
+    Repo.aggregate(
+      from(j in "oban_jobs",
+        where: j.queue == "rag_ingest" and j.state == ^state and fragment("?->>'user_id' = ?", j.args, ^user_id)
+      ),
+      :count,
+      :id
     )
-    |> Repo.aggregate(:count, :id)
   end
 
   defp count_jobs(_user_id, :all, state) do
-    from(j in "oban_jobs",
-      where: j.queue == "rag_ingest" and j.state == ^state
-    )
-    |> Repo.aggregate(:count, :id)
+    Repo.aggregate(from(j in "oban_jobs", where: j.queue == "rag_ingest" and j.state == ^state), :count, :id)
   end
 
   defp count_embed_requests(user_id, :user, nil) do
-    from(e in EmbeddingRequest, where: e.user_id == ^user_id)
-    |> Repo.aggregate(:count, :id)
+    Repo.aggregate(from(e in EmbeddingRequest, where: e.user_id == ^user_id), :count, :id)
   end
 
   defp count_embed_requests(user_id, :user, status) do
-    from(e in EmbeddingRequest, where: e.user_id == ^user_id and e.status == ^status)
-    |> Repo.aggregate(:count, :id)
+    Repo.aggregate(from(e in EmbeddingRequest, where: e.user_id == ^user_id and e.status == ^status), :count, :id)
   end
 
   defp count_embed_requests(_user_id, :all, nil) do
@@ -211,8 +207,7 @@ defmodule Liteskill.Rag.Pipeline do
   end
 
   defp count_embed_requests(_user_id, :all, status) do
-    from(e in EmbeddingRequest, where: e.status == ^status)
-    |> Repo.aggregate(:count, :id)
+    Repo.aggregate(from(e in EmbeddingRequest, where: e.status == ^status), :count, :id)
   end
 
   defp job_counts_since(user_id, scope, cutoff) do
@@ -269,9 +264,9 @@ defmodule Liteskill.Rag.Pipeline do
 
   defp maybe_scope_collection(query, _user_id, :all), do: query
 
-  defp window_cutoff(:hour), do: DateTime.utc_now() |> DateTime.add(-1, :hour)
-  defp window_cutoff(:day), do: DateTime.utc_now() |> DateTime.add(-1, :day)
-  defp window_cutoff(:week), do: DateTime.utc_now() |> DateTime.add(-7, :day)
+  defp window_cutoff(:hour), do: DateTime.add(DateTime.utc_now(), -1, :hour)
+  defp window_cutoff(:day), do: DateTime.add(DateTime.utc_now(), -1, :day)
+  defp window_cutoff(:week), do: DateTime.add(DateTime.utc_now(), -7, :day)
 
   @doc false
   def safe_rate(_numerator, 0), do: 0.0

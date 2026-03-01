@@ -155,9 +155,7 @@ defmodule Liteskill.Chat.StreamRegistry do
             Ecto.StaleEntryError,
             Ecto.InvalidChangesetError
           ] ->
-            Logger.warning(
-              "StreamRegistry auto-recovery failed for #{conv_id}: #{Exception.message(e)}"
-            )
+            Logger.warning("StreamRegistry auto-recovery failed for #{conv_id}: #{Exception.message(e)}")
 
             # coveralls-ignore-stop
         end

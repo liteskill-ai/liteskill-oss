@@ -1,4 +1,5 @@
 defmodule LiteskillWeb.PasswordAuthController do
+  @moduledoc false
   use LiteskillWeb, :controller
 
   alias Liteskill.Accounts

@@ -1,5 +1,7 @@
 defmodule Liteskill.Reports.ReportSection do
+  @moduledoc "Schema for individual sections within a report."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

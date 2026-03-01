@@ -2,11 +2,13 @@ defmodule Liteskill.Rag.WikiSyncWorkerTest do
   use Liteskill.DataCase, async: false
   use Oban.Testing, repo: Liteskill.Repo
 
-  alias Liteskill.Rag
-  alias Liteskill.Rag.{WikiSyncWorker, EmbeddingClient, Chunk}
-  alias Liteskill.DataSources
-
   import Ecto.Query
+
+  alias Liteskill.DataSources
+  alias Liteskill.Rag
+  alias Liteskill.Rag.Chunk
+  alias Liteskill.Rag.EmbeddingClient
+  alias Liteskill.Rag.WikiSyncWorker
 
   setup do
     {:ok, owner} =

@@ -19,16 +19,16 @@ defmodule LiteskillWeb.ConnCase do
 
   using do
     quote do
+      use LiteskillWeb, :verified_routes
+
+      import LiteskillWeb.ConnCase
+      import Phoenix.ConnTest
+      import Phoenix.LiveViewTest
+      import Plug.Conn
       # The default endpoint for testing
       @endpoint LiteskillWeb.Endpoint
 
-      use LiteskillWeb, :verified_routes
-
       # Import conveniences for testing with connections
-      import Plug.Conn
-      import Phoenix.ConnTest
-      import Phoenix.LiveViewTest
-      import LiteskillWeb.ConnCase
     end
   end
 
@@ -41,8 +41,7 @@ defmodule LiteskillWeb.ConnCase do
     {:ok, session} = Liteskill.Accounts.create_session(user.id)
     session_data = Map.merge(%{session_token: session.id}, extra_session)
 
-    conn
-    |> Plug.Test.init_test_session(session_data)
+    Plug.Test.init_test_session(conn, session_data)
   end
 
   @doc """

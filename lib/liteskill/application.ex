@@ -11,66 +11,48 @@ defmodule Liteskill.Application do
     LiteskillWeb.Plugs.RateLimiter.create_table()
     Liteskill.LlmGateway.TokenBucket.create_table()
 
+    # coveralls-ignore-start
     children =
-      [
-        LiteskillWeb.Telemetry,
-        # Desktop: start bundled PostgreSQL before Repo
-        if(desktop_mode?(), do: Liteskill.Desktop.PostgresManager),
-        Liteskill.Repo,
-        {DNSCluster, query: Application.get_env(:liteskill, :dns_cluster_query) || :ignore},
-        {Phoenix.PubSub, name: Liteskill.PubSub},
-        # coveralls-ignore-next-line
-        unless(test_env?(), do: Liteskill.Rag.EmbedQueue),
-        {Oban, Application.fetch_env!(:liteskill, Oban)},
-        # Ensure root admin account exists on boot (skip in test — sandbox not available)
-        # coveralls-ignore-start
-        unless(test_env?(),
-          do:
-            {Task,
-             fn ->
-               Liteskill.Accounts.ensure_admin_user()
-               Liteskill.Rbac.ensure_system_roles()
-               Liteskill.LlmProviders.ensure_env_providers()
-               Liteskill.Settings.get()
-               Liteskill.DemoSeeds.ensure_demo_agents()
+      Enum.reject(
+        [
+          LiteskillWeb.Telemetry,
+          if(desktop_mode?(), do: Liteskill.Desktop.PostgresManager),
+          Liteskill.Repo,
+          {DNSCluster, query: Application.get_env(:liteskill, :dns_cluster_query) || :ignore},
+          {Phoenix.PubSub, name: Liteskill.PubSub},
+          if(!test_env?(), do: Liteskill.Rag.EmbedQueue),
+          {Oban, Application.fetch_env!(:liteskill, Oban)},
+          if(!test_env?(),
+            do:
+              {Task,
+               fn ->
+                 Liteskill.Accounts.ensure_admin_user()
+                 Liteskill.Rbac.ensure_system_roles()
+                 Liteskill.LlmProviders.ensure_env_providers()
+                 Liteskill.Settings.get()
+                 Liteskill.DemoSeeds.ensure_demo_agents()
 
-               if Liteskill.SingleUser.enabled?(),
-                 do: Liteskill.SingleUser.auto_provision_admin()
-             end}
-        ),
-        # coveralls-ignore-stop
-        # OpenRouter OAuth PKCE state store (desktop mode cross-browser flow)
-        Liteskill.OpenRouter.StateStore,
-        # Periodic sweep of stale rate limiter ETS buckets
-        LiteskillWeb.Plugs.RateLimiter.Sweeper,
-        # Task supervisor for LLM streaming and other async work
-        {Task.Supervisor, name: Liteskill.TaskSupervisor},
-        # Stream registry — monitors active LLM stream tasks, triggers recovery on crash
-        Liteskill.Chat.StreamRegistry,
-        # LLM Gateway: per-provider circuit breaker + concurrency gates
-        {Registry, keys: :unique, name: Liteskill.LlmGateway.GateRegistry},
-        {DynamicSupervisor, name: Liteskill.LlmGateway.GateSupervisor, strategy: :one_for_one},
-        # Periodic sweep of stale LLM token bucket ETS entries
-        Liteskill.LlmGateway.TokenBucket.Sweeper,
-        # Chat projector - projects events to read-model tables
-        Liteskill.Chat.Projector,
-        # Periodic sweep for conversations stuck in streaming status
-        Liteskill.Chat.StreamRecovery,
-        # Schedule tick — checks for due schedules and enqueues runs
-        # coveralls-ignore-start
-        unless(test_env?(), do: Liteskill.Schedules.ScheduleTick),
-        # Desktop shutdown is handled by Tauri's kill_sidecar (SIGTERM/taskkill).
-        # No heartbeat socket or ShutdownManager needed.
-        # coveralls-ignore-stop
-        # Periodic sweep of expired server-side sessions (low-priority, placed late
-        # in rest_for_one tree to minimize blast radius on crash)
-        Liteskill.Accounts.SessionSweeper,
-        # SAML identity provider (only when configured)
-        if(saml_configured?(), do: {Samly.Provider, []}),
-        # Start to serve requests, typically the last entry
-        LiteskillWeb.Endpoint
-      ]
-      |> Enum.reject(&is_nil/1)
+                 if Liteskill.SingleUser.enabled?(), do: Liteskill.SingleUser.auto_provision_admin()
+               end}
+          ),
+          Liteskill.OpenRouter.StateStore,
+          LiteskillWeb.Plugs.RateLimiter.Sweeper,
+          {Task.Supervisor, name: Liteskill.TaskSupervisor},
+          Liteskill.Chat.StreamRegistry,
+          {Registry, keys: :unique, name: Liteskill.LlmGateway.GateRegistry},
+          {DynamicSupervisor, name: Liteskill.LlmGateway.GateSupervisor, strategy: :one_for_one},
+          Liteskill.LlmGateway.TokenBucket.Sweeper,
+          Liteskill.Chat.Projector,
+          Liteskill.Chat.StreamRecovery,
+          if(!test_env?(), do: Liteskill.Schedules.ScheduleTick),
+          Liteskill.Accounts.SessionSweeper,
+          if(saml_configured?(), do: {Samly.Provider, []}),
+          LiteskillWeb.Endpoint
+        ],
+        &is_nil/1
+      )
+
+    # coveralls-ignore-stop
 
     # rest_for_one: if an infrastructure child (Repo, PubSub) crashes,
     # all children started after it (Projector, Endpoint) restart too,

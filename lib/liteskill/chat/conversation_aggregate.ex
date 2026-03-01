@@ -7,9 +7,9 @@ defmodule Liteskill.Chat.ConversationAggregate do
 
   @behaviour Liteskill.Aggregate
 
-  require Logger
-
   alias Liteskill.Chat.Events
+
+  require Logger
 
   defstruct [
     :conversation_id,
@@ -49,8 +49,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
     {:ok, [event]}
   end
 
-  def handle_command(%{status: status}, {:create_conversation, _})
-      when status != :created do
+  def handle_command(%{status: status}, {:create_conversation, _}) when status != :created do
     {:error, :already_created}
   end
 
@@ -182,8 +181,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
     {:error, :not_streaming}
   end
 
-  def handle_command(%{status: status}, {:complete_tool_call, params})
-      when status in [:streaming, :active] do
+  def handle_command(%{status: status}, {:complete_tool_call, params}) when status in [:streaming, :active] do
     now = iso_now()
 
     event =
@@ -270,7 +268,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
     {:error, {:unknown_command, command_type}}
   end
 
-  defp iso_now, do: DateTime.utc_now() |> DateTime.to_iso8601()
+  defp iso_now, do: DateTime.to_iso8601(DateTime.utc_now())
 
   # --- Event Appliers ---
 
@@ -314,9 +312,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def apply_event(%{current_stream: nil} = state, %{event_type: "AssistantChunkReceived"}) do
-    Logger.warning(
-      "AssistantChunkReceived received with no active stream — event stream may be corrupted"
-    )
+    Logger.warning("AssistantChunkReceived received with no active stream — event stream may be corrupted")
 
     state
   end
@@ -357,9 +353,7 @@ defmodule Liteskill.Chat.ConversationAggregate do
   end
 
   def apply_event(%{current_stream: nil} = state, %{event_type: "ToolCallStarted"}) do
-    Logger.warning(
-      "ToolCallStarted received with no active stream — event stream may be corrupted"
-    )
+    Logger.warning("ToolCallStarted received with no active stream — event stream may be corrupted")
 
     state
   end

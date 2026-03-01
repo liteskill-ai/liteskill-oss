@@ -19,6 +19,8 @@ defmodule Liteskill.LlmGateway.ProviderGate do
 
   use GenServer
 
+  alias Liteskill.LlmGateway.GateRegistry
+
   require Logger
 
   @default_max_concurrency 25
@@ -67,9 +69,7 @@ defmodule Liteskill.LlmGateway.ProviderGate do
   # -- GenServer lifecycle --
 
   def start_link(provider_id) do
-    GenServer.start_link(__MODULE__, provider_id,
-      name: {:via, Registry, {Liteskill.LlmGateway.GateRegistry, provider_id}}
-    )
+    GenServer.start_link(__MODULE__, provider_id, name: {:via, Registry, {GateRegistry, provider_id}})
   end
 
   @impl true
@@ -407,7 +407,7 @@ defmodule Liteskill.LlmGateway.ProviderGate do
   end
 
   defp lookup(provider_id) do
-    case Registry.lookup(Liteskill.LlmGateway.GateRegistry, provider_id) do
+    case Registry.lookup(GateRegistry, provider_id) do
       [{pid, _}] -> {:ok, pid}
       [] -> :error
     end

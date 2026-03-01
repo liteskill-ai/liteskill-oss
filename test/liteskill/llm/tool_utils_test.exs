@@ -2,6 +2,7 @@ defmodule Liteskill.LLM.ToolUtilsTest do
   use ExUnit.Case, async: false
 
   alias Liteskill.LLM.ToolUtils
+  alias Liteskill.McpServers.Client
 
   describe "convert_tool/1" do
     test "converts Bedrock tool spec to ReqLLM tool" do
@@ -62,6 +63,7 @@ defmodule Liteskill.LLM.ToolUtilsTest do
   describe "execute_tool/4" do
     test "dispatches to builtin module" do
       defmodule FakeBuiltin do
+        @moduledoc false
         def call_tool("test_tool", %{"q" => "hello"}, user_id: "u1") do
           {:ok, %{"content" => [%{"text" => "builtin result"}]}}
         end
@@ -79,7 +81,7 @@ defmodule Liteskill.LLM.ToolUtilsTest do
     end
 
     test "dispatches to MCP server via McpClient" do
-      Req.Test.stub(Liteskill.McpServers.Client, fn conn ->
+      Req.Test.stub(Client, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
@@ -123,9 +125,7 @@ defmodule Liteskill.LLM.ToolUtilsTest do
       server = %{url: "https://mcp.example.com", api_key: nil, headers: %{}}
 
       result =
-        ToolUtils.execute_tool(server, "mcp_tool", %{"q" => "test"},
-          plug: {Req.Test, Liteskill.McpServers.Client}
-        )
+        ToolUtils.execute_tool(server, "mcp_tool", %{"q" => "test"}, plug: {Req.Test, Client})
 
       assert {:ok, %{"content" => [%{"text" => "mcp result"}]}} = result
     end

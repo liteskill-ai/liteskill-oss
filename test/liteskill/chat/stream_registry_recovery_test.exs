@@ -3,7 +3,11 @@ defmodule Liteskill.Chat.StreamRegistryRecoveryTest do
 
   alias Liteskill.Aggregate.Loader
   alias Liteskill.Chat
-  alias Liteskill.Chat.{ConversationAggregate, MessageChunk, Projector, StreamRegistry}
+  alias Liteskill.Chat.Conversation
+  alias Liteskill.Chat.ConversationAggregate
+  alias Liteskill.Chat.MessageChunk
+  alias Liteskill.Chat.Projector
+  alias Liteskill.Chat.StreamRegistry
 
   # Polls a condition function until it returns true, with bounded retries.
   defp assert_eventually(fun, retries \\ 80, interval \\ 25) do
@@ -77,7 +81,7 @@ defmodule Liteskill.Chat.StreamRegistryRecoveryTest do
       Chat.recover_stream_by_id(conv.id)
 
       # Verify conversation is back to active
-      recovered = Repo.get!(Liteskill.Chat.Conversation, conv.id)
+      recovered = Repo.get!(Conversation, conv.id)
       assert recovered.status == "active"
 
       # Verify the streaming message was marked as failed
@@ -111,7 +115,7 @@ defmodule Liteskill.Chat.StreamRegistryRecoveryTest do
       assert_eventually(fn -> not StreamRegistry.streaming?(conv.id) end)
 
       # Conversation should still be active (no error)
-      recovered = Repo.get!(Liteskill.Chat.Conversation, conv.id)
+      recovered = Repo.get!(Conversation, conv.id)
       assert recovered.status == "active"
     end
   end

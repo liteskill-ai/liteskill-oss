@@ -40,7 +40,8 @@ defmodule Liteskill.Schedules.ScheduleTick do
   defp check_due_schedules do
     now = DateTime.utc_now()
 
-    Schedules.list_due_schedules(now)
+    now
+    |> Schedules.list_due_schedules()
     |> Enum.each(fn schedule ->
       %{"schedule_id" => schedule.id, "user_id" => schedule.user_id}
       |> ScheduleWorker.new()

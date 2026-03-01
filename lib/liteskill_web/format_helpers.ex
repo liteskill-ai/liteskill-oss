@@ -17,11 +17,9 @@ defmodule LiteskillWeb.FormatHelpers do
   def format_decimal(_), do: "0.00"
 
   @doc "Formats a large integer with K/M suffixes."
-  def format_number(n) when is_integer(n) and n >= 1_000_000,
-    do: "#{Float.round(n / 1_000_000, 1)}M"
+  def format_number(n) when is_integer(n) and n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
 
-  def format_number(n) when is_integer(n) and n >= 1_000,
-    do: "#{Float.round(n / 1_000, 1)}K"
+  def format_number(n) when is_integer(n) and n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
 
   def format_number(n) when is_integer(n), do: Integer.to_string(n)
   def format_number(_), do: "0"

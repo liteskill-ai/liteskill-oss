@@ -1,9 +1,4 @@
 defmodule Liteskill.Schedules do
-  use Boundary,
-    top_level?: true,
-    deps: [Liteskill.Authorization, Liteskill.Rbac, Liteskill.Runs],
-    exports: [Schedule, ScheduleTick, ScheduleWorker]
-
   @moduledoc """
   Context for managing schedules — cron-like recurring run execution.
 
@@ -11,11 +6,16 @@ defmodule Liteskill.Schedules do
   runs on a recurring basis.
   """
 
-  alias Liteskill.Schedules.Schedule
-  alias Liteskill.Authorization
-  alias Liteskill.Repo
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Authorization, Liteskill.Rbac, Liteskill.Runs],
+    exports: [Schedule, ScheduleTick, ScheduleWorker]
 
   import Ecto.Query
+
+  alias Liteskill.Authorization
+  alias Liteskill.Repo
+  alias Liteskill.Schedules.Schedule
 
   # --- CRUD ---
 
@@ -92,7 +92,7 @@ defmodule Liteskill.Schedules do
   end
 
   def get_schedule(id, user_id) do
-    case Repo.get(Schedule, id) |> Repo.preload(:team_definition) do
+    case Schedule |> Repo.get(id) |> Repo.preload(:team_definition) do
       nil ->
         {:error, :not_found}
 
@@ -109,7 +109,7 @@ defmodule Liteskill.Schedules do
   end
 
   def get_schedule!(id) do
-    Repo.get!(Schedule, id) |> Repo.preload(:team_definition)
+    Schedule |> Repo.get!(id) |> Repo.preload(:team_definition)
   end
 
   def toggle_schedule(id, user_id) do
@@ -203,7 +203,7 @@ defmodule Liteskill.Schedules do
             end
           end)
 
-        if values != [], do: {:exact, values}, else: :any
+        if values == [], do: :any, else: {:exact, values}
     end
   end
 
@@ -223,7 +223,7 @@ defmodule Liteskill.Schedules do
 
   defp next_match(dt, cron, attempts) do
     candidate = NaiveDateTime.add(dt, (attempts + 1) * 60, :second)
-    dow = Date.day_of_week(NaiveDateTime.to_date(candidate)) |> rem(7)
+    dow = candidate |> NaiveDateTime.to_date() |> Date.day_of_week() |> rem(7)
 
     if field_matches?(cron.minute, candidate.minute) &&
          field_matches?(cron.hour, candidate.hour) &&

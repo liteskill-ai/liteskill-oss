@@ -30,7 +30,8 @@ defmodule LiteskillWeb.ChatLive.Helpers do
   def estimate_cost(tokens, model_id, models) do
     case Enum.find(models, &(&1.id == model_id)) do
       %{input_cost_per_million: rate} when not is_nil(rate) ->
-        Decimal.new(tokens)
+        tokens
+        |> Decimal.new()
         |> Decimal.mult(rate)
         |> Decimal.div(1_000_000)
 
@@ -44,13 +45,12 @@ defmodule LiteskillWeb.ChatLive.Helpers do
   Takes the first line, max 50 chars (with "..." suffix if truncated).
   """
   def truncate_title(content) do
-    case String.split(content, "\n", parts: 2) do
-      [first | _] ->
-        if String.length(first) > 50 do
-          String.slice(first, 0, 47) <> "..."
-        else
-          first
-        end
+    [first | _] = String.split(content, "\n", parts: 2)
+
+    if String.length(first) > 50 do
+      String.slice(first, 0, 47) <> "..."
+    else
+      first
     end
   end
 
@@ -131,8 +131,9 @@ defmodule LiteskillWeb.ChatLive.Helpers do
   def display_messages(messages, nil), do: messages
 
   def display_messages(messages, editing_message_id) do
-    (Enum.take_while(messages, &(&1.id != editing_message_id)) ++
-       [Enum.find(messages, &(&1.id == editing_message_id))])
-    |> Enum.reject(&is_nil/1)
+    Enum.reject(
+      Enum.take_while(messages, &(&1.id != editing_message_id)) ++ [Enum.find(messages, &(&1.id == editing_message_id))],
+      &is_nil/1
+    )
   end
 end

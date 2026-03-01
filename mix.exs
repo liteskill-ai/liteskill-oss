@@ -1,7 +1,7 @@
 defmodule Liteskill.MixProject do
   use Mix.Project
 
-  @version File.read!("VERSION") |> String.trim()
+  @version "VERSION" |> File.read!() |> String.trim()
 
   def project do
     [
@@ -20,7 +20,8 @@ defmodule Liteskill.MixProject do
         list_unused_filters: true,
         plt_add_apps: [:ex_unit, :mix],
         excluded_paths: ["test/support"]
-      ]
+      ],
+      docs: docs()
     ]
   end
 
@@ -41,6 +42,41 @@ defmodule Liteskill.MixProject do
         coveralls: :test,
         "coveralls.detail": :test,
         "coveralls.html": :test
+      ]
+    ]
+  end
+
+  defp docs do
+    [
+      main: "Liteskill",
+      extras: ["README.md", "CLAUDE.md"],
+      groups_for_modules: [
+        "Chat & Event Store": [
+          ~r/Liteskill\.Chat/,
+          ~r/Liteskill\.EventStore/,
+          ~r/Liteskill\.Aggregate/
+        ],
+        Accounts: [~r/Liteskill\.Accounts/],
+        "Authorization & RBAC": [
+          ~r/Liteskill\.Authorization/,
+          ~r/Liteskill\.Rbac/
+        ],
+        LLM: [~r/Liteskill\.LLM/, ~r/Liteskill\.LlmGateway/, ~r/Liteskill\.LlmModels/, ~r/Liteskill\.LlmProviders/],
+        MCP: [~r/Liteskill\.McpServers/],
+        Agents: [~r/Liteskill\.Agents/],
+        Runs: [~r/Liteskill\.Runs/],
+        Reports: [~r/Liteskill\.Reports/],
+        RAG: [~r/Liteskill\.Rag/],
+        "Data Sources": [~r/Liteskill\.DataSources/],
+        Groups: [~r/Liteskill\.Groups/],
+        Teams: [~r/Liteskill\.Teams/],
+        Settings: [~r/Liteskill\.Settings/],
+        Usage: [~r/Liteskill\.Usage/],
+        Schedules: [~r/Liteskill\.Schedules/],
+        "Built-in Tools": [~r/Liteskill\.BuiltinTools/],
+        "Built-in Sources": [~r/Liteskill\.BuiltinSources/],
+        Desktop: [~r/Liteskill\.Desktop/],
+        Web: [~r/LiteskillWeb/]
       ]
     ]
   end
@@ -67,12 +103,7 @@ defmodule Liteskill.MixProject do
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
       {:heroicons,
-       github: "tailwindlabs/heroicons",
-       tag: "v2.2.0",
-       sparse: "optimized",
-       app: false,
-       compile: false,
-       depth: 1},
+       github: "tailwindlabs/heroicons", tag: "v2.2.0", sparse: "optimized", app: false, compile: false, depth: 1},
       {:swoosh, "~> 1.16"},
       {:req, "~> 0.5"},
       {:req_llm, "~> 1.5"},
@@ -96,9 +127,12 @@ defmodule Liteskill.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.35", only: :dev, runtime: false},
+      {:doctor, "~> 0.22", only: [:dev, :test], runtime: false},
+      {:styler, "~> 1.2", only: [:dev, :test], runtime: false},
       {:tidewave, "~> 0.5", only: :dev},
-      {:ex_tauri,
-       git: "https://github.com/filipecabaco/ex_tauri.git", optional: true, runtime: false},
+      {:ex_tauri, git: "https://github.com/filipecabaco/ex_tauri.git", optional: true, runtime: false},
       {:burrito, "~> 1.5", optional: true}
     ]
   end
@@ -136,9 +170,12 @@ defmodule Liteskill.MixProject do
       precommit: [
         "compile --warnings-as-errors",
         "deps.unlock --unused",
+        "deps.audit",
+        "cmd mix hex.audit",
         "format",
         "credo --strict",
         "sobelow --config --exit low",
+        "doctor",
         "dialyzer",
         "ecto.create --quiet",
         "ecto.migrate --quiet",

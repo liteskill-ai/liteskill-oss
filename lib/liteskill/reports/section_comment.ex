@@ -1,5 +1,7 @@
 defmodule Liteskill.Reports.SectionComment do
+  @moduledoc "Schema for comments on report sections."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

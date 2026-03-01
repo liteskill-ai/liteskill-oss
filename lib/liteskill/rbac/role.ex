@@ -1,5 +1,7 @@
 defmodule Liteskill.Rbac.Role do
+  @moduledoc "Schema for RBAC roles with associated permissions."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   alias Liteskill.Rbac.Permissions

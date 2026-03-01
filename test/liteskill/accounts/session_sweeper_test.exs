@@ -24,7 +24,7 @@ defmodule Liteskill.Accounts.SessionSweeperTest do
       {:ok, session} = Accounts.create_session(user.id)
 
       # Manually expire the session
-      past = DateTime.add(DateTime.utc_now(), -1, :second) |> DateTime.truncate(:second)
+      past = DateTime.utc_now() |> DateTime.add(-1, :second) |> DateTime.truncate(:second)
 
       Repo.update_all(
         from(s in Accounts.UserSession, where: s.id == ^session.id),
@@ -33,9 +33,7 @@ defmodule Liteskill.Accounts.SessionSweeperTest do
 
       # Start a test-only sweeper with a long interval (won't auto-fire during test)
       pid =
-        start_supervised!(
-          {SessionSweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000}
-        )
+        start_supervised!({SessionSweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000})
 
       # Trigger sweep manually
       send(pid, :sweep)
@@ -49,23 +47,19 @@ defmodule Liteskill.Accounts.SessionSweeperTest do
       {:ok, session} = Accounts.create_session(user.id)
 
       pid =
-        start_supervised!(
-          {SessionSweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000}
-        )
+        start_supervised!({SessionSweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000})
 
       send(pid, :sweep)
       _ = :sys.get_state(pid)
 
-      assert Accounts.validate_session_with_user(session.id) != nil
+      assert Accounts.validate_session_with_user(session.id)
     end
   end
 
   describe "handle_info catch-all" do
     test "ignores unknown messages" do
       pid =
-        start_supervised!(
-          {SessionSweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000}
-        )
+        start_supervised!({SessionSweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 600_000})
 
       send(pid, :random_message)
       _ = :sys.get_state(pid)
@@ -77,9 +71,7 @@ defmodule Liteskill.Accounts.SessionSweeperTest do
   describe "periodic scheduling" do
     test "schedules next sweep after handling :sweep" do
       pid =
-        start_supervised!(
-          {SessionSweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 50}
-        )
+        start_supervised!({SessionSweeper, name: :"sweeper_test_#{System.unique_integer()}", interval_ms: 50})
 
       # The sweeper should fire within ~100ms. Sync twice to confirm it loops.
       Process.sleep(100)

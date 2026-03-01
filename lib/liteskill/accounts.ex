@@ -4,13 +4,13 @@ defmodule Liteskill.Accounts do
   """
   use Boundary, top_level?: true, deps: [], exports: [User, Invitation, UserSession, AuthEvent]
 
+  import Ecto.Query
+
   alias Liteskill.Accounts.AuthEvent
   alias Liteskill.Accounts.Invitation
   alias Liteskill.Accounts.User
   alias Liteskill.Accounts.UserSession
   alias Liteskill.Repo
-
-  import Ecto.Query
 
   @admin_email User.admin_email()
 
@@ -23,8 +23,7 @@ defmodule Liteskill.Accounts do
 
     case get_user_by_email(email) do
       nil ->
-        %User{email: email, name: "Admin", role: "admin"}
-        |> Repo.insert!()
+        Repo.insert!(%User{email: email, name: "Admin", role: "admin"})
 
       %User{role: "admin"} = user ->
         user
@@ -278,7 +277,7 @@ defmodule Liteskill.Accounts do
                         where: i.id == ^inv.id and is_nil(i.used_at)
                       ),
                       set: [
-                        used_at: DateTime.utc_now() |> DateTime.truncate(:second)
+                        used_at: DateTime.truncate(DateTime.utc_now(), :second)
                       ]
                     )
 
@@ -316,16 +315,15 @@ defmodule Liteskill.Accounts do
   `conn_info` should be a map with optional `:ip_address` and `:user_agent` keys.
   """
   def create_session(user_id, conn_info \\ %{}) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = DateTime.truncate(DateTime.utc_now(), :second)
 
-    %UserSession{
+    Repo.insert(%UserSession{
       user_id: user_id,
       ip_address: conn_info[:ip_address],
       user_agent: conn_info[:user_agent],
       last_active_at: now,
       expires_at: DateTime.add(now, session_max_age(), :second)
-    }
-    |> Repo.insert()
+    })
   end
 
   @doc """
@@ -333,7 +331,7 @@ defmodule Liteskill.Accounts do
   Returns `nil` if the session is invalid, expired, or idle-timed-out.
   """
   def validate_session_with_user(token) when is_binary(token) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = DateTime.truncate(DateTime.utc_now(), :second)
     idle_cutoff = DateTime.add(now, -session_idle_timeout(), :second)
 
     Repo.one(
@@ -353,18 +351,16 @@ defmodule Liteskill.Accounts do
   Updates `last_active_at` on a session. Throttled by the caller (skip if < 60s).
   """
   def touch_session(%UserSession{id: id}) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = DateTime.truncate(DateTime.utc_now(), :second)
 
-    from(s in UserSession, where: s.id == ^id)
-    |> Repo.update_all(set: [last_active_at: now])
+    Repo.update_all(from(s in UserSession, where: s.id == ^id), set: [last_active_at: now])
   end
 
   @doc """
   Deletes a single session by ID.
   """
   def delete_session(session_id) when is_binary(session_id) do
-    from(s in UserSession, where: s.id == ^session_id)
-    |> Repo.delete_all()
+    Repo.delete_all(from(s in UserSession, where: s.id == ^session_id))
   end
 
   @doc """
@@ -383,8 +379,7 @@ defmodule Liteskill.Accounts do
   Deletes all sessions for a given user.
   """
   def delete_user_sessions(user_id) when is_binary(user_id) do
-    from(s in UserSession, where: s.user_id == ^user_id)
-    |> Repo.delete_all()
+    Repo.delete_all(from(s in UserSession, where: s.user_id == ^user_id))
   end
 
   @doc """
@@ -392,13 +387,10 @@ defmodule Liteskill.Accounts do
   Called by SessionSweeper.
   """
   def delete_expired_sessions do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = DateTime.truncate(DateTime.utc_now(), :second)
     idle_cutoff = DateTime.add(now, -session_idle_timeout(), :second)
 
-    from(s in UserSession,
-      where: s.expires_at <= ^now or s.last_active_at <= ^idle_cutoff
-    )
-    |> Repo.delete_all()
+    Repo.delete_all(from(s in UserSession, where: s.expires_at <= ^now or s.last_active_at <= ^idle_cutoff))
   end
 
   # --- Auth Events ---
@@ -408,14 +400,13 @@ defmodule Liteskill.Accounts do
   and optional `:user_id`, `:ip_address`, `:user_agent`, `:metadata`.
   """
   def log_auth_event(%{event_type: event_type} = attrs) do
-    %AuthEvent{
+    Repo.insert(%AuthEvent{
       user_id: attrs[:user_id],
       event_type: event_type,
       ip_address: attrs[:ip_address],
       user_agent: attrs[:user_agent],
       metadata: attrs[:metadata] || %{}
-    }
-    |> Repo.insert()
+    })
   end
 
   @doc """
@@ -425,12 +416,9 @@ defmodule Liteskill.Accounts do
   def list_auth_events(user_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 50)
 
-    from(e in AuthEvent,
-      where: e.user_id == ^user_id,
-      order_by: [desc: e.inserted_at, desc: e.id],
-      limit: ^limit
+    Repo.all(
+      from(e in AuthEvent, where: e.user_id == ^user_id, order_by: [desc: e.inserted_at, desc: e.id], limit: ^limit)
     )
-    |> Repo.all()
   end
 
   # --- Session config helpers ---

@@ -10,19 +10,17 @@ config :liteskill, LiteskillWeb.Endpoint, cache_static_manifest: "priv/static/ca
 # Force using SSL in production. Disable with FORCE_SSL=false for environments
 # where TLS is terminated externally without setting X-Forwarded-Proto.
 # Note `:force_ssl` is required to be set at compile-time.
-unless System.get_env("FORCE_SSL") == "false" or System.get_env("LITESKILL_DESKTOP") == "true" do
-  config :liteskill, LiteskillWeb.Endpoint,
-    force_ssl: [rewrite_on: [:x_forwarded_proto], hsts: true]
+if !(System.get_env("FORCE_SSL") == "false" or System.get_env("LITESKILL_DESKTOP") == "true") do
+  config :liteskill, LiteskillWeb.Endpoint, force_ssl: [rewrite_on: [:x_forwarded_proto], hsts: true]
 end
+
+# Do not print debug messages in production
+config :logger, level: :info
 
 # Configure Swoosh API Client
 config :swoosh, api_client: Swoosh.ApiClient.Req
 
 # Disable Swoosh Local Memory Storage
-config :swoosh, local: false
-
-# Do not print debug messages in production
-config :logger, level: :info
-
 # Runtime production configuration, including reading
 # of environment variables, is done on config/runtime.exs.
+config :swoosh, local: false

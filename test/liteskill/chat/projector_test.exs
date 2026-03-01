@@ -1,7 +1,12 @@
 defmodule Liteskill.Chat.ProjectorTest do
   use Liteskill.DataCase, async: false
 
-  alias Liteskill.Chat.{Conversation, Message, MessageChunk, ToolCall, Projector}
+  alias Liteskill.Chat.Conversation
+  alias Liteskill.Chat.Message
+  alias Liteskill.Chat.MessageChunk
+  alias Liteskill.Chat.Projector
+  alias Liteskill.Chat.ToolCall
+  alias Liteskill.EventStore.Event
   alias Liteskill.EventStore.Postgres, as: Store
 
   setup do
@@ -55,7 +60,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           data: %{
             "message_id" => message_id,
             "content" => "Hello!",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -70,7 +75,7 @@ defmodule Liteskill.Chat.ProjectorTest do
 
     conversation = Repo.one!(from c in Conversation, where: c.stream_id == ^stream_id)
     assert conversation.message_count == 1
-    assert conversation.last_message_at != nil
+    assert conversation.last_message_at
   end
 
   test "projects UserMessageAdded event with tool_config", %{user: user} do
@@ -91,7 +96,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           data: %{
             "message_id" => message_id,
             "content" => "Hello!",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now()),
             "tool_config" => tool_config
           }
         }
@@ -116,7 +121,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "model_id" => "claude",
             "request_id" => Ecto.UUID.generate(),
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -164,7 +169,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "input_tokens" => 10,
             "output_tokens" => 5,
             "latency_ms" => 150,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -195,7 +200,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "model_id" => "claude",
             "request_id" => Ecto.UUID.generate(),
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -211,7 +216,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "error_type" => "rate_limit",
             "error_message" => "429",
             "retry_count" => 0,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -234,7 +239,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "model_id" => "claude",
             "request_id" => Ecto.UUID.generate(),
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -251,7 +256,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "tool_use_id" => tool_use_id,
             "tool_name" => "calculator",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -273,7 +278,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "input" => %{"expr" => "2+2"},
             "output" => %{"result" => 4},
             "duration_ms" => 50,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -296,7 +301,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           event_type: "ConversationTitleUpdated",
           data: %{
             "title" => "Updated Title",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -314,7 +319,7 @@ defmodule Liteskill.Chat.ProjectorTest do
       Store.append_events(stream_id, 1, [
         %{
           event_type: "ConversationArchived",
-          data: %{"timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()}
+          data: %{"timestamp" => DateTime.to_iso8601(DateTime.utc_now())}
         }
       ])
 
@@ -349,7 +354,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "parent_stream_id" => parent_stream_id,
             "fork_at_version" => 1,
             "user_id" => user.id,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -357,7 +362,7 @@ defmodule Liteskill.Chat.ProjectorTest do
     Projector.project_events(new_stream_id, events)
 
     conv = Repo.one!(from c in Conversation, where: c.stream_id == ^new_stream_id)
-    assert conv.parent_conversation_id != nil
+    assert conv.parent_conversation_id
     assert conv.fork_at_version == 1
   end
 
@@ -385,7 +390,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "error_type" => "rate_limit",
             "error_message" => "429",
             "retry_count" => 0,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -409,7 +414,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           data: %{
             "message_id" => Ecto.UUID.generate(),
             "content" => "Orphan message",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -421,7 +426,7 @@ defmodule Liteskill.Chat.ProjectorTest do
     assert Repo.aggregate(Message, :count) == prior_count
 
     # Projector should still be alive
-    assert Process.alive?(Process.whereis(Liteskill.Chat.Projector))
+    assert Process.alive?(Process.whereis(Projector))
   end
 
   test "handles ToolCallCompleted for missing tool call gracefully" do
@@ -438,7 +443,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "input" => %{},
             "output" => %{"result" => "ok"},
             "duration_ms" => 10,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -449,16 +454,16 @@ defmodule Liteskill.Chat.ProjectorTest do
     # No tool call was created or modified
     assert Repo.aggregate(ToolCall, :count) == prior_count
 
-    assert Process.alive?(Process.whereis(Liteskill.Chat.Projector))
+    assert Process.alive?(Process.whereis(Projector))
   end
 
   test "handles info messages that are not events" do
     # The projector GenServer should handle unexpected messages
-    send(Liteskill.Chat.Projector, :unexpected_message)
-    state = :sys.get_state(Liteskill.Chat.Projector)
+    send(Projector, :unexpected_message)
+    state = :sys.get_state(Projector)
     # Should still be alive with valid state
     assert is_map(state)
-    assert Process.alive?(Process.whereis(Liteskill.Chat.Projector))
+    assert Process.alive?(Process.whereis(Projector))
   end
 
   test "rebuild_projections replays all events", %{user: user} do
@@ -480,7 +485,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "model_id" => "claude",
             "request_id" => Ecto.UUID.generate(),
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -498,7 +503,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "input_tokens" => nil,
             "output_tokens" => nil,
             "latency_ms" => nil,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -530,7 +535,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "model_id" => "claude",
             "request_id" => Ecto.UUID.generate(),
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -553,7 +558,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "input_tokens" => 10,
             "output_tokens" => 5,
             "latency_ms" => 100,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -581,7 +586,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "model_id" => "claude",
             "request_id" => Ecto.UUID.generate(),
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -602,7 +607,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "input_tokens" => 10,
             "output_tokens" => 5,
             "latency_ms" => 100,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -625,7 +630,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "model_id" => "claude",
             "request_id" => Ecto.UUID.generate(),
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -646,7 +651,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "input_tokens" => 10,
             "output_tokens" => 5,
             "latency_ms" => 100,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -673,7 +678,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "message_id" => message_id,
             "model_id" => "claude",
             "request_id" => Ecto.UUID.generate(),
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -694,7 +699,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             "input_tokens" => 10,
             "output_tokens" => 5,
             "latency_ms" => 100,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -719,7 +724,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           data: %{
             "message_id" => msg1_id,
             "content" => "First",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         },
         %{
@@ -727,7 +732,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           data: %{
             "message_id" => msg2_id,
             "content" => "Second",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         },
         %{
@@ -735,7 +740,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           data: %{
             "message_id" => msg3_id,
             "content" => "Third",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -751,7 +756,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           event_type: "ConversationTruncated",
           data: %{
             "message_id" => msg1_id,
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -779,7 +784,7 @@ defmodule Liteskill.Chat.ProjectorTest do
           data: %{
             "message_id" => message_id,
             "content" => "Async hello!",
-            "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+            "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
           }
         }
       ])
@@ -807,7 +812,7 @@ defmodule Liteskill.Chat.ProjectorTest do
     )
 
     # AssistantChunkReceived with non-UUID message_id will raise Ecto.Query.CastError
-    bad_event = %Liteskill.EventStore.Event{
+    bad_event = %Event{
       stream_id: stream_id,
       stream_version: 999,
       event_type: "AssistantChunkReceived",
@@ -822,8 +827,7 @@ defmodule Liteskill.Chat.ProjectorTest do
     # The projector should not crash — it logs and emits telemetry
     Projector.project_events(stream_id, [bad_event])
 
-    assert_receive {:telemetry_event, %{count: 1},
-                    %{stream_id: ^stream_id, event_type: "AssistantChunkReceived"}},
+    assert_receive {:telemetry_event, %{count: 1}, %{stream_id: ^stream_id, event_type: "AssistantChunkReceived"}},
                    1000
 
     :telemetry.detach("test-projector-failure-#{inspect(ref)}")
@@ -844,7 +848,7 @@ defmodule Liteskill.Chat.ProjectorTest do
 
     fake_stream_id = "conversation-#{Ecto.UUID.generate()}"
 
-    event = %Liteskill.EventStore.Event{
+    event = %Event{
       stream_id: fake_stream_id,
       stream_version: 1,
       event_type: "UserMessageAdded",
@@ -868,7 +872,7 @@ defmodule Liteskill.Chat.ProjectorTest do
 
       # Feed a malformed AssistantChunkReceived event where chunk_index is nil
       # This should cause Repo.insert! to raise due to NOT NULL constraint
-      bad_event = %Liteskill.EventStore.Event{
+      bad_event = %Event{
         event_type: "AssistantChunkReceived",
         data: %{
           "message_id" => Ecto.UUID.generate(),
@@ -887,7 +891,7 @@ defmodule Liteskill.Chat.ProjectorTest do
     test "handles ConversationTruncated with nonexistent message_id", %{user: user} do
       {stream_id, _conversation_id} = create_conversation(user)
 
-      truncation_event = %Liteskill.EventStore.Event{
+      truncation_event = %Event{
         event_type: "ConversationTruncated",
         data: %{
           "message_id" => Ecto.UUID.generate()
@@ -917,7 +921,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             data: %{
               "message_id" => msg1_id,
               "content" => "First",
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           },
           %{
@@ -925,7 +929,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             data: %{
               "message_id" => msg2_id,
               "content" => "Second",
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           },
           %{
@@ -933,7 +937,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             data: %{
               "message_id" => msg3_id,
               "content" => "Third",
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           }
         ])
@@ -965,7 +969,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             data: %{
               "message_id" => user_msg_id,
               "content" => "Hello",
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           },
           %{
@@ -974,7 +978,7 @@ defmodule Liteskill.Chat.ProjectorTest do
               "message_id" => asst_msg_id,
               "model_id" => "claude",
               "request_id" => Ecto.UUID.generate(),
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           }
         ])
@@ -1007,7 +1011,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             data: %{
               "message_id" => msg1_id,
               "content" => "First",
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           },
           %{
@@ -1015,7 +1019,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             data: %{
               "message_id" => msg2_id,
               "content" => "Second",
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           },
           %{
@@ -1023,7 +1027,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             data: %{
               "message_id" => msg3_id,
               "content" => "Third",
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           }
         ])
@@ -1037,7 +1041,7 @@ defmodule Liteskill.Chat.ProjectorTest do
             event_type: "ConversationTruncated",
             data: %{
               "message_id" => msg2_id,
-              "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+              "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
             }
           }
         ])
@@ -1045,7 +1049,7 @@ defmodule Liteskill.Chat.ProjectorTest do
       Projector.project_events(stream_id, truncate_events)
 
       # msg1 kept, msg2 and msg3 deleted
-      assert Repo.get(Message, msg1_id) != nil
+      assert Repo.get(Message, msg1_id)
       assert Repo.get(Message, msg2_id) == nil
       assert Repo.get(Message, msg3_id) == nil
 
@@ -1079,13 +1083,13 @@ defmodule Liteskill.Chat.ProjectorTest do
 
       Projector.project_events(new_stream_id, events)
 
-      fork_event = %Liteskill.EventStore.Event{
+      fork_event = %Event{
         event_type: "ConversationForked",
         data: %{
           "parent_stream_id" => nonexistent_parent_stream,
           "fork_at_version" => 1,
           "user_id" => user.id,
-          "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601()
+          "timestamp" => DateTime.to_iso8601(DateTime.utc_now())
         },
         stream_id: new_stream_id,
         stream_version: 2,
@@ -1113,7 +1117,7 @@ defmodule Liteskill.Chat.ProjectorTest do
       {stream_id, _} = create_conversation(user)
       fake_message_id = Ecto.UUID.generate()
 
-      chunk_event = %Liteskill.EventStore.Event{
+      chunk_event = %Event{
         event_type: "AssistantChunkReceived",
         data: %{
           "message_id" => fake_message_id,
@@ -1138,7 +1142,7 @@ defmodule Liteskill.Chat.ProjectorTest do
       {stream_id, _} = create_conversation(user)
       fake_message_id = Ecto.UUID.generate()
 
-      completion_event = %Liteskill.EventStore.Event{
+      completion_event = %Event{
         event_type: "AssistantStreamCompleted",
         data: %{
           "message_id" => fake_message_id,

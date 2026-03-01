@@ -3,8 +3,8 @@ defmodule LiteskillWeb.AdminLive.UsageTab do
 
   use LiteskillWeb, :html
 
-  import LiteskillWeb.FormatHelpers
   import LiteskillWeb.AdminLive.Helpers, only: [require_admin: 2]
+  import LiteskillWeb.FormatHelpers
 
   alias Liteskill.Accounts
   alias Liteskill.Groups
@@ -92,8 +92,8 @@ defmodule LiteskillWeb.AdminLive.UsageTab do
     time_opts = period_to_opts(period)
 
     instance = Usage.instance_totals(time_opts)
-    by_user = Usage.usage_summary(Keyword.merge(time_opts, group_by: :user_id))
-    by_model = Usage.usage_summary(Keyword.merge(time_opts, group_by: :model_id))
+    by_user = Usage.usage_summary(Keyword.put(time_opts, :group_by, :user_id))
+    by_model = Usage.usage_summary(Keyword.put(time_opts, :group_by, :model_id))
     daily = Usage.daily_totals(time_opts)
 
     users = Accounts.list_users()

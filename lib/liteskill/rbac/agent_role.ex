@@ -1,5 +1,7 @@
 defmodule Liteskill.Rbac.AgentRole do
+  @moduledoc "Join schema associating an agent definition with a role."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

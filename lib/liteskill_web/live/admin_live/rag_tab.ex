@@ -3,8 +3,8 @@ defmodule LiteskillWeb.AdminLive.RagTab do
 
   use LiteskillWeb, :html
 
-  import Phoenix.LiveView, only: [put_flash: 3]
   import LiteskillWeb.AdminLive.Helpers, only: [require_admin: 2]
+  import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Liteskill.LlmModels
   alias Liteskill.Settings
@@ -78,9 +78,7 @@ defmodule LiteskillWeb.AdminLive.RagTab do
 
   def handle_event("rag_confirm_model_change", %{"confirmation" => confirmation}, socket) do
     require_admin(socket, fn ->
-      if confirmation != "I know what this means and I am very sure" do
-        {:noreply, put_flash(socket, :error, "Confirmation text does not match")}
-      else
+      if confirmation == "I know what this means and I am very sure" do
         selected_id = socket.assigns.rag_selected_model_id
         user_id = socket.assigns.current_user.id
 
@@ -89,7 +87,8 @@ defmodule LiteskillWeb.AdminLive.RagTab do
             Liteskill.Rag.clear_all_embeddings()
 
             if selected_id do
-              Liteskill.Rag.ReembedWorker.new(%{"user_id" => user_id})
+              %{"user_id" => user_id}
+              |> Liteskill.Rag.ReembedWorker.new()
               |> Oban.insert()
             end
 
@@ -114,6 +113,8 @@ defmodule LiteskillWeb.AdminLive.RagTab do
                action_error("update embedding model", reason)
              )}
         end
+      else
+        {:noreply, put_flash(socket, :error, "Confirmation text does not match")}
       end
     end)
   end

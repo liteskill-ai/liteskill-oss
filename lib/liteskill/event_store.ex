@@ -1,12 +1,12 @@
 defmodule Liteskill.EventStore do
-  use Boundary, top_level?: true, deps: [], exports: [Event, Snapshot, Postgres]
-
   @moduledoc """
   Behaviour for event store implementations.
 
   Provides append-only event storage with optimistic concurrency control,
   stream reading, subscriptions via PubSub, and snapshot support.
   """
+
+  use Boundary, top_level?: true, deps: [], exports: [Event, Snapshot, Postgres]
 
   alias Liteskill.EventStore.Event
 

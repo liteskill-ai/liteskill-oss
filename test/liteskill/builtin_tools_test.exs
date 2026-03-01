@@ -2,10 +2,11 @@ defmodule Liteskill.BuiltinToolsTest do
   use ExUnit.Case, async: true
 
   alias Liteskill.BuiltinTools
+  alias Liteskill.BuiltinTools.Reports
 
   test "all/0 returns registered modules" do
     modules = BuiltinTools.all()
-    assert Liteskill.BuiltinTools.Reports in modules
+    assert Reports in modules
   end
 
   test "all_tools/0 returns flat tool list" do
@@ -28,7 +29,7 @@ defmodule Liteskill.BuiltinToolsTest do
     server = hd(servers)
     assert server.id == "builtin:reports"
     assert server.name == "Reports"
-    assert server.builtin == Liteskill.BuiltinTools.Reports
+    assert server.builtin == Reports
     assert server.status == "active"
     assert server.global == true
     assert server.user_id == nil
@@ -36,8 +37,8 @@ defmodule Liteskill.BuiltinToolsTest do
   end
 
   test "find_handler/1 finds correct module" do
-    assert BuiltinTools.find_handler("reports__create") == Liteskill.BuiltinTools.Reports
-    assert BuiltinTools.find_handler("reports__list") == Liteskill.BuiltinTools.Reports
+    assert BuiltinTools.find_handler("reports__create") == Reports
+    assert BuiltinTools.find_handler("reports__list") == Reports
   end
 
   test "find_handler/1 returns nil for unknown tool" do

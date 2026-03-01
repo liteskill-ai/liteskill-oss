@@ -3,7 +3,10 @@ defmodule Liteskill.Rag.ReembedWorkerTest do
   use Oban.Testing, repo: Liteskill.Repo
 
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Chunk, EmbeddingClient, Document, ReembedWorker}
+  alias Liteskill.Rag.Chunk
+  alias Liteskill.Rag.Document
+  alias Liteskill.Rag.EmbeddingClient
+  alias Liteskill.Rag.ReembedWorker
   alias Liteskill.Settings
 
   setup do
@@ -93,7 +96,7 @@ defmodule Liteskill.Rag.ReembedWorkerTest do
       chunks = Rag.list_chunks_for_document(doc.id, owner.id)
 
       Enum.each(chunks, fn chunk ->
-        assert chunk.embedding != nil
+        assert chunk.embedding
       end)
     end
 

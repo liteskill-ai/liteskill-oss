@@ -1,11 +1,11 @@
 defmodule LiteskillWeb.Plugs.LiveAuthTest do
   use LiteskillWeb.ConnCase, async: false
 
-  require Ecto.Query
-
   alias Liteskill.Accounts
   alias Liteskill.Accounts.User
   alias LiteskillWeb.Plugs.LiveAuth
+
+  require Ecto.Query
 
   setup do
     {:ok, user} =
@@ -62,7 +62,7 @@ defmodule LiteskillWeb.Plugs.LiveAuthTest do
     admin = Accounts.get_user_by_email(User.admin_email())
 
     if User.setup_required?(admin) do
-      password = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
+      password = 32 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
       Accounts.setup_admin_password(admin, password)
     end
 
@@ -166,7 +166,7 @@ defmodule LiteskillWeb.Plugs.LiveAuthTest do
 
         socket = build_socket()
         assert {:cont, updated} = LiveAuth.on_mount(:require_authenticated, %{}, %{}, socket)
-        assert updated.assigns.current_user != nil
+        assert updated.assigns.current_user
       end)
     end
   end
@@ -228,7 +228,7 @@ defmodule LiteskillWeb.Plugs.LiveAuthTest do
         refute Liteskill.SingleUser.setup_needed?()
         socket = build_socket()
         assert {:cont, updated} = LiveAuth.on_mount(:require_admin, %{}, %{}, socket)
-        assert updated.assigns.current_user != nil
+        assert updated.assigns.current_user
       end)
     end
   end
@@ -259,7 +259,7 @@ defmodule LiteskillWeb.Plugs.LiveAuthTest do
         assert Liteskill.SingleUser.setup_needed?()
         socket = build_socket()
         assert {:cont, updated} = LiveAuth.on_mount(:require_setup_needed, %{}, %{}, socket)
-        assert updated.assigns.current_user != nil
+        assert updated.assigns.current_user
       end)
     end
 

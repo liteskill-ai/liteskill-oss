@@ -1,5 +1,7 @@
 defmodule Liteskill.Reports.Report do
+  @moduledoc "Schema for agent-generated reports."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

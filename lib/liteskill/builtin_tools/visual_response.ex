@@ -56,13 +56,11 @@ defmodule Liteskill.BuiltinTools.VisualResponse do
 
   @impl true
   def call_tool("visual__get_catalog", _input, _context) do
-    {:ok, @json_render_prompt}
-    |> wrap_result()
+    wrap_result({:ok, @json_render_prompt})
   end
 
   def call_tool(tool_name, _input, _context) do
-    {:error, "Unknown tool: #{tool_name}"}
-    |> wrap_result()
+    wrap_result({:error, "Unknown tool: #{tool_name}"})
   end
 
   defp wrap_result({:ok, text}) when is_binary(text) do

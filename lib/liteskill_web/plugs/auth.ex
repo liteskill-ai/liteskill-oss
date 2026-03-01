@@ -3,8 +3,8 @@ defmodule LiteskillWeb.Plugs.Auth do
   Authentication plugs for session-based user loading and access control.
   """
 
-  import Plug.Conn
   import Phoenix.Controller
+  import Plug.Conn
 
   alias Liteskill.Accounts
   alias Liteskill.SingleUser
@@ -51,7 +51,7 @@ defmodule LiteskillWeb.Plugs.Auth do
   end
 
   defp maybe_touch_session(%{last_active_at: last_active_at} = session) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    now = DateTime.truncate(DateTime.utc_now(), :second)
     elapsed = DateTime.diff(now, last_active_at, :second)
 
     if elapsed >= @touch_throttle_seconds do

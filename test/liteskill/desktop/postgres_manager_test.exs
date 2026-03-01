@@ -484,8 +484,7 @@ defmodule Liteskill.Desktop.PostgresManagerTest do
       {:ok, pid} = PostgresManager.start_link(opts)
 
       # patch_libdir uses -h localhost -p port too
-      assert_receive {:cmd, "psql.exe",
-                      ["-h", "localhost", "-p", "15432", "-d", "template1", "-c", _]}
+      assert_receive {:cmd, "psql.exe", ["-h", "localhost", "-p", "15432", "-d", "template1", "-c", _]}
 
       assert_receive {:cmd, "psql.exe", ["-h", "localhost", "-p", "15432", "-tAc", _query]}
 

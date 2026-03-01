@@ -7,7 +7,7 @@ defmodule Liteskill.LLMTest do
   alias Liteskill.Usage.UsageRecord
 
   setup do
-    Application.put_env(:liteskill, Liteskill.LLM, bedrock_region: "us-east-1")
+    Application.put_env(:liteskill, LLM, bedrock_region: "us-east-1")
 
     :ok
   end
@@ -250,11 +250,11 @@ defmodule Liteskill.LLMTest do
     test "calculates costs from model rates when API returns no costs", %{user: user} do
       messages = [%{role: :user, content: "Hello"}]
 
-      llm_model = %Liteskill.LlmModels.LlmModel{
+      llm_model = %LlmModel{
         model_id: "claude-rated",
         input_cost_per_million: Decimal.new("3"),
         output_cost_per_million: Decimal.new("15"),
-        provider: %Liteskill.LlmProviders.LlmProvider{
+        provider: %LlmProvider{
           provider_type: "anthropic",
           api_key: "test-key",
           provider_config: %{}

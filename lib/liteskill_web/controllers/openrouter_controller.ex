@@ -12,11 +12,11 @@ defmodule LiteskillWeb.OpenRouterController do
 
   use LiteskillWeb, :controller
 
-  plug LiteskillWeb.Plugs.Auth, :fetch_current_user
-
   alias Liteskill.Accounts
   alias Liteskill.LlmProviders
   alias Liteskill.OpenRouter
+
+  plug LiteskillWeb.Plugs.Auth, :fetch_current_user
 
   @provider_name "OpenRouter"
   @pubsub Liteskill.PubSub
@@ -157,36 +157,38 @@ defmodule LiteskillWeb.OpenRouterController do
   # --- Shared upsert logic ---
 
   defp do_upsert(user, key) do
-    case LlmProviders.get_provider_by_name(@provider_name, user.id) do
-      nil ->
-        case LlmProviders.create_provider(%{
-               name: @provider_name,
-               provider_type: "openrouter",
-               api_key: key,
-               instance_wide: true,
-               user_id: user.id
-             }) do
-          {:ok, provider} ->
-            {:ok, :created, provider}
+    case_result =
+      case LlmProviders.get_provider_by_name(@provider_name, user.id) do
+        nil ->
+          case LlmProviders.create_provider(%{
+                 name: @provider_name,
+                 provider_type: "openrouter",
+                 api_key: key,
+                 instance_wide: true,
+                 user_id: user.id
+               }) do
+            {:ok, provider} ->
+              {:ok, :created, provider}
 
-          # coveralls-ignore-start — defensive: provider attrs are always valid
-          {:error, changeset} ->
-            {:error, changeset}
-            # coveralls-ignore-stop
-        end
+            # coveralls-ignore-start — defensive: provider attrs are always valid
+            {:error, changeset} ->
+              {:error, changeset}
+              # coveralls-ignore-stop
+          end
 
-      existing ->
-        case LlmProviders.update_provider_record(existing, %{api_key: key, status: "active"}) do
-          {:ok, provider} ->
-            {:ok, :updated, provider}
+        existing ->
+          case LlmProviders.update_provider_record(existing, %{api_key: key, status: "active"}) do
+            {:ok, provider} ->
+              {:ok, :updated, provider}
 
-          # coveralls-ignore-start — defensive: provider attrs are always valid
-          {:error, changeset} ->
-            {:error, changeset}
-            # coveralls-ignore-stop
-        end
-    end
-    |> normalize_result()
+            # coveralls-ignore-start — defensive: provider attrs are always valid
+            {:error, changeset} ->
+              {:error, changeset}
+              # coveralls-ignore-stop
+          end
+      end
+
+    normalize_result(case_result)
   end
 
   defp normalize_result({:ok, action, _provider}), do: {:ok, action}

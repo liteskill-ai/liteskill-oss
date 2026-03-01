@@ -3,8 +3,8 @@ defmodule LiteskillWeb.AdminLive.ServerTab do
 
   use LiteskillWeb, :html
 
-  import Phoenix.LiveView, only: [put_flash: 3]
   import LiteskillWeb.AdminLive.Helpers, only: [require_admin: 2, parse_decimal: 1]
+  import Phoenix.LiveView, only: [put_flash: 3]
 
   alias Liteskill.Settings
 
@@ -89,8 +89,6 @@ defmodule LiteskillWeb.AdminLive.ServerTab do
         idp = List.first(idps) || %{}
         sp = List.first(sps) || %{}
         %{idp_id: idp[:id], sp_id: sp[:id], sp_entity_id: sp[:entity_id]}
-      else
-        nil
       end
 
     assigns =

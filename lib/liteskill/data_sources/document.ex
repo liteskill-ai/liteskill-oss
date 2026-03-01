@@ -1,5 +1,7 @@
 defmodule Liteskill.DataSources.Document do
+  @moduledoc "Schema for documents ingested from data sources."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}

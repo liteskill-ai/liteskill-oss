@@ -1,10 +1,11 @@
 defmodule Liteskill.Chat.StreamRecoveryTest do
   use Liteskill.DataCase, async: false
 
-  alias Liteskill.Chat
-  alias Liteskill.Chat.{Conversation, StreamRecovery}
-
   import Ecto.Query
+
+  alias Liteskill.Chat
+  alias Liteskill.Chat.Conversation
+  alias Liteskill.Chat.StreamRecovery
 
   setup do
     {:ok, user} =
@@ -19,11 +20,12 @@ defmodule Liteskill.Chat.StreamRecoveryTest do
   end
 
   defp create_stuck_conversation(user) do
+    alias Chat.ConversationAggregate
+    alias Chat.Projector
+    alias Liteskill.Aggregate.Loader
+
     {:ok, conv} = Chat.create_conversation(%{user_id: user.id, title: "Stuck"})
     {:ok, _msg} = Chat.send_message(conv.id, user.id, "test")
-
-    alias Liteskill.Aggregate.Loader
-    alias Liteskill.Chat.{ConversationAggregate, Projector}
 
     message_id = Ecto.UUID.generate()
     command = {:start_assistant_stream, %{message_id: message_id, model_id: "test-model"}}
@@ -34,10 +36,9 @@ defmodule Liteskill.Chat.StreamRecoveryTest do
   end
 
   defp backdate_conversation(conv_id, minutes_ago) do
-    past = DateTime.utc_now() |> DateTime.add(-minutes_ago * 60, :second)
+    past = DateTime.add(DateTime.utc_now(), -minutes_ago * 60, :second)
 
-    from(c in Conversation, where: c.id == ^conv_id)
-    |> Repo.update_all(set: [updated_at: past])
+    Repo.update_all(from(c in Conversation, where: c.id == ^conv_id), set: [updated_at: past])
   end
 
   describe "periodic sweep" do

@@ -1,9 +1,4 @@
 defmodule Liteskill.Reports do
-  use Boundary,
-    top_level?: true,
-    deps: [Liteskill.Accounts, Liteskill.Authorization, Liteskill.Rbac],
-    exports: [Report, ReportSection, SectionComment]
-
   @moduledoc """
   Context for managing reports and their nested sections.
 
@@ -11,12 +6,19 @@ defmodule Liteskill.Reports do
   that render as markdown with #, ##, ### etc. headers.
   """
 
-  alias Liteskill.Accounts.User
-  alias Liteskill.Authorization
-  alias Liteskill.Reports.{Report, ReportSection, SectionComment}
-  alias Liteskill.Repo
+  use Boundary,
+    top_level?: true,
+    deps: [Liteskill.Accounts, Liteskill.Authorization, Liteskill.Rbac],
+    exports: [Report, ReportSection, SectionComment]
 
   import Ecto.Query
+
+  alias Liteskill.Accounts.User
+  alias Liteskill.Authorization
+  alias Liteskill.Repo
+  alias Liteskill.Reports.Report
+  alias Liteskill.Reports.ReportSection
+  alias Liteskill.Reports.SectionComment
 
   @doc "System prompt for the LLM agent that addresses report comments."
   def address_comments_system_prompt do
@@ -35,8 +37,7 @@ defmodule Liteskill.Reports do
       run_id = Keyword.get(opts, :run_id)
 
       attrs =
-        %{title: title, user_id: user_id}
-        |> then(fn a -> if run_id, do: Map.put(a, :run_id, run_id), else: a end)
+        then(%{title: title, user_id: user_id}, fn a -> if run_id, do: Map.put(a, :run_id, run_id), else: a end)
 
       Repo.transaction(fn ->
         report =
@@ -66,9 +67,7 @@ defmodule Liteskill.Reports do
   def list_reports_paginated(user_id, page) when is_integer(page) and page >= 1 do
     accessible_ids = Authorization.accessible_entity_ids("report", user_id)
 
-    base_query =
-      Report
-      |> where([r], r.user_id == ^user_id or r.id in subquery(accessible_ids))
+    base_query = where(Report, [r], r.user_id == ^user_id or r.id in subquery(accessible_ids))
 
     total = Repo.aggregate(base_query, :count)
     total_pages = max(ceil(total / @reports_per_page), 1)
@@ -234,7 +233,8 @@ defmodule Liteskill.Reports do
   end
 
   defp find_section_by_path(report_id, parts) do
-    Enum.reduce_while(parts, {nil, nil}, fn title, {parent_id, _section} ->
+    parts
+    |> Enum.reduce_while({nil, nil}, fn title, {parent_id, _section} ->
       case find_section(report_id, parent_id, title) do
         nil -> {:halt, {parent_id, nil}}
         section -> {:cont, {section.id, section}}
@@ -471,12 +471,7 @@ defmodule Liteskill.Reports do
 
   def list_section_comments(section_id, user_id) do
     with {:ok, _section, _report} <- authorize_section_access(section_id, user_id) do
-      comments =
-        from(c in SectionComment,
-          where: c.section_id == ^section_id,
-          order_by: [asc: c.inserted_at]
-        )
-        |> Repo.all()
+      comments = Repo.all(from(c in SectionComment, where: c.section_id == ^section_id, order_by: [asc: c.inserted_at]))
 
       {:ok, comments}
     end
@@ -706,7 +701,7 @@ defmodule Liteskill.Reports do
     tree = build_tree(sections, nil)
     section_md = render_tree(tree, start_depth, include_comments)
 
-    (report_comments_md <> section_md) |> String.trim()
+    String.trim(report_comments_md <> section_md)
   end
 
   defp build_tree(sections, parent_id) do
@@ -755,8 +750,7 @@ defmodule Liteskill.Reports do
           "> **[#{type_label}] [#{status_label}] (id:#{comment.id})**: #{comment.body}"
 
         reply_lines =
-          (comment.replies || [])
-          |> Enum.map_join("\n", fn reply ->
+          Enum.map_join(comment.replies || [], "\n", fn reply ->
             reply_type = String.upcase(reply.author_type)
             ">> **[#{reply_type}] (reply)**: #{reply.body}"
           end)

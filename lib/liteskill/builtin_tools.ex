@@ -1,16 +1,16 @@
 defmodule Liteskill.BuiltinTools do
-  use Boundary,
-    top_level?: true,
-    check: [out: false],
-    deps: [],
-    exports: [Reports, Wiki, AgentStudio, DeepResearch]
-
   @moduledoc """
   Behaviour and registry for built-in tool suites.
 
   Built-in tools are tool suites that run in-process (no HTTP),
   appearing alongside MCP servers in the tool picker.
   """
+
+  use Boundary,
+    top_level?: true,
+    check: [out: false],
+    deps: [],
+    exports: [Reports, Wiki, AgentStudio, DeepResearch]
 
   @callback id() :: String.t()
   @callback name() :: String.t()

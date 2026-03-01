@@ -1,5 +1,7 @@
 defmodule Liteskill.Accounts.Invitation do
+  @moduledoc "Schema for user invitations."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -30,7 +32,7 @@ defmodule Liteskill.Accounts.Invitation do
   end
 
   def expired?(%__MODULE__{expires_at: expires_at}) do
-    DateTime.compare(DateTime.utc_now(), expires_at) == :gt
+    DateTime.after?(DateTime.utc_now(), expires_at)
   end
 
   def used?(%__MODULE__{used_at: nil}), do: false
@@ -58,6 +60,6 @@ defmodule Liteskill.Accounts.Invitation do
   end
 
   defp generate_token do
-    :crypto.strong_rand_bytes(@token_bytes) |> Base.url_encode64(padding: false)
+    @token_bytes |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
   end
 end

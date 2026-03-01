@@ -10,6 +10,7 @@ defmodule Liteskill.Authorization.EntityAcl do
   """
 
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @primary_key {:id, :binary_id, autogenerate: true}
@@ -69,9 +70,7 @@ defmodule Liteskill.Authorization.EntityAcl do
     group_id = get_field(changeset, :group_id)
     agent_definition_id = get_field(changeset, :agent_definition_id)
 
-    set_count =
-      [user_id, group_id, agent_definition_id]
-      |> Enum.count(&(not is_nil(&1)))
+    set_count = Enum.count([user_id, group_id, agent_definition_id], &(not is_nil(&1)))
 
     case set_count do
       1 ->

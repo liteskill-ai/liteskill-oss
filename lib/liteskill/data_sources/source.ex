@@ -1,5 +1,7 @@
 defmodule Liteskill.DataSources.Source do
+  @moduledoc "Schema for configurable data sources (S3, web, git, etc.)."
   use Ecto.Schema
+
   import Ecto.Changeset
 
   @type t :: %__MODULE__{}

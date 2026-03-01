@@ -1,21 +1,26 @@
 defmodule LiteskillWeb.ChatLive do
+  @moduledoc false
   use LiteskillWeb, :live_view
 
   import LiteskillWeb.FormatHelpers, only: [format_cost: 1, format_number: 1]
 
   alias Liteskill.Chat
   alias Liteskill.Chat.MessageBuilder
+  alias Liteskill.Chat.Projector
+  alias Liteskill.LLM.RagContext
   alias Liteskill.LLM.StreamHandler
   alias Liteskill.McpServers
   alias LiteskillWeb.ChatComponents
-  alias LiteskillWeb.McpComponents
   alias LiteskillWeb.ChatLive.ConversationsHandler
   alias LiteskillWeb.ChatLive.CostHandler
   alias LiteskillWeb.ChatLive.EditHandler
   alias LiteskillWeb.ChatLive.Helpers, as: ChatHelpers
   alias LiteskillWeb.ChatLive.SourcesHandler
   alias LiteskillWeb.ChatLive.ToolHandler
-  alias LiteskillWeb.{SharingComponents, SharingLive, SourcesComponents}
+  alias LiteskillWeb.McpComponents
+  alias LiteskillWeb.SharingComponents
+  alias LiteskillWeb.SharingLive
+  alias LiteskillWeb.SourcesComponents
 
   @impl true
   def mount(_params, _session, socket) do
@@ -137,8 +142,7 @@ defmodule LiteskillWeb.ChatLive do
     # Unsubscribe from previous conversation if any
     maybe_unsubscribe(socket)
 
-    socket
-    |> assign(
+    assign(socket,
       conversation: nil,
       messages: [],
       streaming: false,
@@ -156,8 +160,7 @@ defmodule LiteskillWeb.ChatLive do
     managed = Chat.list_conversations(user_id, limit: page_size, offset: 0)
     total = Chat.count_conversations(user_id)
 
-    socket
-    |> assign(
+    assign(socket,
       conversation: nil,
       messages: [],
       streaming: false,
@@ -191,7 +194,7 @@ defmodule LiteskillWeb.ChatLive do
         {conversation, streaming} =
           if conversation.status == "streaming" && socket.assigns.stream_task_pid == nil do
             Chat.recover_stream(conversation_id, user_id)
-            Liteskill.Chat.Projector.sync()
+            Projector.sync()
             {:ok, recovered} = Chat.get_conversation(conversation_id, user_id)
             {recovered, false}
           else
@@ -202,8 +205,7 @@ defmodule LiteskillWeb.ChatLive do
           if streaming, do: ToolHandler.load_pending_tool_calls(conversation.messages), else: []
 
         socket =
-          socket
-          |> assign(
+          assign(socket,
             conversation: conversation,
             messages: conversation.messages,
             streaming: streaming,
@@ -777,8 +779,7 @@ defmodule LiteskillWeb.ChatLive do
         {:noreply, socket}
 
       socket.assigns.available_llm_models == [] ->
-        {:noreply,
-         put_flash(socket, :error, "No models configured. Add one in Settings > Models.")}
+        {:noreply, put_flash(socket, :error, "No models configured. Add one in Settings > Models.")}
 
       true ->
         user_id = socket.assigns.current_user.id
@@ -794,9 +795,7 @@ defmodule LiteskillWeb.ChatLive do
 
             case Chat.create_conversation(create_params) do
               {:ok, conversation} ->
-                case Chat.send_message(conversation.id, user_id, content,
-                       tool_config: tool_config
-                     ) do
+                case Chat.send_message(conversation.id, user_id, content, tool_config: tool_config) do
                   {:ok, _message} ->
                     {:noreply, push_navigate(socket, to: "/c/#{conversation.id}?auto_stream=1")}
 
@@ -815,8 +814,7 @@ defmodule LiteskillWeb.ChatLive do
                 pid = trigger_llm_stream(conversation, user_id, socket, tool_config)
 
                 {:noreply,
-                 socket
-                 |> assign(
+                 assign(socket,
                    messages: messages,
                    form: to_form(%{"content" => ""}, as: :message),
                    streaming: true,
@@ -868,8 +866,7 @@ defmodule LiteskillWeb.ChatLive do
       pid = trigger_llm_stream(conversation, user_id, socket, tool_config)
 
       {:noreply,
-       socket
-       |> assign(
+       assign(socket,
          streaming: true,
          stream_content: "",
          stream_error: nil,
@@ -979,17 +976,15 @@ defmodule LiteskillWeb.ChatLive do
            messages: messages,
            conversations: conversations,
            conversation: fresh_conv,
-           pending_tool_calls:
-             if(task_alive && db_streaming, do: socket.assigns.pending_tool_calls, else: []),
-           stream_task_pid: if(still_streaming, do: socket.assigns.stream_task_pid, else: nil)
+           pending_tool_calls: if(task_alive && db_streaming, do: socket.assigns.pending_tool_calls, else: []),
+           stream_task_pid: if(still_streaming, do: socket.assigns.stream_task_pid)
          )}
     end
   end
 
   def handle_info(:fetch_tools, socket), do: ToolHandler.handle_info(:fetch_tools, socket)
 
-  def handle_info(:reload_tool_calls, socket),
-    do: ToolHandler.handle_info(:reload_tool_calls, socket)
+  def handle_info(:reload_tool_calls, socket), do: ToolHandler.handle_info(:reload_tool_calls, socket)
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, socket) do
     if socket.assigns.streaming && pid == socket.assigns.stream_task_pid do
@@ -1001,10 +996,7 @@ defmodule LiteskillWeb.ChatLive do
 
   def handle_info(_msg, socket), do: {:noreply, socket}
 
-  defp handle_event_store_event(
-         %{event_type: "AssistantStreamStarted"},
-         socket
-       ) do
+  defp handle_event_store_event(%{event_type: "AssistantStreamStarted"}, socket) do
     # Clear pending_tool_calls — previous round's tool calls are now in the DB
     # and rendered inline on their parent message.
     assign(socket,
@@ -1015,38 +1007,25 @@ defmodule LiteskillWeb.ChatLive do
     )
   end
 
-  defp handle_event_store_event(
-         %{event_type: "AssistantChunkReceived", data: data},
-         socket
-       ) do
+  defp handle_event_store_event(%{event_type: "AssistantChunkReceived", data: data}, socket) do
     delta = data["delta_text"] || ""
     assign(socket, stream_content: socket.assigns.stream_content <> delta)
   end
 
-  defp handle_event_store_event(
-         %{event_type: "AssistantStreamCompleted"},
-         socket
-       ) do
+  defp handle_event_store_event(%{event_type: "AssistantStreamCompleted"}, socket) do
     # Delay reload to let the Projector finish updating the DB.
     # Keep streaming content visible until then.
     Process.send_after(self(), :reload_after_complete, 100)
     socket
   end
 
-  defp handle_event_store_event(
-         %{event_type: "AssistantStreamFailed", data: data},
-         socket
-       ) do
+  defp handle_event_store_event(%{event_type: "AssistantStreamFailed", data: data}, socket) do
     error = ChatHelpers.friendly_stream_error(data["error_type"], data["error_message"])
 
-    socket
-    |> assign(streaming: false, stream_content: "", stream_error: error)
+    assign(socket, streaming: false, stream_content: "", stream_error: error)
   end
 
-  defp handle_event_store_event(
-         %{event_type: "UserMessageAdded"},
-         socket
-       ) do
+  defp handle_event_store_event(%{event_type: "UserMessageAdded"}, socket) do
     # Reload messages (handles shared conversations)
     user_id = socket.assigns.current_user.id
     conversation = socket.assigns.conversation
@@ -1054,10 +1033,7 @@ defmodule LiteskillWeb.ChatLive do
     assign(socket, messages: messages)
   end
 
-  defp handle_event_store_event(
-         %{event_type: "ToolCallStarted", data: data},
-         socket
-       ) do
+  defp handle_event_store_event(%{event_type: "ToolCallStarted", data: data}, socket) do
     # Build tool call immediately from event data to avoid race with projector
     tc = ToolHandler.build_tool_call_from_event(data)
 
@@ -1068,10 +1044,7 @@ defmodule LiteskillWeb.ChatLive do
     assign(socket, pending_tool_calls: pending)
   end
 
-  defp handle_event_store_event(
-         %{event_type: "ToolCallCompleted", data: data},
-         socket
-       ) do
+  defp handle_event_store_event(%{event_type: "ToolCallCompleted", data: data}, socket) do
     # Update the pending tool call status immediately
     tool_use_id = data["tool_use_id"]
 
@@ -1119,7 +1092,7 @@ defmodule LiteskillWeb.ChatLive do
       if query && String.trim(query) != "" do
         case Liteskill.Rag.augment_context(query, user_id) do
           {:ok, results} when results != [] ->
-            {results, Liteskill.LLM.RagContext.serialize_sources(results)}
+            {results, RagContext.serialize_sources(results)}
 
           _ ->
             {[], nil}
@@ -1129,7 +1102,7 @@ defmodule LiteskillWeb.ChatLive do
       end
 
     system_prompt =
-      Liteskill.LLM.RagContext.build_system_prompt(rag_results, conversation.system_prompt)
+      RagContext.build_system_prompt(rag_results, conversation.system_prompt)
 
     opts = if system_prompt, do: [system: system_prompt], else: []
 
@@ -1203,13 +1176,12 @@ defmodule LiteskillWeb.ChatLive do
       user_id = socket.assigns.current_user.id
 
       Chat.recover_stream(conversation.id, user_id)
-      Liteskill.Chat.Projector.sync()
+      Projector.sync()
 
       {:ok, messages} = Chat.list_messages(conversation.id, user_id)
       {:ok, fresh_conv} = Chat.get_conversation(conversation.id, user_id)
 
-      socket
-      |> assign(
+      assign(socket,
         streaming: false,
         stream_content: "",
         messages: messages,

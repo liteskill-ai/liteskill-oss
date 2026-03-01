@@ -20,8 +20,7 @@ if System.get_env("PHX_SERVER") do
   config :liteskill, LiteskillWeb.Endpoint, server: true
 end
 
-config :liteskill, LiteskillWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+config :liteskill, LiteskillWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 # OIDC configuration (all environments)
 if System.get_env("OIDC_CLIENT_ID") do
@@ -43,6 +42,8 @@ if saml_metadata_file = System.get_env("SAML_IDP_METADATA_FILE") do
   host = System.get_env("PHX_HOST", "localhost")
   scheme = if System.get_env("PHX_SERVER"), do: "https", else: "http"
   saml_base_url = System.get_env("SAML_BASE_URL", "#{scheme}://#{host}:#{port}/sso")
+
+  config :liteskill, :saml_configured, true
 
   config :samly, Samly.Provider,
     idp_id_from: :path_segment,
@@ -67,9 +68,16 @@ if saml_metadata_file = System.get_env("SAML_IDP_METADATA_FILE") do
         signed_envelopes_in_resp: true
       }
     ]
-
-  config :liteskill, :saml_configured, true
 end
+
+# AWS Bedrock configuration (all environments)
+bedrock_overrides =
+  [
+    {System.get_env("AWS_BEARER_TOKEN_BEDROCK"), :bedrock_bearer_token},
+    {System.get_env("AWS_REGION"), :bedrock_region}
+  ]
+  |> Enum.reject(fn {val, _key} -> is_nil(val) end)
+  |> Enum.map(fn {val, key} -> {key, val} end)
 
 # ReqLLM connection pool — increase default Finch pool size for LLM concurrency.
 # Key must be :finch (not :finch_options) — that's what ReqLLM.Application reads.
@@ -86,15 +94,6 @@ config :req_llm,
       :default => [protocols: [:http1], size: 25, count: 1]
     }
   ]
-
-# AWS Bedrock configuration (all environments)
-bedrock_overrides =
-  [
-    {System.get_env("AWS_BEARER_TOKEN_BEDROCK"), :bedrock_bearer_token},
-    {System.get_env("AWS_REGION"), :bedrock_region}
-  ]
-  |> Enum.reject(fn {val, _key} -> is_nil(val) end)
-  |> Enum.map(fn {val, key} -> {key, val} end)
 
 if bedrock_overrides != [] do
   existing = Application.get_env(:liteskill, Liteskill.LLM, [])
@@ -157,11 +156,11 @@ if System.get_env("LITESKILL_DESKTOP") == "true" do
       cfg
     end
 
-  config :liteskill, :single_user_mode, true
-  config :liteskill, :desktop_mode, true
   config :liteskill, :desktop_data_dir, desktop_data_dir
+  config :liteskill, :desktop_mode, true
+  config :liteskill, :single_user_mode, true
 
-  unless System.get_env("ENCRYPTION_KEY") do
+  if !System.get_env("ENCRYPTION_KEY") do
     config :liteskill, :encryption_key, desktop_config["encryption_key"]
   end
 
@@ -170,6 +169,7 @@ if System.get_env("LITESKILL_DESKTOP") == "true" do
       {:win32, _} ->
         pg_port = String.to_integer(System.get_env("LITESKILL_PG_PORT", "15432"))
         config :liteskill, :desktop_pg_port, pg_port
+
         [database: "liteskill_desktop", hostname: "localhost", port: pg_port, pool_size: 5]
 
       _ ->
@@ -177,9 +177,9 @@ if System.get_env("LITESKILL_DESKTOP") == "true" do
         [database: "liteskill_desktop", socket_dir: socket_dir, pool_size: 5]
     end
 
-  config :liteskill, Liteskill.Repo, repo_opts
-
   port = String.to_integer(System.get_env("PORT", "4000"))
+
+  config :liteskill, Liteskill.Repo, repo_opts
 
   config :liteskill, LiteskillWeb.Endpoint,
     url: [host: "localhost", port: port, scheme: "http"],
@@ -212,14 +212,6 @@ if config_env() == :prod and System.get_env("LITESKILL_DESKTOP") != "true" do
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
-  config :liteskill, Liteskill.Repo,
-    # ssl: true,
-    url: database_url,
-    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
-    # For machines with several cores, consider starting multiple pools of `pool_size`
-    # pool_count: 4,
-    socket_options: maybe_ipv6
-
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
   # want to use a different value for prod and you most likely don't want
@@ -234,7 +226,13 @@ if config_env() == :prod and System.get_env("LITESKILL_DESKTOP") != "true" do
 
   host = System.get_env("PHX_HOST") || "example.com"
 
-  config :liteskill, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+  config :liteskill, Liteskill.Repo,
+    # ssl: true,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+    # For machines with several cores, consider starting multiple pools of `pool_size`
+    # pool_count: 4,
+    socket_options: maybe_ipv6
 
   config :liteskill, LiteskillWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
@@ -246,6 +244,8 @@ if config_env() == :prod and System.get_env("LITESKILL_DESKTOP") != "true" do
       ip: {0, 0, 0, 0, 0, 0, 0, 0}
     ],
     secret_key_base: secret_key_base
+
+  config :liteskill, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
   # ## SSL Support
   #

@@ -6,8 +6,11 @@ defmodule LiteskillWeb.WikiLive do
   use LiteskillWeb, :live_view
 
   alias Liteskill.Chat
-  alias LiteskillWeb.{ChatComponents, SharingComponents, SharingLive, WikiComponents}
+  alias LiteskillWeb.ChatComponents
   alias LiteskillWeb.Layouts
+  alias LiteskillWeb.SharingComponents
+  alias LiteskillWeb.SharingLive
+  alias LiteskillWeb.WikiComponents
 
   @sharing_events SharingLive.sharing_events()
 
@@ -42,7 +45,7 @@ defmodule LiteskillWeb.WikiLive do
        single_user_mode: Liteskill.SingleUser.enabled?()
      )
      |> allow_upload(:wiki_import, accept: ~w(.zip), max_entries: 1, max_file_size: 50_000_000)
-     |> assign(SharingLive.sharing_assigns()), layout: {LiteskillWeb.Layouts, :chat}}
+     |> assign(SharingLive.sharing_assigns()), layout: {Layouts, :chat}}
   end
 
   @impl true
@@ -589,8 +592,7 @@ defmodule LiteskillWeb.WikiLive do
     {:noreply, assign(socket, wiki_sidebar_open: !socket.assigns.wiki_sidebar_open)}
   end
 
-  def handle_event("toggle_wiki_view_mode", %{"mode" => mode}, socket)
-      when mode in ["card", "list"] do
+  def handle_event("toggle_wiki_view_mode", %{"mode" => mode}, socket) when mode in ["card", "list"] do
     {:noreply, assign(socket, wiki_view_mode: mode)}
   end
 
@@ -644,7 +646,7 @@ defmodule LiteskillWeb.WikiLive do
 
     case consumed do
       [zip_binary] ->
-        opts = if title != "", do: [space_title: title], else: []
+        opts = if title == "", do: [], else: [space_title: title]
 
         case Liteskill.DataSources.WikiImport.import_space(zip_binary, user_id, opts) do
           {:ok, space_doc} ->

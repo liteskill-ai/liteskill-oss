@@ -78,7 +78,7 @@ defmodule LiteskillWeb.SharingLive do
   def handle_event("search_users", %{"user_search" => query}, socket) do
     if String.length(query) >= 2 do
       existing_user_ids =
-        Enum.map(socket.assigns.sharing_acls, & &1.user_id) |> Enum.reject(&is_nil/1)
+        socket.assigns.sharing_acls |> Enum.map(& &1.user_id) |> Enum.reject(&is_nil/1)
 
       exclude = [socket.assigns.current_user.id | existing_user_ids]
       results = Liteskill.Accounts.search_users(query, exclude: exclude, limit: 5)

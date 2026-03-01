@@ -59,5 +59,5 @@ defmodule Liteskill.DataSources.Connectors.Wiki do
 
   # coveralls-ignore-next-line
   defp content_hash(nil), do: nil
-  defp content_hash(content), do: :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+  defp content_hash(content), do: :sha256 |> :crypto.hash(content) |> Base.encode16(case: :lower)
 end

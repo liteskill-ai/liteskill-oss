@@ -8,8 +8,8 @@ defmodule LiteskillWeb.AgentStudioComponents do
   import LiteskillWeb.FormatHelpers, only: [format_cost: 1, format_number: 1]
 
   alias Liteskill.Agents.AgentDefinition
-  alias Liteskill.Teams.TeamDefinition
   alias Liteskill.Runs.Run
+  alias Liteskill.Teams.TeamDefinition
   alias LiteskillWeb.ChatComponents
 
   # ---- Full-Page Form Wrappers ----
@@ -2017,8 +2017,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
   defp humanize_seconds(s) when s < 60, do: "#{s}s"
   defp humanize_seconds(s) when s < 3600, do: "#{div(s, 60)}m #{rem(s, 60)}s"
 
-  defp humanize_seconds(s),
-    do: "#{div(s, 3600)}h #{div(rem(s, 3600), 60)}m #{rem(s, 60)}s"
+  defp humanize_seconds(s), do: "#{div(s, 3600)}h #{div(rem(s, 3600), 60)}m #{rem(s, 60)}s"
 
   defp log_chat_role_class("system"), do: "bg-warning/10 border border-warning/20"
   defp log_chat_role_class("user"), do: "bg-primary/10 border border-primary/20"
@@ -2032,9 +2031,7 @@ defmodule LiteskillWeb.AgentStudioComponents do
   defp log_chat_role_badge("tool"), do: "badge-success"
   defp log_chat_role_badge(_), do: "badge-ghost"
 
-  defp log_chat_message_content(%{"role" => "system", "content" => content})
-       when is_binary(content),
-       do: content
+  defp log_chat_message_content(%{"role" => "system", "content" => content}) when is_binary(content), do: content
 
   defp log_chat_message_content(%{"content" => content}) when is_list(content) do
     Enum.map_join(content, "\n", fn

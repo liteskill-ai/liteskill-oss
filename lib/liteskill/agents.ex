@@ -1,4 +1,12 @@
 defmodule Liteskill.Agents do
+  @moduledoc """
+  Context for managing agent definitions.
+
+  Agent definitions are the "character sheets" for AI agents — name, backstory,
+  opinions, strategy, model, and tool/datasource access via ACLs.
+  All operations are ACL-controlled.
+  """
+
   use Boundary,
     top_level?: true,
     deps: [
@@ -15,19 +23,12 @@ defmodule Liteskill.Agents do
     ],
     exports: [AgentDefinition, ToolResolver, JidoAgent, Actions.LlmGenerate]
 
-  @moduledoc """
-  Context for managing agent definitions.
-
-  Agent definitions are the "character sheets" for AI agents — name, backstory,
-  opinions, strategy, model, and tool/datasource access via ACLs.
-  All operations are ACL-controlled.
-  """
+  import Ecto.Query
 
   alias Liteskill.Agents.AgentDefinition
   alias Liteskill.Authorization
+  alias Liteskill.McpServers.McpServer
   alias Liteskill.Repo
-
-  import Ecto.Query
 
   # --- CRUD ---
 
@@ -100,7 +101,8 @@ defmodule Liteskill.Agents do
   end
 
   def get_agent(id, user_id) do
-    case Repo.get(AgentDefinition, id)
+    case AgentDefinition
+         |> Repo.get(id)
          |> Repo.preload(llm_model: :provider) do
       nil ->
         {:error, :not_found}
@@ -118,7 +120,7 @@ defmodule Liteskill.Agents do
   end
 
   def get_agent!(id) do
-    Repo.get!(AgentDefinition, id) |> Repo.preload(llm_model: :provider)
+    AgentDefinition |> Repo.get!(id) |> Repo.preload(llm_model: :provider)
   end
 
   # --- Agent Resource Access (Tools) ---
@@ -126,7 +128,7 @@ defmodule Liteskill.Agents do
   @doc "Grants an agent access to an MCP server."
   def grant_tool_access(agent_definition_id, mcp_server_id, user_id) do
     with {:ok, agent} <- get_and_authorize_owner(agent_definition_id, user_id),
-         :ok <- verify_entity_exists(Liteskill.McpServers.McpServer, mcp_server_id) do
+         :ok <- verify_entity_exists(McpServer, mcp_server_id) do
       Authorization.grant_agent_access("mcp_server", mcp_server_id, agent.id)
     end
   end
@@ -140,7 +142,8 @@ defmodule Liteskill.Agents do
 
   @doc "Lists MCP server IDs accessible to an agent."
   def list_tool_server_ids(agent_definition_id) do
-    Authorization.agent_accessible_entity_ids("mcp_server", agent_definition_id)
+    "mcp_server"
+    |> Authorization.agent_accessible_entity_ids(agent_definition_id)
     |> Repo.all()
   end
 
@@ -148,7 +151,7 @@ defmodule Liteskill.Agents do
   def list_accessible_servers(agent_definition_id) do
     server_ids = list_tool_server_ids(agent_definition_id)
 
-    Liteskill.McpServers.McpServer
+    McpServer
     |> where([s], s.id in ^server_ids)
     |> order_by([s], asc: s.name)
     |> limit(1000)
@@ -174,7 +177,8 @@ defmodule Liteskill.Agents do
 
   @doc "Lists data source IDs accessible to an agent."
   def list_source_ids(agent_definition_id) do
-    Authorization.agent_accessible_entity_ids("source", agent_definition_id)
+    "source"
+    |> Authorization.agent_accessible_entity_ids(agent_definition_id)
     |> Repo.all()
   end
 

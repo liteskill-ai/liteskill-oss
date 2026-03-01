@@ -3,7 +3,8 @@ defmodule LiteskillWeb.ConversationJSON do
   JSON view helpers for conversation API responses.
   """
 
-  alias Liteskill.Chat.{Conversation, Message}
+  alias Liteskill.Chat.Conversation
+  alias Liteskill.Chat.Message
 
   def index(%{conversations: conversations}) do
     %{data: Enum.map(conversations, &conversation_summary/1)}

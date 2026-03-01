@@ -1,9 +1,9 @@
 defmodule Liteskill.Retry do
-  use Boundary, top_level?: true, deps: [], exports: []
-
   @moduledoc """
   Shared retry utilities: exponential backoff with jitter and interruptible sleep.
   """
+
+  use Boundary, top_level?: true, deps: [], exports: []
 
   @doc """
   Calculates exponential backoff with jitter.

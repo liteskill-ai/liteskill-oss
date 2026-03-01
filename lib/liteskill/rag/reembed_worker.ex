@@ -8,12 +8,15 @@ defmodule Liteskill.Rag.ReembedWorker do
 
   use Oban.Worker, queue: :rag_ingest, max_attempts: 3
 
+  import Ecto.Query
+
   alias Liteskill.Rag
-  alias Liteskill.Rag.{Chunk, Document, EmbeddingClient, EmbedQueue}
+  alias Liteskill.Rag.Chunk
+  alias Liteskill.Rag.Document
+  alias Liteskill.Rag.EmbeddingClient
+  alias Liteskill.Rag.EmbedQueue
   alias Liteskill.Repo
   alias Liteskill.Settings
-
-  import Ecto.Query
 
   @batch_size 10
 
@@ -59,9 +62,7 @@ defmodule Liteskill.Rag.ReembedWorker do
   end
 
   defp reembed_document(document, user_id, args) do
-    chunks =
-      from(c in Chunk, where: c.document_id == ^document.id, order_by: c.position)
-      |> Repo.all()
+    chunks = Repo.all(from(c in Chunk, where: c.document_id == ^document.id, order_by: c.position))
 
     if chunks == [] do
       document
@@ -80,7 +81,8 @@ defmodule Liteskill.Rag.ReembedWorker do
       case EmbedQueue.embed(texts, embed_opts) do
         {:ok, embeddings} ->
           Repo.transaction(fn ->
-            Enum.zip(chunks, embeddings)
+            chunks
+            |> Enum.zip(embeddings)
             |> Enum.each(fn {chunk, embedding} ->
               chunk
               |> Ecto.Changeset.change(%{embedding: Pgvector.new(embedding)})

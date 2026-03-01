@@ -57,7 +57,7 @@ defmodule Liteskill.DataSources.WikiExportTest do
 
       # Verify ZIP contents
       {:ok, file_list} = :zip.unzip(zip_binary, [:memory])
-      paths = Enum.map(file_list, fn {path, _} -> to_string(path) end) |> Enum.sort()
+      paths = file_list |> Enum.map(fn {path, _} -> to_string(path) end) |> Enum.sort()
 
       assert "manifest.json" in paths
       assert "child-one/child-one.md" in paths

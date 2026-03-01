@@ -51,8 +51,7 @@ defmodule Liteskill.BuiltinTools.Wiki do
             },
             "ranges" => %{
               "type" => "object",
-              "description" =>
-                "Line ranges per article ID, e.g. {\"<id>\": {\"start\": 1, \"end\": 50}}"
+              "description" => ~s(Line ranges per article ID, e.g. {"<id>": {"start": 1, "end": 50}})
             },
             "query" => %{
               "type" => "string",
@@ -125,12 +124,14 @@ defmodule Liteskill.BuiltinTools.Wiki do
   def call_tool(tool_name, input, context) do
     user_id = Keyword.fetch!(context, :user_id)
 
-    case tool_name do
-      "wiki__read" -> do_read(user_id, input)
-      "wiki__write" -> do_write(user_id, input)
-      _ -> {:error, "Unknown tool: #{tool_name}"}
-    end
-    |> wrap_result()
+    case_result =
+      case tool_name do
+        "wiki__read" -> do_read(user_id, input)
+        "wiki__write" -> do_write(user_id, input)
+        _ -> {:error, "Unknown tool: #{tool_name}"}
+      end
+
+    wrap_result(case_result)
   end
 
   # --- Read Operations ---
@@ -224,7 +225,7 @@ defmodule Liteskill.BuiltinTools.Wiki do
       Enum.map(docs, fn doc ->
         snippet =
           if doc.content do
-            doc.content |> String.slice(0, 200)
+            String.slice(doc.content, 0, 200)
           else
             ""
           end
@@ -254,23 +255,24 @@ defmodule Liteskill.BuiltinTools.Wiki do
   defp do_write(_user_id, _input), do: {:error, "Missing required field: actions"}
 
   defp execute_action(%{"action" => "create_space", "title" => title} = action, user_id) do
-    with :ok <- Liteskill.Rbac.authorize(user_id, "wiki_spaces:create") do
-      attrs = %{title: title}
-      attrs = if action["content"], do: Map.put(attrs, :content, action["content"]), else: attrs
+    case Liteskill.Rbac.authorize(user_id, "wiki_spaces:create") do
+      :ok ->
+        attrs = %{title: title}
+        attrs = if action["content"], do: Map.put(attrs, :content, action["content"]), else: attrs
 
-      attrs =
-        if action["description"],
-          do: Map.put(attrs, :description, action["description"]),
-          else: attrs
+        attrs =
+          if action["description"],
+            do: Map.put(attrs, :description, action["description"]),
+            else: attrs
 
-      case DataSources.create_document("builtin:wiki", attrs, user_id) do
-        {:ok, doc} ->
-          %{"action" => "create_space", "status" => "ok", "id" => doc.id, "title" => doc.title}
+        case DataSources.create_document("builtin:wiki", attrs, user_id) do
+          {:ok, doc} ->
+            %{"action" => "create_space", "status" => "ok", "id" => doc.id, "title" => doc.title}
 
-        {:error, reason} ->
-          %{"action" => "create_space", "status" => "error", "error" => format_error(reason)}
-      end
-    else
+          {:error, reason} ->
+            %{"action" => "create_space", "status" => "error", "error" => format_error(reason)}
+        end
+
       {:error, reason} ->
         %{"action" => "create_space", "status" => "error", "error" => format_error(reason)}
     end
@@ -280,10 +282,7 @@ defmodule Liteskill.BuiltinTools.Wiki do
     %{"action" => "create_space", "status" => "error", "error" => "missing title"}
   end
 
-  defp execute_action(
-         %{"action" => "create_article", "parent_id" => parent_id, "title" => title} = action,
-         user_id
-       ) do
+  defp execute_action(%{"action" => "create_article", "parent_id" => parent_id, "title" => title} = action, user_id) do
     attrs = %{title: title}
     attrs = if action["content"], do: Map.put(attrs, :content, action["content"]), else: attrs
 

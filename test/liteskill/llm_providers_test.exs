@@ -1,12 +1,12 @@
 defmodule Liteskill.LlmProvidersTest do
   use Liteskill.DataCase, async: false
 
+  import Ecto.Query
+
   alias Liteskill.Authorization.EntityAcl
   alias Liteskill.LlmProviders
   alias Liteskill.LlmProviders.LlmProvider
   alias Liteskill.Rbac
-
-  import Ecto.Query
 
   setup do
     # Ensure RBAC system roles exist
@@ -21,7 +21,7 @@ defmodule Liteskill.LlmProvidersTest do
       })
 
     # Give admin the Instance Admin role (which has "*" permission)
-    [admin_role] = Rbac.list_roles() |> Enum.filter(&(&1.name == "Instance Admin"))
+    [admin_role] = Enum.filter(Rbac.list_roles(), &(&1.name == "Instance Admin"))
     {:ok, _} = Rbac.assign_role_to_user(admin.id, admin_role.id)
 
     {:ok, other} =
@@ -52,25 +52,25 @@ defmodule Liteskill.LlmProvidersTest do
     end
 
     test "invalid without name", %{admin: admin} do
-      attrs = valid_attrs(admin.id) |> Map.delete(:name)
+      attrs = admin.id |> valid_attrs() |> Map.delete(:name)
       changeset = LlmProvider.changeset(%LlmProvider{}, attrs)
       refute changeset.valid?
     end
 
     test "invalid without provider_type", %{admin: admin} do
-      attrs = valid_attrs(admin.id) |> Map.delete(:provider_type)
+      attrs = admin.id |> valid_attrs() |> Map.delete(:provider_type)
       changeset = LlmProvider.changeset(%LlmProvider{}, attrs)
       refute changeset.valid?
     end
 
     test "invalid provider_type rejected", %{admin: admin} do
-      attrs = valid_attrs(admin.id) |> Map.put(:provider_type, "invalid_type")
+      attrs = admin.id |> valid_attrs() |> Map.put(:provider_type, "invalid_type")
       changeset = LlmProvider.changeset(%LlmProvider{}, attrs)
       refute changeset.valid?
     end
 
     test "invalid status rejected", %{admin: admin} do
-      attrs = valid_attrs(admin.id) |> Map.put(:status, "deleted")
+      attrs = admin.id |> valid_attrs() |> Map.put(:status, "deleted")
       changeset = LlmProvider.changeset(%LlmProvider{}, attrs)
       refute changeset.valid?
     end
@@ -116,7 +116,8 @@ defmodule Liteskill.LlmProvidersTest do
 
     test "creates provider with all optional fields", %{admin: admin} do
       attrs =
-        valid_attrs(admin.id)
+        admin.id
+        |> valid_attrs()
         |> Map.merge(%{
           api_key: "secret-api-key",
           provider_config: %{"region" => "us-west-2"},
@@ -132,7 +133,7 @@ defmodule Liteskill.LlmProvidersTest do
     end
 
     test "fails with invalid attrs", %{admin: admin} do
-      attrs = valid_attrs(admin.id) |> Map.delete(:name)
+      attrs = admin.id |> valid_attrs() |> Map.delete(:name)
       assert {:error, _changeset} = LlmProviders.create_provider(attrs)
     end
   end
@@ -202,7 +203,7 @@ defmodule Liteskill.LlmProvidersTest do
     end
 
     test "returns instance_wide providers to other users", %{admin: admin, other: other} do
-      attrs = valid_attrs(admin.id) |> Map.put(:instance_wide, true)
+      attrs = admin.id |> valid_attrs() |> Map.put(:instance_wide, true)
       {:ok, _} = LlmProviders.create_provider(attrs)
 
       providers = LlmProviders.list_providers(other.id)
@@ -231,10 +232,10 @@ defmodule Liteskill.LlmProvidersTest do
 
     test "returns providers ordered by name", %{admin: admin} do
       {:ok, p1} =
-        LlmProviders.create_provider(valid_attrs(admin.id) |> Map.put(:name, "Zzz Provider"))
+        admin.id |> valid_attrs() |> Map.put(:name, "Zzz Provider") |> LlmProviders.create_provider()
 
       {:ok, p2} =
-        LlmProviders.create_provider(valid_attrs(admin.id) |> Map.put(:name, "Aaa Provider"))
+        admin.id |> valid_attrs() |> Map.put(:name, "Aaa Provider") |> LlmProviders.create_provider()
 
       {:ok, _} =
         LlmProviders.grant_usage(p1.id, admin.id, admin.id)
@@ -257,7 +258,7 @@ defmodule Liteskill.LlmProvidersTest do
     end
 
     test "instance_wide provider accessible to all", %{admin: admin, other: other} do
-      attrs = valid_attrs(admin.id) |> Map.put(:instance_wide, true)
+      attrs = admin.id |> valid_attrs() |> Map.put(:instance_wide, true)
       {:ok, provider} = LlmProviders.create_provider(attrs)
 
       assert {:ok, _} = LlmProviders.get_provider(provider.id, other.id)
@@ -320,7 +321,7 @@ defmodule Liteskill.LlmProvidersTest do
 
       providers = LlmProviders.list_providers(admin.id)
       env_provider = Enum.find(providers, &(&1.name == "Bedrock (environment)"))
-      assert env_provider != nil
+      assert env_provider
       assert env_provider.provider_type == "amazon_bedrock"
       assert env_provider.api_key == "test-env-token"
       assert env_provider.provider_config == %{"region" => "us-west-2"}
@@ -531,7 +532,7 @@ defmodule Liteskill.LlmProvidersTest do
       {:ok, _admin_provider} = LlmProviders.create_provider(valid_attrs(admin.id))
 
       {:ok, other_provider} =
-        LlmProviders.create_provider(valid_attrs(other.id) |> Map.put(:name, "Other's Provider"))
+        other.id |> valid_attrs() |> Map.put(:name, "Other's Provider") |> LlmProviders.create_provider()
 
       owned = LlmProviders.list_owned_providers(other.id)
       assert length(owned) == 1
@@ -567,7 +568,7 @@ defmodule Liteskill.LlmProvidersTest do
 
   describe "encrypted fields" do
     test "api_key is encrypted and decrypted", %{admin: admin} do
-      attrs = valid_attrs(admin.id) |> Map.put(:api_key, "super-secret-key-123")
+      attrs = admin.id |> valid_attrs() |> Map.put(:api_key, "super-secret-key-123")
       {:ok, provider} = LlmProviders.create_provider(attrs)
 
       reloaded = Repo.get!(LlmProvider, provider.id)
@@ -576,7 +577,7 @@ defmodule Liteskill.LlmProvidersTest do
 
     test "provider_config is encrypted and decrypted", %{admin: admin} do
       config = %{"region" => "eu-west-1", "custom_field" => "value"}
-      attrs = valid_attrs(admin.id) |> Map.put(:provider_config, config)
+      attrs = admin.id |> valid_attrs() |> Map.put(:provider_config, config)
       {:ok, provider} = LlmProviders.create_provider(attrs)
 
       reloaded = Repo.get!(LlmProvider, provider.id)

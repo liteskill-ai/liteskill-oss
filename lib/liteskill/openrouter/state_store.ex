@@ -10,8 +10,8 @@ defmodule Liteskill.OpenRouter.StateStore do
   use GenServer
 
   @table :openrouter_oauth_state
-  @ttl_ms :timer.minutes(5)
-  @cleanup_interval_ms :timer.minutes(1)
+  @ttl_ms to_timeout(minute: 5)
+  @cleanup_interval_ms to_timeout(minute: 1)
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)

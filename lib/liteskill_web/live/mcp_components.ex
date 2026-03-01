@@ -619,7 +619,8 @@ defmodule LiteskillWeb.McpComponents do
     required_fields = get_in(assigns.tool, ["inputSchema", "required"]) || []
 
     params =
-      Enum.map(properties, fn {name, schema} ->
+      properties
+      |> Enum.map(fn {name, schema} ->
         %{
           name: name,
           type: schema["type"] || "any",

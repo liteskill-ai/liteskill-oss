@@ -14,9 +14,11 @@ defmodule Liteskill.LLM.StreamHandler do
   """
 
   alias Liteskill.Aggregate.Loader
-  alias Liteskill.Chat.{ConversationAggregate, Projector}
-  alias Liteskill.LlmGateway.{ProviderGate, TokenBucket}
+  alias Liteskill.Chat.ConversationAggregate
+  alias Liteskill.Chat.Projector
   alias Liteskill.LLM.ToolUtils
+  alias Liteskill.LlmGateway.ProviderGate
+  alias Liteskill.LlmGateway.TokenBucket
   alias Liteskill.Retry
   alias Liteskill.Usage
 
@@ -51,9 +53,7 @@ defmodule Liteskill.LLM.StreamHandler do
       do_start_stream(stream_id, messages, opts)
     else
       {:error, reason} = error ->
-        Logger.warning(
-          "StreamHandler: pre-flight check failed for #{stream_id}: #{inspect(reason)}"
-        )
+        Logger.warning("StreamHandler: pre-flight check failed for #{stream_id}: #{inspect(reason)}")
 
         error
     end
@@ -68,9 +68,7 @@ defmodule Liteskill.LLM.StreamHandler do
         :ok
 
       {:error, :cost_limit_exceeded, current} ->
-        {:error,
-         {"cost_limit",
-          "Cost limit of $#{cost_limit} reached (spent: $#{Decimal.round(current, 4)})"}}
+        {:error, {"cost_limit", "Cost limit of $#{cost_limit} reached (spent: $#{Decimal.round(current, 4)})"}}
     end
   end
 
@@ -132,11 +130,9 @@ defmodule Liteskill.LLM.StreamHandler do
     end
   end
 
-  defp check_context_size(messages, %{context_window: cw})
-       when is_integer(cw) and cw > 0 do
+  defp check_context_size(messages, %{context_window: cw}) when is_integer(cw) and cw > 0 do
     estimated_bytes =
-      messages
-      |> Enum.reduce(0, fn msg, acc ->
+      Enum.reduce(messages, 0, fn msg, acc ->
         content = msg[:content] || msg["content"] || ""
         acc + content_byte_size(content)
       end)
@@ -194,8 +190,7 @@ defmodule Liteskill.LLM.StreamHandler do
       rag_sources = Keyword.get(opts, :rag_sources)
 
       command =
-        {:start_assistant_stream,
-         %{message_id: message_id, model_id: model_id, rag_sources: rag_sources}}
+        {:start_assistant_stream, %{message_id: message_id, model_id: model_id, rag_sources: rag_sources}}
 
       case Loader.execute(ConversationAggregate, stream_id, command) do
         {:ok, _state, events} ->
@@ -296,9 +291,7 @@ defmodule Liteskill.LLM.StreamHandler do
             %{stream_id: stream_id, attempt: retry_count + 1, error_label: label}
           )
 
-          Logger.warning(
-            "StreamHandler #{label}, retrying in #{backoff}ms (attempt #{retry_count + 1})"
-          )
+          Logger.warning("StreamHandler #{label}, retrying in #{backoff}ms (attempt #{retry_count + 1})")
 
           # coveralls-ignore-start — cancel path untestable without race
           Retry.interruptible_sleep(backoff)
@@ -380,14 +373,14 @@ defmodule Liteskill.LLM.StreamHandler do
   defp convert_message(%{"role" => "user", "content" => blocks}) when is_list(blocks) do
     tool_results = Enum.filter(blocks, &match?(%{"toolResult" => _}, &1))
 
-    if tool_results != [] do
+    if tool_results == [] do
+      text = extract_text_from_blocks(blocks)
+      [ReqLLM.Context.user(text)]
+    else
       Enum.map(tool_results, fn %{"toolResult" => tr} ->
         text = extract_tool_result_text(tr)
         ReqLLM.Context.tool_result(tr["toolUseId"], text)
       end)
-    else
-      text = extract_text_from_blocks(blocks)
-      [ReqLLM.Context.user(text)]
     end
   end
 
@@ -395,15 +388,15 @@ defmodule Liteskill.LLM.StreamHandler do
     text = extract_text_from_blocks(blocks)
     tool_use_blocks = Enum.filter(blocks, &match?(%{"toolUse" => _}, &1))
 
-    if tool_use_blocks != [] do
+    if tool_use_blocks == [] do
+      [ReqLLM.Context.assistant(text)]
+    else
       tool_calls =
         Enum.map(tool_use_blocks, fn %{"toolUse" => tu} ->
           %{id: tu["toolUseId"], name: tu["name"], arguments: tu["input"] || %{}}
         end)
 
       [ReqLLM.Context.assistant(text, tool_calls: tool_calls)]
-    else
-      [ReqLLM.Context.assistant(text)]
     end
   end
 
@@ -496,9 +489,7 @@ defmodule Liteskill.LLM.StreamHandler do
   def retryable_error?(%{status: status}) when status in [429, 500, 502, 503, 504, 408], do: true
   def retryable_error?(%Mint.TransportError{}), do: true
 
-  def retryable_error?(%{reason: reason})
-      when reason in ["timeout", :timeout, "closed", :closed],
-      do: true
+  def retryable_error?(%{reason: reason}) when reason in ["timeout", :timeout, "closed", :closed], do: true
 
   def retryable_error?(reason) when reason in [:timeout, :closed, :econnrefused], do: true
   def retryable_error?({:timeout, _}), do: true
@@ -513,11 +504,10 @@ defmodule Liteskill.LLM.StreamHandler do
   def retryable_error_label(_), do: "transient error"
 
   @doc false
-  def extract_error_message(%{status: status, response_body: rb})
-      when is_integer(status) and is_map(rb) do
+  def extract_error_message(%{status: status, response_body: rb}) when is_integer(status) and is_map(rb) do
     body_text = Map.get(rb, "message", Map.get(rb, "Message", Jason.encode!(rb)))
     body_text = truncate_error(body_text, 500)
-    if body_text != "", do: "HTTP #{status}: #{body_text}", else: "HTTP #{status}"
+    if body_text == "", do: "HTTP #{status}", else: "HTTP #{status}: #{body_text}"
   end
 
   def extract_error_message(%{status: status, body: body}) when is_integer(status) do
@@ -530,13 +520,12 @@ defmodule Liteskill.LLM.StreamHandler do
       end
 
     body_text = truncate_error(body_text, 500)
-    if body_text != "", do: "HTTP #{status}: #{body_text}", else: "HTTP #{status}"
+    if body_text == "", do: "HTTP #{status}", else: "HTTP #{status}: #{body_text}"
   end
 
   def extract_error_message(%{status: status}) when is_integer(status), do: "HTTP #{status}"
 
-  def extract_error_message(%Mint.TransportError{reason: reason}),
-    do: "connection error: #{reason}"
+  def extract_error_message(%Mint.TransportError{reason: reason}), do: "connection error: #{reason}"
 
   def extract_error_message(%{reason: reason}) when is_binary(reason) do
     extract_provider_config_message(reason) || reason
@@ -608,11 +597,9 @@ defmodule Liteskill.LLM.StreamHandler do
   end
 
   # Unwrap nested error tuples from ReqLLM (e.g. {:http_streaming_failed, {:provider_build_failed, struct}})
-  def normalize_error({_outer, {_inner, %{} = error}}) when is_struct(error),
-    do: normalize_error(error)
+  def normalize_error({_outer, {_inner, %{} = error}}) when is_struct(error), do: normalize_error(error)
 
-  def normalize_error({_outer, %{} = error}) when is_struct(error),
-    do: normalize_error(error)
+  def normalize_error({_outer, %{} = error}) when is_struct(error), do: normalize_error(error)
 
   def normalize_error(error), do: error
 
@@ -623,7 +610,7 @@ defmodule Liteskill.LLM.StreamHandler do
   allowed tools list. Returns no tool calls if tools list is empty (deny-all).
   """
   def validate_tool_calls(tool_calls, tools) do
-    allowed = tools |> Enum.map(&get_in(&1, ["toolSpec", "name"])) |> MapSet.new()
+    allowed = MapSet.new(tools, &get_in(&1, ["toolSpec", "name"]))
 
     if MapSet.size(allowed) == 0 do
       []
@@ -638,10 +625,10 @@ defmodule Liteskill.LLM.StreamHandler do
   """
   def build_assistant_content(full_content, tool_calls) do
     text_blocks =
-      if full_content != "" do
-        [%{"text" => full_content}]
-      else
+      if full_content == "" do
         []
+      else
+        [%{"text" => full_content}]
       end
 
     tool_use_blocks =
@@ -666,19 +653,12 @@ defmodule Liteskill.LLM.StreamHandler do
 
   # -- Stream success dispatch --
 
-  defp handle_stream_success(
-         stream_id,
-         message_id,
-         messages,
-         full_content,
-         tool_calls,
-         start_time,
-         usage,
-         opts
-       ) do
+  defp handle_stream_success(stream_id, message_id, messages, full_content, tool_calls, start_time, usage, opts) do
     latency_ms = System.monotonic_time(:millisecond) - start_time
 
-    if tool_calls != [] do
+    if tool_calls == [] do
+      complete_stream(stream_id, message_id, full_content, latency_ms, usage, opts)
+    else
       handle_tool_calls(
         stream_id,
         message_id,
@@ -689,23 +669,12 @@ defmodule Liteskill.LLM.StreamHandler do
         usage,
         opts
       )
-    else
-      complete_stream(stream_id, message_id, full_content, latency_ms, usage, opts)
     end
   end
 
   # -- Tool call handling --
 
-  defp handle_tool_calls(
-         stream_id,
-         message_id,
-         messages,
-         full_content,
-         tool_calls,
-         latency_ms,
-         usage,
-         opts
-       ) do
+  defp handle_tool_calls(stream_id, message_id, messages, full_content, tool_calls, latency_ms, usage, opts) do
     tools = Keyword.get(opts, :tools, [])
     validated = validate_tool_calls(tool_calls, tools)
 
@@ -725,20 +694,11 @@ defmodule Liteskill.LLM.StreamHandler do
     end
   end
 
-  defp do_handle_tool_calls(
-         stream_id,
-         message_id,
-         messages,
-         full_content,
-         parsed_tool_calls,
-         latency_ms,
-         usage,
-         opts
-       ) do
+  defp do_handle_tool_calls(stream_id, message_id, messages, full_content, parsed_tool_calls, latency_ms, usage, opts) do
     auto_confirm = Keyword.get(opts, :auto_confirm, false)
 
     approval_topic = "tool_approval:#{stream_id}"
-    unless auto_confirm, do: Phoenix.PubSub.subscribe(Liteskill.PubSub, approval_topic)
+    if !auto_confirm, do: Phoenix.PubSub.subscribe(Liteskill.PubSub, approval_topic)
 
     Enum.each(parsed_tool_calls, fn tc ->
       command =
@@ -767,7 +727,7 @@ defmodule Liteskill.LLM.StreamHandler do
         opts
       )
 
-    unless auto_confirm, do: Phoenix.PubSub.unsubscribe(Liteskill.PubSub, approval_topic)
+    if !auto_confirm, do: Phoenix.PubSub.unsubscribe(Liteskill.PubSub, approval_topic)
 
     complete_stream_with_stop_reason(
       stream_id,
@@ -814,9 +774,7 @@ defmodule Liteskill.LLM.StreamHandler do
         {:error, :cost_limit_exceeded, _current} ->
           gateway_checkin(opts, :ok)
 
-          Logger.warning(
-            "StreamHandler: cost limit exceeded for #{stream_id}, stopping tool-call loop"
-          )
+          Logger.warning("StreamHandler: cost limit exceeded for #{stream_id}, stopping tool-call loop")
 
           {:error, :cost_limit_exceeded}
       end
@@ -825,14 +783,7 @@ defmodule Liteskill.LLM.StreamHandler do
     end
   end
 
-  defp execute_or_await_tool_calls(
-         stream_id,
-         message_id,
-         parsed_tool_calls,
-         true = _auto_confirm,
-         _topic,
-         opts
-       ) do
+  defp execute_or_await_tool_calls(stream_id, message_id, parsed_tool_calls, true = _auto_confirm, _topic, opts) do
     tool_servers = Keyword.get(opts, :tool_servers, %{})
 
     Enum.map(parsed_tool_calls, fn tc ->
@@ -841,14 +792,7 @@ defmodule Liteskill.LLM.StreamHandler do
     end)
   end
 
-  defp execute_or_await_tool_calls(
-         stream_id,
-         message_id,
-         parsed_tool_calls,
-         false = _auto_confirm,
-         _topic,
-         opts
-       ) do
+  defp execute_or_await_tool_calls(stream_id, message_id, parsed_tool_calls, false = _auto_confirm, _topic, opts) do
     tool_servers = Keyword.get(opts, :tool_servers, %{})
     pending_ids = MapSet.new(parsed_tool_calls, & &1.tool_use_id)
     timeout_ms = Keyword.get(opts, :tool_approval_timeout_ms, @default_tool_approval_timeout_ms)
@@ -950,15 +894,7 @@ defmodule Liteskill.LLM.StreamHandler do
     )
   end
 
-  defp complete_stream_with_stop_reason(
-         stream_id,
-         message_id,
-         full_content,
-         stop_reason,
-         latency_ms,
-         usage,
-         opts
-       ) do
+  defp complete_stream_with_stop_reason(stream_id, message_id, full_content, stop_reason, latency_ms, usage, opts) do
     # Release the gateway slot before event-store write — the LLM call is done.
     # The next tool-call round will do a fresh checkout via handle_stream/3.
     # Double-checkin is safe (ProviderGate uses ref matching).

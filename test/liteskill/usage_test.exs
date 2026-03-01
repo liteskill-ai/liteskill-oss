@@ -1,6 +1,9 @@
 defmodule Liteskill.UsageTest do
   use Liteskill.DataCase, async: false
 
+  alias Liteskill.LlmModels.LlmModel
+  alias Liteskill.LlmProviders.LlmProvider
+  alias Liteskill.Rag.EmbeddingRequest
   alias Liteskill.Usage
   alias Liteskill.Usage.UsageRecord
 
@@ -122,9 +125,9 @@ defmodule Liteskill.UsageTest do
     end
 
     test "extracts model_id from llm_model struct", %{user: user} do
-      llm_model = %Liteskill.LlmModels.LlmModel{
+      llm_model = %LlmModel{
         model_id: "claude-from-struct",
-        provider: %Liteskill.LlmProviders.LlmProvider{
+        provider: %LlmProvider{
           provider_type: "anthropic",
           api_key: "k",
           provider_config: %{}
@@ -173,11 +176,11 @@ defmodule Liteskill.UsageTest do
     end
 
     test "calculates costs from model rates when API returns no costs", %{user: user} do
-      llm_model = %Liteskill.LlmModels.LlmModel{
+      llm_model = %LlmModel{
         model_id: "rated-model",
         input_cost_per_million: Decimal.new("3"),
         output_cost_per_million: Decimal.new("15"),
-        provider: %Liteskill.LlmProviders.LlmProvider{
+        provider: %LlmProvider{
           provider_type: "anthropic",
           api_key: "k",
           provider_config: %{}
@@ -216,13 +219,9 @@ defmodule Liteskill.UsageTest do
 
   describe "usage_by_conversation/1" do
     test "returns aggregated usage for a conversation", %{user: user, conversation: conv} do
-      Usage.record_usage(
-        valid_attrs(user, conv, %{input_tokens: 100, output_tokens: 50, total_tokens: 150})
-      )
+      Usage.record_usage(valid_attrs(user, conv, %{input_tokens: 100, output_tokens: 50, total_tokens: 150}))
 
-      Usage.record_usage(
-        valid_attrs(user, conv, %{input_tokens: 200, output_tokens: 100, total_tokens: 300})
-      )
+      Usage.record_usage(valid_attrs(user, conv, %{input_tokens: 200, output_tokens: 100, total_tokens: 300}))
 
       result = Usage.usage_by_conversation(conv.id)
 
@@ -289,17 +288,11 @@ defmodule Liteskill.UsageTest do
 
   describe "usage_by_user_and_model/2" do
     test "returns usage grouped by model", %{user: user, conversation: conv} do
-      Usage.record_usage(
-        valid_attrs(user, conv, %{model_id: "model-a", input_tokens: 100, total_tokens: 100})
-      )
+      Usage.record_usage(valid_attrs(user, conv, %{model_id: "model-a", input_tokens: 100, total_tokens: 100}))
 
-      Usage.record_usage(
-        valid_attrs(user, conv, %{model_id: "model-a", input_tokens: 200, total_tokens: 200})
-      )
+      Usage.record_usage(valid_attrs(user, conv, %{model_id: "model-a", input_tokens: 200, total_tokens: 200}))
 
-      Usage.record_usage(
-        valid_attrs(user, conv, %{model_id: "model-b", input_tokens: 50, total_tokens: 50})
-      )
+      Usage.record_usage(valid_attrs(user, conv, %{model_id: "model-b", input_tokens: 50, total_tokens: 50}))
 
       results = Usage.usage_by_user_and_model(user.id)
 
@@ -506,13 +499,9 @@ defmodule Liteskill.UsageTest do
     end
 
     test "returns aggregated usage for a run", %{user: user, conversation: conv, run: run} do
-      Usage.record_usage(
-        valid_attrs(user, conv, %{run_id: run.id, input_tokens: 100, total_tokens: 150})
-      )
+      Usage.record_usage(valid_attrs(user, conv, %{run_id: run.id, input_tokens: 100, total_tokens: 150}))
 
-      Usage.record_usage(
-        valid_attrs(user, conv, %{run_id: run.id, input_tokens: 200, total_tokens: 300})
-      )
+      Usage.record_usage(valid_attrs(user, conv, %{run_id: run.id, input_tokens: 200, total_tokens: 300}))
 
       # Record outside this run — should not be counted
       Usage.record_usage(valid_attrs(user, conv, %{input_tokens: 999, total_tokens: 999}))
@@ -715,8 +704,8 @@ defmodule Liteskill.UsageTest do
         overrides
       )
 
-    %Liteskill.Rag.EmbeddingRequest{}
-    |> Liteskill.Rag.EmbeddingRequest.changeset(attrs)
+    %EmbeddingRequest{}
+    |> EmbeddingRequest.changeset(attrs)
     |> Repo.insert!()
   end
 
@@ -861,9 +850,7 @@ defmodule Liteskill.UsageTest do
         })
 
       {:ok, _} =
-        Usage.record_usage(
-          valid_attrs(user, conv, %{run_id: run.id, total_cost: Decimal.new("2.00")})
-        )
+        Usage.record_usage(valid_attrs(user, conv, %{run_id: run.id, total_cost: Decimal.new("2.00")}))
 
       assert {:error, :cost_limit_exceeded, _} =
                Usage.check_cost_limit(:run, run.id, Decimal.new("1.00"))

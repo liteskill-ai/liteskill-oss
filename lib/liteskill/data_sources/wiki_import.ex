@@ -85,8 +85,7 @@ defmodule Liteskill.DataSources.WikiImport do
 
     # Group by top-level entry
     groups =
-      relevant
-      |> Enum.group_by(fn {relative, _} ->
+      Enum.group_by(relevant, fn {relative, _} ->
         relative |> String.split("/", parts: 2) |> hd()
       end)
 

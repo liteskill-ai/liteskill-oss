@@ -1,9 +1,9 @@
 defmodule Liteskill.OpenRouter do
-  use Boundary, top_level?: true, deps: [], exports: [StateStore, Models]
-
   @moduledoc """
   OpenRouter OAuth PKCE flow — generate challenges and exchange authorization codes for API keys.
   """
+
+  use Boundary, top_level?: true, deps: [], exports: [StateStore, Models]
 
   @auth_url "https://openrouter.ai/auth"
   @exchange_url "https://openrouter.ai/api/v1/auth/keys"
@@ -15,11 +15,13 @@ defmodule Liteskill.OpenRouter do
   """
   def generate_pkce do
     verifier =
-      :crypto.strong_rand_bytes(32)
+      32
+      |> :crypto.strong_rand_bytes()
       |> Base.url_encode64(padding: false)
 
     challenge =
-      :crypto.hash(:sha256, verifier)
+      :sha256
+      |> :crypto.hash(verifier)
       |> Base.url_encode64(padding: false)
 
     {verifier, challenge}

@@ -1,4 +1,5 @@
 defmodule Liteskill.Chat.Events.AssistantStreamCompleted do
+  @moduledoc false
   @derive Jason.Encoder
   defstruct [
     :message_id,

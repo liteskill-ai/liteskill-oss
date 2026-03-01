@@ -23,8 +23,7 @@ defmodule LiteskillWeb.ErrorHelpers do
   def humanize_error(:cannot_modify_owner), do: "cannot change owner's role"
   def humanize_error(:cannot_demote_root_admin), do: "cannot remove admin from root admin"
 
-  def humanize_error(reason) when is_atom(reason),
-    do: reason |> Atom.to_string() |> String.replace("_", " ")
+  def humanize_error(reason) when is_atom(reason), do: reason |> Atom.to_string() |> String.replace("_", " ")
 
   def humanize_error(reason) when is_binary(reason), do: reason
 

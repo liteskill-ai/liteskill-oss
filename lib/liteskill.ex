@@ -1,6 +1,4 @@
 defmodule Liteskill do
-  use Boundary, check: [in: false, out: false]
-
   @moduledoc """
   Liteskill keeps the contexts that define your domain
   and business logic.
@@ -8,4 +6,5 @@ defmodule Liteskill do
   Contexts are also responsible for managing your data, regardless
   if it comes from the database, an external API or others.
   """
+  use Boundary, check: [in: false, out: false]
 end
