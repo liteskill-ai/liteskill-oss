@@ -246,6 +246,12 @@ defmodule LiteskillWeb.McpComponents do
         ]}>
           {@tool_call.status}
         </span>
+        <span
+          :if={@tool_call.status == "completed" && @tool_call.duration_ms}
+          class="text-[0.65rem] italic text-base-content/40"
+        >
+          Ran for: {format_duration_ms(@tool_call.duration_ms)}
+        </span>
       </div>
       <div :if={@show_actions && @tool_call.status == "started"} class="flex gap-1 items-center">
         <button
@@ -506,6 +512,22 @@ defmodule LiteskillWeb.McpComponents do
         {"", name}
     end
   end
+
+  defp format_duration_ms(ms) when is_integer(ms) and ms < 1000, do: "#{ms}ms"
+
+  defp format_duration_ms(ms) when is_integer(ms) and ms < 60_000 do
+    seconds = ms / 1000
+    :erlang.float_to_binary(seconds, decimals: 2) <> " seconds"
+  end
+
+  defp format_duration_ms(ms) when is_integer(ms) do
+    total_sec = div(ms, 1000)
+    m = div(total_sec, 60)
+    s = rem(total_sec, 60)
+    "#{m}m #{s}s"
+  end
+
+  defp format_duration_ms(_), do: ""
 
   defp prepare_output(nil), do: {:text, ""}
 

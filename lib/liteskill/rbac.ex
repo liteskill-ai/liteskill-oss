@@ -2,7 +2,7 @@ defmodule Liteskill.Rbac do
   use Boundary,
     top_level?: true,
     deps: [Liteskill.Accounts, Liteskill.Groups],
-    exports: [Permissions, Role, UserRole, GroupRole]
+    exports: [Permissions, Role, UserRole, GroupRole, AgentRole]
 
   @moduledoc """
   Role-based access control context.
@@ -11,7 +11,7 @@ defmodule Liteskill.Rbac do
   Orthogonal to EntityAcl which controls per-resource access.
   """
 
-  alias Liteskill.Rbac.{GroupRole, Permissions, Role, UserRole}
+  alias Liteskill.Rbac.{AgentRole, GroupRole, Permissions, Role, UserRole}
   alias Liteskill.Repo
 
   import Ecto.Query
@@ -251,6 +251,46 @@ defmodule Liteskill.Rbac do
     |> Repo.all()
   end
 
+  # --- Agent role assignments ---
+
+  def assign_role_to_agent(agent_definition_id, role_id) do
+    %AgentRole{}
+    |> AgentRole.changeset(%{agent_definition_id: agent_definition_id, role_id: role_id})
+    |> Repo.insert()
+  end
+
+  def remove_role_from_agent(agent_definition_id, role_id) do
+    case Repo.one(
+           from ar in AgentRole,
+             where: ar.agent_definition_id == ^agent_definition_id and ar.role_id == ^role_id
+         ) do
+      nil -> {:error, :not_found}
+      agent_role -> Repo.delete(agent_role)
+    end
+  end
+
+  def list_agent_roles(agent_definition_id) do
+    from(r in Role,
+      join: ar in AgentRole,
+      on: ar.role_id == r.id,
+      where: ar.agent_definition_id == ^agent_definition_id,
+      order_by: [desc: r.system, asc: r.name]
+    )
+    |> Repo.all()
+  end
+
+  def list_agent_permissions(agent_definition_id) do
+    from(r in Role,
+      join: ar in AgentRole,
+      on: ar.role_id == r.id,
+      where: ar.agent_definition_id == ^agent_definition_id,
+      select: r.permissions
+    )
+    |> Repo.all()
+    |> List.flatten()
+    |> MapSet.new()
+  end
+
   # --- Query helpers for admin UI ---
 
   def list_role_users(role_id) do
@@ -259,6 +299,14 @@ defmodule Liteskill.Rbac do
       on: ur.user_id == u.id,
       where: ur.role_id == ^role_id,
       order_by: [asc: u.email]
+    )
+    |> Repo.all()
+  end
+
+  def list_role_agent_ids(role_id) do
+    from(ar in AgentRole,
+      where: ar.role_id == ^role_id,
+      select: ar.agent_definition_id
     )
     |> Repo.all()
   end

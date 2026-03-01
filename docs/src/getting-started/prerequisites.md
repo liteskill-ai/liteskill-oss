@@ -13,6 +13,15 @@ Liteskill uses [mise](https://mise.jdx.dev/) for tool version management. The `m
 
 Install mise and run `mise install` to get the correct versions.
 
+## System Dependencies
+
+A C compiler and `make` are required to build native extensions (e.g. `argon2_elixir`). Install your platform's build tools before running `mix deps.compile`:
+
+- **Debian/Ubuntu:** `sudo apt install build-essential`
+- **Fedora/RHEL:** `sudo dnf groupinstall "Development Tools"`
+- **macOS:** `xcode-select --install`
+- **Arch Linux:** `sudo pacman -S base-devel`
+
 ## PostgreSQL
 
 PostgreSQL 16 with the **pgvector** extension is required.

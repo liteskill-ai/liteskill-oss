@@ -2,8 +2,8 @@ import Config
 
 # Configure your database
 config :liteskill, Liteskill.Repo,
-  username: "postgres",
-  password: "postgres",
+  username: "liteskill",
+  password: "liteskill",
   hostname: "localhost",
   database: "liteskill_dev",
   stacktrace: true,

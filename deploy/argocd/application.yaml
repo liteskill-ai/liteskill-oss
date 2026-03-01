@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://docs.liteskill.ai/helm
     chart: liteskill
-    targetRevision: 0.2.11
+    targetRevision: 0.2.51
     helm:
       releaseName: liteskill
       valuesObject:

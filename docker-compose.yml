@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-liteskill}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-liteskill}
-      POSTGRES_DB: ${POSTGRES_DB:-liteskill}
+      POSTGRES_DB: ${POSTGRES_DB:-liteskill_dev}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -20,6 +20,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    network_mode: host
 
   app:
     build: .
@@ -42,6 +43,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    network_mode: host
     environment:
       <<: *app-env
     profiles:

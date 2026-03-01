@@ -56,6 +56,27 @@ defmodule Liteskill.Accounts do
   end
 
   @doc """
+  Finds an existing user by email (for SAML account linking) or creates a new one.
+  When an existing user is found by email, updates their SAML fields.
+  Idempotent -- safe to call on every SAML login callback.
+  """
+  def find_or_create_from_saml(attrs) do
+    email = Map.fetch!(attrs, :email)
+
+    case get_user_by_email(email) do
+      nil ->
+        %User{}
+        |> User.saml_changeset(Map.new(attrs))
+        |> Repo.insert()
+
+      user ->
+        user
+        |> User.saml_changeset(Map.new(attrs))
+        |> Repo.update()
+    end
+  end
+
+  @doc """
   Registers a new user with email and password.
   """
   def register_user(attrs) do

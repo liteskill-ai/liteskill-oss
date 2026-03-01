@@ -31,6 +31,46 @@ if System.get_env("OIDC_CLIENT_ID") do
     client_secret: System.get_env("OIDC_CLIENT_SECRET")
 end
 
+# SAML configuration (all environments)
+if saml_metadata_file = System.get_env("SAML_IDP_METADATA_FILE") do
+  saml_sp_id = System.get_env("SAML_SP_ID", "liteskill")
+  saml_sp_entity_id = System.get_env("SAML_SP_ENTITY_ID", "urn:liteskill:sp")
+  saml_sp_certfile = System.get_env("SAML_SP_CERTFILE", "")
+  saml_sp_keyfile = System.get_env("SAML_SP_KEYFILE", "")
+  saml_idp_id = System.get_env("SAML_IDP_ID", "saml")
+
+  port = String.to_integer(System.get_env("PORT", "4000"))
+  host = System.get_env("PHX_HOST", "localhost")
+  scheme = if System.get_env("PHX_SERVER"), do: "https", else: "http"
+  saml_base_url = System.get_env("SAML_BASE_URL", "#{scheme}://#{host}:#{port}/sso")
+
+  config :samly, Samly.Provider,
+    idp_id_from: :path_segment,
+    service_providers: [
+      %{
+        id: saml_sp_id,
+        entity_id: saml_sp_entity_id,
+        certfile: saml_sp_certfile,
+        keyfile: saml_sp_keyfile
+      }
+    ],
+    identity_providers: [
+      %{
+        id: saml_idp_id,
+        sp_id: saml_sp_id,
+        base_url: saml_base_url,
+        metadata_file: saml_metadata_file,
+        pre_session_create_pipeline: LiteskillWeb.SamlPipeline,
+        sign_requests: true,
+        sign_metadata: true,
+        signed_assertion_in_resp: true,
+        signed_envelopes_in_resp: true
+      }
+    ]
+
+  config :liteskill, :saml_configured, true
+end
+
 # ReqLLM connection pool — increase default Finch pool size for LLM concurrency.
 # Key must be :finch (not :finch_options) — that's what ReqLLM.Application reads.
 #

@@ -361,6 +361,72 @@ defmodule Liteskill.RbacTest do
     end
   end
 
+  describe "agent role assignments" do
+    setup %{user: user} do
+      Rbac.ensure_system_roles()
+
+      {:ok, agent} =
+        Liteskill.Agents.create_agent(%{
+          name: "RBAC Agent #{System.unique_integer([:positive])}",
+          user_id: user.id,
+          strategy: "react"
+        })
+
+      {:ok, role} =
+        Rbac.create_role(%{name: "Agent Role-#{System.unique_integer([:positive])}"})
+
+      %{agent: agent, role: role}
+    end
+
+    test "assign_role_to_agent/2", %{agent: agent, role: role} do
+      assert {:ok, _} = Rbac.assign_role_to_agent(agent.id, role.id)
+      assert Enum.any?(Rbac.list_agent_roles(agent.id), &(&1.id == role.id))
+    end
+
+    test "rejects duplicate assignment", %{agent: agent, role: role} do
+      {:ok, _} = Rbac.assign_role_to_agent(agent.id, role.id)
+      assert {:error, _} = Rbac.assign_role_to_agent(agent.id, role.id)
+    end
+
+    test "remove_role_from_agent/2", %{agent: agent, role: role} do
+      {:ok, _} = Rbac.assign_role_to_agent(agent.id, role.id)
+      assert {:ok, _} = Rbac.remove_role_from_agent(agent.id, role.id)
+      refute Enum.any?(Rbac.list_agent_roles(agent.id), &(&1.id == role.id))
+    end
+
+    test "remove returns error for non-existent assignment", %{agent: agent, role: role} do
+      assert {:error, :not_found} = Rbac.remove_role_from_agent(agent.id, role.id)
+    end
+
+    test "list_agent_roles/1", %{agent: agent, role: role} do
+      {:ok, _} = Rbac.assign_role_to_agent(agent.id, role.id)
+      roles = Rbac.list_agent_roles(agent.id)
+      assert roles != []
+    end
+
+    test "list_role_agent_ids/1 returns agent IDs assigned to a role", %{
+      agent: agent,
+      role: role
+    } do
+      {:ok, _} = Rbac.assign_role_to_agent(agent.id, role.id)
+      agent_ids = Rbac.list_role_agent_ids(role.id)
+      assert agent.id in agent_ids
+    end
+
+    test "list_agent_permissions/1 returns permissions from assigned roles", %{agent: agent} do
+      {:ok, role} =
+        Rbac.create_role(%{
+          name: "Perm Role-#{System.unique_integer([:positive])}",
+          permissions: ["conversations:create", "agents:create"]
+        })
+
+      {:ok, _} = Rbac.assign_role_to_agent(agent.id, role.id)
+      perms = Rbac.list_agent_permissions(agent.id)
+      assert MapSet.member?(perms, "conversations:create")
+      assert MapSet.member?(perms, "agents:create")
+    end
+  end
+
   describe "list_role_users/1 and list_role_groups/1" do
     setup %{user: user} do
       Rbac.ensure_system_roles()

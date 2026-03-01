@@ -25,6 +25,21 @@ defmodule LiteskillWeb.Router do
     plug LiteskillWeb.Plugs.RateLimiter, limit: 60, window_ms: 60_000
   end
 
+  # SAML SSO routes (Samly handles auth flow)
+  # coveralls-ignore-start - requires SAML IdP configuration
+  scope "/sso" do
+    forward "/", Samly.Router
+  end
+
+  # SAML post-auth callback
+  scope "/auth", LiteskillWeb do
+    pipe_through [:browser]
+
+    get "/saml/callback", SamlAuthController, :callback
+  end
+
+  # coveralls-ignore-stop
+
   # Session bridge for LiveView auth
   scope "/auth", LiteskillWeb do
     pipe_through [:browser]

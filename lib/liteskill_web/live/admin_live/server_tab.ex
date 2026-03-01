@@ -79,12 +79,26 @@ defmodule LiteskillWeb.AdminLive.ServerTab do
     repo_config = Liteskill.Repo.config()
     oban_config = Application.get_env(:liteskill, Oban, [])
     oidc_config = Application.get_env(:ueberauth, Ueberauth.Strategy.OIDCC, [])
+    saml_configured = Application.get_env(:liteskill, :saml_configured, false)
+
+    saml_config =
+      if saml_configured do
+        samly_config = Application.get_env(:samly, Samly.Provider, [])
+        idps = Keyword.get(samly_config, :identity_providers, [])
+        sps = Keyword.get(samly_config, :service_providers, [])
+        idp = List.first(idps) || %{}
+        sp = List.first(sps) || %{}
+        %{idp_id: idp[:id], sp_id: sp[:id], sp_entity_id: sp[:entity_id]}
+      else
+        nil
+      end
 
     assigns =
       assigns
       |> assign(:repo_config, repo_config)
       |> assign(:oban_config, oban_config)
       |> assign(:oidc_config, oidc_config)
+      |> assign(:saml_config, saml_config)
 
     ~H"""
     <div class="space-y-6">
@@ -195,6 +209,22 @@ defmodule LiteskillWeb.AdminLive.ServerTab do
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <.info_row label="Issuer" value={@oidc_config[:issuer] || "Not configured"} />
             <.info_row label="Client ID" value={@oidc_config[:client_id] || "Not configured"} />
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title mb-4">SAML / SSO</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <%= if @saml_config do %>
+              <.info_row label="Status" value="Configured" />
+              <.info_row label="IdP ID" value={@saml_config.idp_id || "—"} />
+              <.info_row label="SP ID" value={@saml_config.sp_id || "—"} />
+              <.info_row label="SP Entity ID" value={@saml_config.sp_entity_id || "—"} />
+            <% else %>
+              <.info_row label="Status" value="Not configured" />
+            <% end %>
           </div>
         </div>
       </div>

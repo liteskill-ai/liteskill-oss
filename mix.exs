@@ -88,6 +88,7 @@ defmodule Liteskill.MixProject do
       {:ueberauth_oidcc, "~> 0.4"},
       {:oidcc, "~> 3.0"},
       {:argon2_elixir, "~> 4.1"},
+      {:samly, "~> 1.0"},
       {:jose, "~> 1.11"},
       {:jido, "~> 2.0.0-rc"},
       {:boundary, "~> 0.10", runtime: false},

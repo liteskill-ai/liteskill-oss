@@ -21,6 +21,8 @@ defmodule Liteskill.Accounts.User do
     field :oidc_claims, :map, default: %{}
     field :password, :string, virtual: true, redact: true
     field :password_hash, :string
+    field :saml_name_id, :string
+    field :saml_issuer, :string
     field :role, :string, default: "user"
     field :force_password_change, :boolean, default: false
     field :preferences, :map, default: %{}
@@ -35,6 +37,14 @@ defmodule Liteskill.Accounts.User do
     |> cast(attrs, [:email, :name, :avatar_url, :oidc_sub, :oidc_issuer, :oidc_claims])
     |> validate_required([:email, :oidc_sub, :oidc_issuer])
     |> unique_constraint([:oidc_sub, :oidc_issuer])
+    |> unique_constraint(:email)
+  end
+
+  def saml_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:email, :name, :saml_name_id, :saml_issuer])
+    |> validate_required([:email, :saml_name_id, :saml_issuer])
+    |> unique_constraint([:saml_name_id, :saml_issuer])
     |> unique_constraint(:email)
   end
 

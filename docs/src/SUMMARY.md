@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](introduction.md)
+- [So What's the Difference?](so-whats-the-difference.md)
 
 # Hello World Tutorial
 
@@ -52,6 +53,10 @@
 - [LiveView](web/liveview.md)
 - [API](web/api.md)
 - [Authentication](web/authentication.md)
+
+# Deployment
+
+- [Helm Chart](deployment/helm-chart.md)
 
 # Configuration
 

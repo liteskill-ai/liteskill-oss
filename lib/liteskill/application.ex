@@ -32,6 +32,7 @@ defmodule Liteskill.Application do
                Liteskill.Rbac.ensure_system_roles()
                Liteskill.LlmProviders.ensure_env_providers()
                Liteskill.Settings.get()
+               Liteskill.DemoSeeds.ensure_demo_agents()
 
                if Liteskill.SingleUser.enabled?(),
                  do: Liteskill.SingleUser.auto_provision_admin()
@@ -64,6 +65,8 @@ defmodule Liteskill.Application do
         # Periodic sweep of expired server-side sessions (low-priority, placed late
         # in rest_for_one tree to minimize blast radius on crash)
         Liteskill.Accounts.SessionSweeper,
+        # SAML identity provider (only when configured)
+        if(saml_configured?(), do: {Samly.Provider, []}),
         # Start to serve requests, typically the last entry
         LiteskillWeb.Endpoint
       ]
@@ -86,4 +89,5 @@ defmodule Liteskill.Application do
 
   defp test_env?, do: Application.get_env(:liteskill, :env) == :test
   defp desktop_mode?, do: Application.get_env(:liteskill, :desktop_mode, false)
+  defp saml_configured?, do: Application.get_env(:liteskill, :saml_configured, false)
 end

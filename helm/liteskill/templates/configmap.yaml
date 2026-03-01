@@ -12,7 +12,31 @@ data:
   {{- if .Values.config.dnsClusterQuery }}
   DNS_CLUSTER_QUERY: {{ .Values.config.dnsClusterQuery | quote }}
   {{- end }}
+  {{- if .Values.config.singleUserMode }}
+  SINGLE_USER_MODE: "true"
+  {{- end }}
+  {{- if .Values.config.sessionMaxAgeSeconds }}
+  SESSION_MAX_AGE_SECONDS: {{ .Values.config.sessionMaxAgeSeconds | quote }}
+  {{- end }}
+  {{- if .Values.config.sessionIdleTimeoutSeconds }}
+  SESSION_IDLE_TIMEOUT_SECONDS: {{ .Values.config.sessionIdleTimeoutSeconds | quote }}
+  {{- end }}
   {{- if .Values.oidc.enabled }}
   OIDC_ISSUER: {{ .Values.oidc.issuer | quote }}
   OIDC_CLIENT_ID: {{ .Values.oidc.clientId | quote }}
+  {{- end }}
+  {{- if .Values.saml.enabled }}
+  SAML_IDP_METADATA_FILE: {{ .Values.saml.idpMetadataFile | quote }}
+  SAML_SP_ID: {{ .Values.saml.spId | quote }}
+  SAML_SP_ENTITY_ID: {{ .Values.saml.spEntityId | quote }}
+  {{- if .Values.saml.spCertfile }}
+  SAML_SP_CERTFILE: {{ .Values.saml.spCertfile | quote }}
+  {{- end }}
+  {{- if .Values.saml.spKeyfile }}
+  SAML_SP_KEYFILE: {{ .Values.saml.spKeyfile | quote }}
+  {{- end }}
+  SAML_IDP_ID: {{ .Values.saml.idpId | quote }}
+  {{- if .Values.saml.baseUrl }}
+  SAML_BASE_URL: {{ .Values.saml.baseUrl | quote }}
+  {{- end }}
   {{- end }}

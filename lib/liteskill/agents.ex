@@ -33,16 +33,25 @@ defmodule Liteskill.Agents do
 
   def create_agent(attrs) do
     user_id = attrs[:user_id] || attrs["user_id"]
+    role_id = attrs[:role_id] || attrs["role_id"]
 
     with :ok <- Liteskill.Rbac.authorize(user_id, "agents:create"),
          :ok <- validate_model_access(attrs[:llm_model_id] || attrs["llm_model_id"], user_id) do
-      %AgentDefinition{}
-      |> AgentDefinition.changeset(attrs)
-      |> Authorization.create_with_owner_acl("agent_definition", [:llm_model])
+      result =
+        %AgentDefinition{}
+        |> AgentDefinition.changeset(attrs)
+        |> Authorization.create_with_owner_acl("agent_definition", [:llm_model])
+
+      with {:ok, agent} <- result do
+        sync_agent_role(agent.id, role_id)
+        {:ok, agent}
+      end
     end
   end
 
   def update_agent(id, user_id, attrs) do
+    role_id = attrs[:role_id] || attrs["role_id"]
+
     case Repo.get(AgentDefinition, id) do
       nil ->
         {:error, :not_found}
@@ -54,8 +63,12 @@ defmodule Liteskill.Agents do
           |> AgentDefinition.changeset(attrs)
           |> Repo.update()
           |> case do
-            {:ok, updated} -> {:ok, Repo.preload(updated, [:llm_model])}
-            error -> error
+            {:ok, updated} ->
+              sync_agent_role(updated.id, role_id)
+              {:ok, Repo.preload(updated, [:llm_model])}
+
+            error ->
+              error
           end
         end
     end
@@ -178,6 +191,18 @@ defmodule Liteskill.Agents do
     case Repo.get(schema, id) do
       nil -> {:error, :not_found}
       _ -> :ok
+    end
+  end
+
+  defp sync_agent_role(agent_definition_id, role_id) do
+    current_roles = Liteskill.Rbac.list_agent_roles(agent_definition_id)
+
+    for role <- current_roles do
+      Liteskill.Rbac.remove_role_from_agent(agent_definition_id, role.id)
+    end
+
+    if role_id && role_id != "" do
+      Liteskill.Rbac.assign_role_to_agent(agent_definition_id, role_id)
     end
   end
 

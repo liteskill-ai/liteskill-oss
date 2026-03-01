@@ -44,6 +44,65 @@ defmodule Liteskill.AccountsTest do
     end
   end
 
+  describe "find_or_create_from_saml/1" do
+    test "creates a new user when no email match exists" do
+      attrs = %{
+        email: unique_email(),
+        name: "SAML User",
+        saml_name_id: "saml-user-123",
+        saml_issuer: "https://idp.example.com/saml"
+      }
+
+      assert {:ok, %User{} = user} = Accounts.find_or_create_from_saml(attrs)
+      assert user.email == attrs.email
+      assert user.saml_name_id == "saml-user-123"
+      assert user.saml_issuer == "https://idp.example.com/saml"
+      assert user.name == "SAML User"
+    end
+
+    test "links to existing password user by email" do
+      email = unique_email()
+      {:ok, existing} = Accounts.register_user(%{email: email, password: "supersecretpass123"})
+
+      attrs = %{
+        email: email,
+        name: "SAML User",
+        saml_name_id: "saml-user-456",
+        saml_issuer: "https://idp.example.com/saml"
+      }
+
+      assert {:ok, %User{} = user} = Accounts.find_or_create_from_saml(attrs)
+      assert user.id == existing.id
+      assert user.saml_name_id == "saml-user-456"
+      assert user.saml_issuer == "https://idp.example.com/saml"
+    end
+
+    test "is idempotent — returns same user on repeat calls" do
+      email = unique_email()
+
+      attrs = %{
+        email: email,
+        name: "SAML User",
+        saml_name_id: "saml-user-789",
+        saml_issuer: "https://idp.example.com/saml"
+      }
+
+      {:ok, user1} = Accounts.find_or_create_from_saml(attrs)
+      {:ok, user2} = Accounts.find_or_create_from_saml(attrs)
+
+      assert user1.id == user2.id
+    end
+
+    test "returns error for missing required fields" do
+      assert {:error, %Ecto.Changeset{}} =
+               Accounts.find_or_create_from_saml(%{
+                 email: unique_email(),
+                 saml_name_id: nil,
+                 saml_issuer: nil
+               })
+    end
+  end
+
   describe "get_user!/1" do
     test "returns user by id" do
       {:ok, user} = Accounts.find_or_create_from_oidc(unique_oidc_attrs())

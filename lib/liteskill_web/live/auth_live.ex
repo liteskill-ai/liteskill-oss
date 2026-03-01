@@ -143,6 +143,11 @@ defmodule LiteskillWeb.AuthLive do
   end
 
   defp render_form(%{live_action: :login} = assigns) do
+    assigns =
+      assigns
+      |> assign(:oidc_configured, oidc_configured?())
+      |> assign(:saml_configured, saml_configured?())
+
     ~H"""
     <.form for={@form} phx-submit="submit" class="space-y-4">
       <div class="form-control">
@@ -179,6 +184,26 @@ defmodule LiteskillWeb.AuthLive do
         <button type="submit" class="btn btn-primary w-full">Sign In</button>
       </div>
     </.form>
+
+    <div :if={@oidc_configured || @saml_configured} class="divider">or</div>
+
+    <div :if={@oidc_configured || @saml_configured} class="space-y-2">
+      <a
+        :if={@oidc_configured}
+        href={~p"/auth/oidcc"}
+        class="btn btn-outline w-full"
+      >
+        Sign in with OIDC
+      </a>
+
+      <a
+        :if={@saml_configured}
+        href={saml_signin_url()}
+        class="btn btn-outline w-full"
+      >
+        Sign in with SSO
+      </a>
+    </div>
 
     <div class="divider">or</div>
 
@@ -330,4 +355,37 @@ defmodule LiteskillWeb.AuthLive do
   defp page_title(:login, _), do: "Welcome Back"
   defp page_title(:invite, nil), do: "Invitation"
   defp page_title(:invite, _), do: "Accept Invitation"
+
+  defp oidc_configured? do
+    case Application.get_env(:ueberauth, Ueberauth.Strategy.OIDCC) do
+      nil -> false
+      config -> Keyword.has_key?(config, :client_id)
+    end
+  end
+
+  defp saml_configured? do
+    Application.get_env(:liteskill, :saml_configured, false)
+  end
+
+  defp saml_signin_url do
+    idp_id = saml_idp_id()
+    callback_url = URI.encode_www_form("/auth/saml/callback")
+    "/sso/auth/signin/#{idp_id}?target_url=#{callback_url}"
+  end
+
+  defp saml_idp_id do
+    case Application.get_env(:samly, Samly.Provider) do
+      nil ->
+        "saml"
+
+      config ->
+        config
+        |> Keyword.get(:identity_providers, [])
+        |> List.first()
+        |> case do
+          %{id: id} -> id
+          _ -> "saml"
+        end
+    end
+  end
 end

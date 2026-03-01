@@ -439,4 +439,52 @@ defmodule Liteskill.AgentsTest do
       end
     end
   end
+
+  describe "role assignment via create/update" do
+    setup %{owner: owner} do
+      Liteskill.Rbac.ensure_system_roles()
+
+      {:ok, role} =
+        Liteskill.Rbac.create_role(%{
+          name: "Agent Test Role-#{System.unique_integer([:positive])}"
+        })
+
+      %{owner: owner, role: role}
+    end
+
+    test "create_agent assigns role when role_id provided", %{owner: owner, role: role} do
+      attrs = agent_attrs(owner, %{role_id: role.id})
+      assert {:ok, agent} = Agents.create_agent(attrs)
+
+      roles = Liteskill.Rbac.list_agent_roles(agent.id)
+      assert Enum.any?(roles, &(&1.id == role.id))
+    end
+
+    test "create_agent without role_id assigns no role", %{owner: owner} do
+      assert {:ok, agent} = Agents.create_agent(agent_attrs(owner))
+      assert Liteskill.Rbac.list_agent_roles(agent.id) == []
+    end
+
+    test "update_agent changes role", %{owner: owner, role: role} do
+      {:ok, agent} = Agents.create_agent(agent_attrs(owner, %{role_id: role.id}))
+
+      {:ok, role2} =
+        Liteskill.Rbac.create_role(%{
+          name: "Agent Role 2-#{System.unique_integer([:positive])}"
+        })
+
+      {:ok, _} = Agents.update_agent(agent.id, owner.id, %{"role_id" => role2.id})
+
+      roles = Liteskill.Rbac.list_agent_roles(agent.id)
+      assert length(roles) == 1
+      assert hd(roles).id == role2.id
+    end
+
+    test "update_agent removes role when role_id is empty", %{owner: owner, role: role} do
+      {:ok, agent} = Agents.create_agent(agent_attrs(owner, %{role_id: role.id}))
+      {:ok, _} = Agents.update_agent(agent.id, owner.id, %{"role_id" => ""})
+
+      assert Liteskill.Rbac.list_agent_roles(agent.id) == []
+    end
+  end
 end

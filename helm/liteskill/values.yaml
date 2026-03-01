@@ -1,3 +1,7 @@
+# -- Name overrides
+nameOverride: ""
+fullnameOverride: ""
+
 # -- Image
 image:
   repository: ghcr.io/liteskill-ai/liteskill-oss
@@ -12,6 +16,11 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 5
   targetCPUUtilizationPercentage: 80
+
+# -- Pod Disruption Budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
 
 # -- Service
 service:
@@ -37,6 +46,9 @@ config:
   poolSize: "10"
   dnsClusterQuery: ""       # set for Erlang clustering in k8s
   ectoIpv6: "false"
+  singleUserMode: false
+  sessionMaxAgeSeconds: ""
+  sessionIdleTimeoutSeconds: ""
 
 # -- OIDC (optional)
 oidc:
@@ -44,6 +56,17 @@ oidc:
   issuer: ""
   clientId: ""
   clientSecret: ""           # → Secret
+
+# -- SAML (optional)
+saml:
+  enabled: false
+  idpMetadataFile: ""    # path inside container (mount via extraVolumes)
+  spId: "liteskill"
+  spEntityId: "urn:liteskill:sp"
+  spCertfile: ""         # path inside container
+  spKeyfile: ""          # path inside container
+  idpId: "saml"
+  baseUrl: ""            # defaults to https://<PHX_HOST>/sso
 
 # -- Secrets (required)
 secrets:
@@ -67,6 +90,7 @@ secrets:
 migration:
   enabled: true
   backoffLimit: 3
+  activeDeadlineSeconds: 600
 
 # -- Resources
 resources: {}
@@ -84,6 +108,25 @@ readinessProbe:
     port: http
   initialDelaySeconds: 5
   periodSeconds: 5
+startupProbe:
+  httpGet:
+    path: /login
+    port: http
+  failureThreshold: 30
+  periodSeconds: 2
+
+# -- Security context (pod-level)
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+
+# -- Security context (container-level)
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
 
 # -- Service account
 serviceAccount:
@@ -97,3 +140,8 @@ podLabels: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+topologySpreadConstraints: []
+
+# -- Extra volumes (e.g. for SAML cert/key/metadata file mounts)
+extraVolumes: []
+extraVolumeMounts: []

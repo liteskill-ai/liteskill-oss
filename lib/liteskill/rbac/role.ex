@@ -15,6 +15,7 @@ defmodule Liteskill.Rbac.Role do
 
     has_many :user_roles, Liteskill.Rbac.UserRole
     has_many :group_roles, Liteskill.Rbac.GroupRole
+    has_many :agent_roles, Liteskill.Rbac.AgentRole
 
     timestamps(type: :utc_datetime)
   end
