@@ -144,6 +144,16 @@ jobs:
       - name: Run Dialyzer
         run: mix dialyzer
 
+  docker-smoke:
+    name: Docker Smoke Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Docker smoke test
+        run: scripts/smoke-docker.sh
+
   docs:
     name: Docs
     runs-on: ubuntu-latest

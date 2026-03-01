@@ -180,7 +180,8 @@ defmodule Liteskill.MixProject do
         "ecto.create --quiet",
         "ecto.migrate --quiet",
         "coveralls",
-        "cmd mdbook build docs/"
+        "cmd mdbook build docs/",
+        "cmd scripts/smoke-docker.sh"
       ]
     ]
   end

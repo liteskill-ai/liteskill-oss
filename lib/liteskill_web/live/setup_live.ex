@@ -113,7 +113,7 @@ defmodule LiteskillWeb.SetupLive do
 
     assign(socket,
       wizard_mode: :initial,
-      page_title: "Initial Setup",
+      page_title: "LiteSkill Setup",
       steps: steps,
       step: hd(steps)
     )

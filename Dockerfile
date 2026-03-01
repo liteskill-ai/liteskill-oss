@@ -69,7 +69,7 @@ RUN mix release liteskill
 FROM ${RUNNER_IMAGE}
 
 RUN apt-get update -y && \
-    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates && \
+    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl && \
     apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 # Set the locale
@@ -82,7 +82,7 @@ ENV LC_ALL=en_US.UTF-8
 WORKDIR /app
 
 # Create a non-root user
-RUN groupadd --system app && useradd --system --gid app app
+RUN groupadd --system app && useradd --system --gid app --create-home app
 
 # Copy the release from the build stage
 COPY --from=build --chown=app:app /app/_build/prod/rel/liteskill ./
