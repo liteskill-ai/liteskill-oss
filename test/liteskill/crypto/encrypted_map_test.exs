@@ -1,7 +1,14 @@
 defmodule Liteskill.Crypto.EncryptedMapTest do
-  use ExUnit.Case, async: true
+  # async: false because setup modifies global Application config (:encryption_key)
+  use ExUnit.Case, async: false
 
   alias Liteskill.Crypto.EncryptedMap
+
+  setup do
+    Application.put_env(:liteskill, :encryption_key, "test-encrypted-map-key")
+    on_exit(fn -> Application.delete_env(:liteskill, :encryption_key) end)
+    :ok
+  end
 
   describe "type/0" do
     test "returns :text" do

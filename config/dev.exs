@@ -67,9 +67,6 @@ config :liteskill, LiteskillWeb.Endpoint,
     ]
   ]
 
-# Encryption key for sensitive fields (API keys, etc.)
-config :liteskill, :encryption_key, "dev-only-encryption-key-do-not-use-in-prod"
-
 # Enable dev routes for dashboard and mailbox
 config :liteskill, dev_routes: true
 

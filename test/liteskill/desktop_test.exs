@@ -73,9 +73,7 @@ defmodule Liteskill.DesktopTest do
       # First call: creates file
       config = Desktop.load_or_create_config!(path)
       assert is_map(config)
-      assert Map.has_key?(config, "encryption_key")
       assert Map.has_key?(config, "secret_key_base")
-      assert byte_size(config["encryption_key"]) > 0
       assert byte_size(config["secret_key_base"]) > 0
       assert File.exists?(path)
 

@@ -16,6 +16,31 @@ defmodule Liteskill.Crypto do
   def encrypt(""), do: nil
 
   def encrypt(plaintext) when is_binary(plaintext) do
+    if encryption_enabled?(), do: do_encrypt(plaintext), else: plaintext
+  end
+
+  def decrypt(nil), do: nil
+
+  def decrypt(encoded) when is_binary(encoded) do
+    if encryption_enabled?(), do: do_decrypt(encoded), else: encoded
+  end
+
+  @doc """
+  Validates that the encryption key is configured. Call at application boot
+  to fail fast instead of crashing on first encrypt/decrypt.
+
+  When encryption is not enabled (default), this is a no-op.
+  """
+  def validate_key! do
+    if encryption_enabled?() do
+      encryption_key()
+      :ok
+    else
+      :ok
+    end
+  end
+
+  defp do_encrypt(plaintext) do
     key = encryption_key()
     iv = :crypto.strong_rand_bytes(@iv_length)
 
@@ -25,9 +50,7 @@ defmodule Liteskill.Crypto do
     Base.encode64(iv <> tag <> ciphertext)
   end
 
-  def decrypt(nil), do: nil
-
-  def decrypt(encoded) when is_binary(encoded) do
+  defp do_decrypt(encoded) do
     key = encryption_key()
 
     with {:ok, <<iv::binary-size(@iv_length), tag::binary-size(@tag_length), ciphertext::binary>>} <-
@@ -47,13 +70,8 @@ defmodule Liteskill.Crypto do
     end
   end
 
-  @doc """
-  Validates that the encryption key is configured. Call at application boot
-  to fail fast instead of crashing on first encrypt/decrypt.
-  """
-  def validate_key! do
-    encryption_key()
-    :ok
+  defp encryption_enabled? do
+    Application.get_env(:liteskill, :encryption_key) != nil
   end
 
   defp encryption_key do

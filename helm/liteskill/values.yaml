@@ -68,11 +68,11 @@ saml:
   idpId: "saml"
   baseUrl: ""            # defaults to https://<PHX_HOST>/sso
 
-# -- Secrets (required)
+# -- Secrets
 secrets:
-  databaseUrl: ""            # ecto://USER:PASS@HOST/DATABASE
-  secretKeyBase: ""          # mix phx.gen.secret
-  encryptionKey: ""          # openssl rand -base64 32
+  databaseUrl: ""            # ecto://USER:PASS@HOST/DATABASE (required)
+  secretKeyBase: ""          # optional — auto-generated on first boot if empty
+  encryptionKey: ""          # optional — only needed when LITESKILL_ENCRYPTION=true
   awsBearerToken: ""         # AWS Bedrock bearer token
   awsRegion: ""              # e.g. us-east-1
 

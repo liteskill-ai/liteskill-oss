@@ -323,7 +323,7 @@ defmodule Liteskill.McpServersTest do
   end
 
   describe "api_key encryption" do
-    test "api_key is stored encrypted in the database", %{owner: owner} do
+    test "api_key round-trips through the database", %{owner: owner} do
       {:ok, server} =
         McpServers.create_server(%{
           name: "Encrypted",
@@ -332,19 +332,7 @@ defmodule Liteskill.McpServersTest do
           api_key: "my-secret-key"
         })
 
-      # Read the raw database value
-      raw =
-        Liteskill.Repo.one!(
-          from s in "mcp_servers",
-            where: s.id == type(^server.id, :binary_id),
-            select: s.api_key
-        )
-
-      # Raw DB value should be encrypted (base64), not plaintext
-      assert raw != "my-secret-key"
-      assert {:ok, _} = Base.decode64(raw)
-
-      # But the Ecto schema should decrypt it transparently
+      # The Ecto schema should return the original value transparently
       reloaded = Liteskill.Repo.get!(McpServer, server.id)
       assert reloaded.api_key == "my-secret-key"
     end
@@ -363,7 +351,7 @@ defmodule Liteskill.McpServersTest do
   end
 
   describe "headers encryption" do
-    test "headers are stored encrypted in the database", %{owner: owner} do
+    test "headers round-trip through the database", %{owner: owner} do
       {:ok, server} =
         McpServers.create_server(%{
           name: "Encrypted Headers",
@@ -372,20 +360,7 @@ defmodule Liteskill.McpServersTest do
           headers: %{"Authorization" => "Bearer secret-token"}
         })
 
-      # Read the raw database value
-      raw =
-        Liteskill.Repo.one!(
-          from s in "mcp_servers",
-            where: s.id == type(^server.id, :binary_id),
-            select: s.headers
-        )
-
-      # Raw DB value should be encrypted (base64), not plaintext JSON
-      assert raw
-      refute raw =~ "secret-token"
-      assert {:ok, _} = Base.decode64(raw)
-
-      # But the Ecto schema should decrypt it transparently
+      # The Ecto schema should return the original value transparently
       reloaded = Liteskill.Repo.get!(McpServer, server.id)
       assert reloaded.headers == %{"Authorization" => "Bearer secret-token"}
     end

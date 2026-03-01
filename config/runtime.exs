@@ -114,10 +114,8 @@ if idle_timeout = System.get_env("SESSION_IDLE_TIMEOUT_SECONDS") do
   config :liteskill, :session_idle_timeout_seconds, String.to_integer(idle_timeout)
 end
 
-# Encryption key for sensitive fields (MCP API keys, etc.)
-if encryption_key = System.get_env("ENCRYPTION_KEY") do
-  config :liteskill, :encryption_key, encryption_key
-end
+# Encryption is off by default. Set LITESKILL_ENCRYPTION=true to enable.
+encryption_enabled? = System.get_env("LITESKILL_ENCRYPTION") in ~w(true 1 yes)
 
 # Desktop mode: bundled PostgreSQL, single-user, no external dependencies
 if System.get_env("LITESKILL_DESKTOP") == "true" do
@@ -147,7 +145,6 @@ if System.get_env("LITESKILL_DESKTOP") == "true" do
       desktop_config_path |> File.read!() |> Jason.decode!()
     else
       cfg = %{
-        "encryption_key" => Base.url_encode64(:crypto.strong_rand_bytes(48), padding: false),
         "secret_key_base" => Base.url_encode64(:crypto.strong_rand_bytes(48), padding: false)
       }
 
@@ -160,8 +157,14 @@ if System.get_env("LITESKILL_DESKTOP") == "true" do
   config :liteskill, :desktop_mode, true
   config :liteskill, :single_user_mode, true
 
-  if !System.get_env("ENCRYPTION_KEY") do
-    config :liteskill, :encryption_key, desktop_config["encryption_key"]
+  # Encryption is opt-in. Desktop configs from older installs may have an
+  # encryption_key — it is only used when LITESKILL_ENCRYPTION=true.
+  if encryption_enabled? do
+    encryption_key =
+      System.get_env("ENCRYPTION_KEY") || desktop_config["encryption_key"] ||
+        raise "LITESKILL_ENCRYPTION=true requires ENCRYPTION_KEY env var or key in desktop_config.json"
+
+    config :liteskill, :encryption_key, encryption_key
   end
 
   repo_opts =
@@ -212,17 +215,53 @@ if config_env() == :prod and System.get_env("LITESKILL_DESKTOP") != "true" do
 
   maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
 
-  # The secret key base is used to sign/encrypt cookies and other secrets.
-  # A default value is used in config/dev.exs and config/test.exs but you
-  # want to use a different value for prod and you most likely don't want
-  # to check this value into version control, so we use an environment
-  # variable instead.
-  secret_key_base =
-    System.get_env("SECRET_KEY_BASE") ||
-      raise """
-      environment variable SECRET_KEY_BASE is missing.
-      You can generate one by calling: mix phx.gen.secret
-      """
+  # --- Auto-generate secret_key_base ---
+  # Priority: env var → secrets file → generate & persist.
+  # NOTE: This logic is intentionally inline because runtime.exs executes
+  # before application code is available in releases.
+  secrets_dir =
+    if secrets_file = System.get_env("LITESKILL_SECRETS_FILE") do
+      Path.dirname(secrets_file)
+    else
+      case :os.type() do
+        {:unix, :darwin} ->
+          Path.join(System.get_env("HOME", "~"), "Library/Application Support/Liteskill")
+
+        {:unix, _} ->
+          xdg =
+            System.get_env("XDG_DATA_HOME", Path.join(System.get_env("HOME", "~"), ".local/share"))
+
+          Path.join(xdg, "liteskill")
+
+        {:win32, _} ->
+          Path.join(System.get_env("APPDATA", "C:/Users/Default/AppData/Roaming"), "Liteskill")
+      end
+    end
+
+  secrets_path = System.get_env("LITESKILL_SECRETS_FILE") || Path.join(secrets_dir, "secrets.json")
+
+  saved_secrets =
+    if File.exists?(secrets_path) do
+      secrets_path |> File.read!() |> Jason.decode!()
+    else
+      secrets = %{
+        "secret_key_base" => Base.url_encode64(:crypto.strong_rand_bytes(48), padding: false)
+      }
+
+      File.mkdir_p!(Path.dirname(secrets_path))
+      File.write!(secrets_path, Jason.encode!(secrets, pretty: true))
+      secrets
+    end
+
+  secret_key_base = System.get_env("SECRET_KEY_BASE") || saved_secrets["secret_key_base"]
+
+  if encryption_enabled? do
+    encryption_key =
+      System.get_env("ENCRYPTION_KEY") ||
+        raise "LITESKILL_ENCRYPTION=true requires ENCRYPTION_KEY env var to be set"
+
+    config :liteskill, :encryption_key, encryption_key
+  end
 
   host = System.get_env("PHX_HOST") || "example.com"
 

@@ -20,9 +20,6 @@ config :liteskill, LiteskillWeb.Endpoint,
 
 config :liteskill, Oban, testing: :manual
 
-# Encryption key for sensitive fields (API keys, etc.)
-config :liteskill, :encryption_key, "test-only-encryption-key-do-not-use-in-prod"
-
 # Disable persistent_term cache for Settings (incompatible with Ecto sandbox)
 config :liteskill, :settings_cache, false
 

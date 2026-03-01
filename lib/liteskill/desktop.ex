@@ -109,8 +109,8 @@ defmodule Liteskill.Desktop do
   @doc """
   Loads or creates the desktop configuration file at the given path.
 
-  On first run, generates cryptographically secure `encryption_key` and
-  `secret_key_base` values, persists them as JSON, and returns the map.
+  On first run, generates a cryptographically secure `secret_key_base`
+  value, persists it as JSON, and returns the map.
   On subsequent runs, reads the existing file.
   """
   @spec load_or_create_config!(String.t()) :: map()
@@ -119,7 +119,6 @@ defmodule Liteskill.Desktop do
       path |> File.read!() |> Jason.decode!()
     else
       config = %{
-        "encryption_key" => Base.url_encode64(:crypto.strong_rand_bytes(48), padding: false),
         "secret_key_base" => Base.url_encode64(:crypto.strong_rand_bytes(48), padding: false)
       }
 

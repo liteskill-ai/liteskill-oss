@@ -1,7 +1,11 @@
 x-app-env: &app-env
   DATABASE_URL: "ecto://${POSTGRES_USER:-liteskill}:${POSTGRES_PASSWORD:-liteskill}@localhost/${POSTGRES_DB:-liteskill}"
-  SECRET_KEY_BASE: "${SECRET_KEY_BASE:?SECRET_KEY_BASE is required -- generate with: openssl rand -base64 64}"
-  ENCRYPTION_KEY: "${ENCRYPTION_KEY:?ENCRYPTION_KEY is required -- generate with: openssl rand -base64 32}"
+  # SECRET_KEY_BASE is auto-generated on first boot if not provided.
+  # To persist across container restarts, mount a volume and set LITESKILL_SECRETS_FILE.
+  SECRET_KEY_BASE: "${SECRET_KEY_BASE:-}"
+  # Encryption is off by default. To enable, set both:
+  #   LITESKILL_ENCRYPTION=true
+  #   ENCRYPTION_KEY=<your-key>  (generate with: openssl rand -base64 32)
 
 services:
   db:

@@ -5,9 +5,21 @@
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string (e.g. `ecto://USER:PASS@HOST/DATABASE`) |
-| `SECRET_KEY_BASE` | Phoenix secret key (generate with `mix phx.gen.secret` or `openssl rand -base64 64`) |
-| `ENCRYPTION_KEY` | Key for AES-256-GCM encryption of sensitive fields (generate with `openssl rand -base64 32`) |
 | `PHX_SERVER` | Set to `true` to start the HTTP server (required for releases) |
+
+## Optional (Auto-generated if not set)
+
+| Variable | Description |
+|----------|-------------|
+| `SECRET_KEY_BASE` | Phoenix secret key for cookie signing. Auto-generated and persisted to `secrets.json` on first boot if not set. Generate manually with `mix phx.gen.secret` or `openssl rand -base64 64`. |
+| `LITESKILL_SECRETS_FILE` | Override the path to the auto-generated secrets file (default: platform-specific data dir) |
+
+## Encryption (Off by Default)
+
+| Variable | Description |
+|----------|-------------|
+| `LITESKILL_ENCRYPTION` | Set to `true` to enable at-rest encryption of sensitive fields |
+| `ENCRYPTION_KEY` | Required when encryption is enabled. Key for AES-256-GCM (generate with `openssl rand -base64 32`) |
 
 ## Server
 
@@ -47,7 +59,7 @@
 When `LITESKILL_DESKTOP=true`:
 
 - A bundled PostgreSQL instance is managed automatically
-- Encryption key and secret key base are auto-generated and stored in `desktop_config.json`
+- Secret key base is auto-generated and stored in `desktop_config.json`
 - Single-user mode is enabled automatically
 - Data is stored in platform-specific directories:
   - macOS: `~/Library/Application Support/Liteskill`
@@ -64,3 +76,5 @@ The `docker-compose.yml` uses these defaults (overridable via shell environment)
 | `POSTGRES_PASSWORD` | `liteskill` |
 | `POSTGRES_DB` | `liteskill` |
 | `PHX_HOST` | `localhost` |
+
+`SECRET_KEY_BASE` is auto-generated on first boot if not provided. To persist across container restarts, mount a volume and set `LITESKILL_SECRETS_FILE`.
