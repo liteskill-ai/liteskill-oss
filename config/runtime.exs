@@ -255,7 +255,12 @@ if config_env() == :prod and System.get_env("LITESKILL_DESKTOP") != "true" do
       secrets
     end
 
-  secret_key_base = System.get_env("SECRET_KEY_BASE") || saved_secrets["secret_key_base"]
+  secret_key_base =
+    case System.get_env("SECRET_KEY_BASE") do
+      nil -> saved_secrets["secret_key_base"]
+      "" -> saved_secrets["secret_key_base"]
+      val -> val
+    end
 
   if encryption_enabled? do
     encryption_key =
