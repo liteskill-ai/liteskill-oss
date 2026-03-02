@@ -53,3 +53,15 @@ config :wallaby,
   screenshot_on_failure: true,
   screenshot_dir: "tmp/wallaby_screenshots",
   js_errors: false
+
+# CI: run Chrome headless with sandbox disabled (containerized environment)
+if System.get_env("CI") do
+  config :wallaby,
+    chromedriver: [
+      capabilities: %{
+        "goog:chromeOptions" => %{
+          args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+        }
+      }
+    ]
+end
