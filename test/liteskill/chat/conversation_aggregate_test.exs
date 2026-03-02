@@ -169,8 +169,9 @@ defmodule Liteskill.Chat.ConversationAggregateTest do
           {:receive_chunk, %{message_id: state.current_stream.message_id, chunk_index: 0, delta_text: "Hello"}}
         ])
 
-      assert length(state.current_stream.chunks) == 1
-      assert hd(state.current_stream.chunks).delta_text == "Hello"
+      # Chunks are no longer accumulated in aggregate state (O(n^2) fix) —
+      # they are projected directly to the DB by the Projector.
+      assert state.current_stream.chunks == []
     end
 
     test "cannot receive chunk when not streaming" do

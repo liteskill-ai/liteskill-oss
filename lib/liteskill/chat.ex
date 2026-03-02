@@ -120,8 +120,8 @@ defmodule Liteskill.Chat do
     with {:ok, conversation} <- authorize_conversation(conversation_id, user_id) do
       parent_stream_id = conversation.stream_id
 
-      # Read parent events up to the fork point
-      parent_events = Store.read_stream_forward(parent_stream_id)
+      # Read parent events up to the fork point (bounded to prevent OOM on huge conversations)
+      parent_events = Store.read_stream_forward(parent_stream_id, 1, @max_replay_events)
 
       # Find the stream_version that corresponds to the message at the given position
       fork_at_version = find_version_at_position(parent_events, at_message_position)

@@ -56,13 +56,13 @@ defmodule Liteskill.Agents.ToolResolver do
       tool_filters = get_in(agent.config, ["tool_filters"]) || %{}
 
       Enum.reduce(servers, {[], %{}}, fn server, acc ->
-        resolve_server_tools(server, user_id, tool_filters, acc)
+        resolve_server_tools(server, tool_filters, acc)
       end)
     end
   end
 
   # coveralls-ignore-start
-  defp resolve_server_tools(server, user_id, tool_filters, {tools_acc, servers_acc}) do
+  defp resolve_server_tools(server, tool_filters, {tools_acc, servers_acc}) do
     case McpClient.list_tools(server) do
       {:ok, tool_list} ->
         filter_names = Map.get(tool_filters, to_string(server.id))
@@ -76,16 +76,7 @@ defmodule Liteskill.Agents.ToolResolver do
 
         new_tools = Enum.map(filtered, &to_bedrock_spec/1)
 
-        new_servers =
-          Map.new(filtered, fn tool ->
-            resolved_server =
-              case McpServers.get_server(server.id, user_id) do
-                {:ok, s} -> s
-                _ -> server
-              end
-
-            {tool["name"], resolved_server}
-          end)
+        new_servers = Map.new(filtered, fn tool -> {tool["name"], server} end)
 
         {tools_acc ++ new_tools, Map.merge(servers_acc, new_servers)}
 

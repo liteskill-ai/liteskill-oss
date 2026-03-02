@@ -33,6 +33,10 @@ defmodule Liteskill.Schedules.ScheduleTick do
     {:noreply, state}
   end
 
+  # coveralls-ignore-start — catch-all for unexpected messages
+  def handle_info(_msg, state), do: {:noreply, state}
+  # coveralls-ignore-stop
+
   defp schedule_tick do
     Process.send_after(self(), :tick, @tick_interval_ms)
   end

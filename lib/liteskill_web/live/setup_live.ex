@@ -23,6 +23,14 @@ defmodule LiteskillWeb.SetupLive do
   def mount(_params, _session, socket) do
     mode = if SingleUser.enabled?(), do: :single_user, else: :server
 
+    {llm_providers, llm_models, rag_embedding_models, rag_current_model} =
+      if connected?(socket) do
+        {LlmProviders.list_all_providers(), LlmModels.list_all_models(),
+         LlmModels.list_all_active_models(model_type: "embedding"), Settings.get().embedding_model}
+      else
+        {[], [], [], nil}
+      end
+
     socket =
       socket
       |> assign(
@@ -36,14 +44,14 @@ defmodule LiteskillWeb.SetupLive do
         sources_to_configure: [],
         current_config_index: 0,
         config_form: to_form(%{}, as: :config),
-        llm_providers: LlmProviders.list_all_providers(),
-        llm_models: LlmModels.list_all_models(),
+        llm_providers: llm_providers,
+        llm_models: llm_models,
         llm_provider_form: to_form(%{}, as: :llm_provider),
         llm_model_form: to_form(%{}, as: :llm_model),
         provider_view: :presets,
         openrouter_pending: false,
-        rag_embedding_models: LlmModels.list_all_active_models(model_type: "embedding"),
-        rag_current_model: Settings.get().embedding_model,
+        rag_embedding_models: rag_embedding_models,
+        rag_current_model: rag_current_model,
         or_models: nil,
         or_search: "",
         or_results: [],

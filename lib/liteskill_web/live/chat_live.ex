@@ -6,7 +6,6 @@ defmodule LiteskillWeb.ChatLive do
 
   alias Liteskill.Chat
   alias Liteskill.Chat.MessageBuilder
-  alias Liteskill.Chat.Projector
   alias Liteskill.LLM.RagContext
   alias Liteskill.LLM.StreamHandler
   alias Liteskill.McpServers
@@ -24,27 +23,26 @@ defmodule LiteskillWeb.ChatLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    conversations = Chat.list_conversations(socket.assigns.current_user.id)
-
     user = socket.assigns.current_user
-
-    available_llm_models =
-      Liteskill.LlmModels.list_active_models(user.id, model_type: "inference")
-
-    preferred_id = get_in(user.preferences, ["preferred_llm_model_id"])
-    selected_server_ids = McpServers.load_selected_server_ids(user.id)
     auto_confirm_tools = get_in(user.preferences, ["auto_confirm_tools"]) != false
 
-    selected_llm_model_id =
-      cond do
-        preferred_id && Enum.any?(available_llm_models, &(&1.id == preferred_id)) ->
-          preferred_id
+    {conversations, available_llm_models, selected_llm_model_id, selected_server_ids, has_admin_access} =
+      if connected?(socket) do
+        convs = Chat.list_conversations(user.id)
+        models = Liteskill.LlmModels.list_active_models(user.id, model_type: "inference")
+        preferred_id = get_in(user.preferences, ["preferred_llm_model_id"])
+        server_ids = McpServers.load_selected_server_ids(user.id)
 
-        available_llm_models != [] ->
-          hd(available_llm_models).id
+        model_id =
+          cond do
+            preferred_id && Enum.any?(models, &(&1.id == preferred_id)) -> preferred_id
+            models != [] -> hd(models).id
+            true -> nil
+          end
 
-        true ->
-          nil
+        {convs, models, model_id, server_ids, Liteskill.Rbac.has_any_admin_permission?(user.id)}
+      else
+        {[], [], nil, MapSet.new(), false}
       end
 
     {:ok,
@@ -109,11 +107,13 @@ defmodule LiteskillWeb.ChatLive do
        # Conversation usage modal
        show_usage_modal: false,
        usage_modal_data: nil,
-       has_admin_access: Liteskill.Rbac.has_any_admin_permission?(user.id),
+       has_admin_access: has_admin_access,
        single_user_mode: Liteskill.SingleUser.enabled?()
      )
      |> then(fn socket ->
-       if MapSet.size(selected_server_ids) > 0, do: send(self(), :fetch_tools)
+       if connected?(socket) && MapSet.size(selected_server_ids) > 0,
+         do: send(self(), :fetch_tools)
+
        socket
      end), layout: {LiteskillWeb.Layouts, :chat}}
   end
@@ -195,7 +195,7 @@ defmodule LiteskillWeb.ChatLive do
         {conversation, streaming} =
           if conversation.status == "streaming" && socket.assigns.stream_task_pid == nil do
             Chat.recover_stream(conversation_id, user_id)
-            Projector.sync()
+            Process.sleep(50)
             {:ok, recovered} = Chat.get_conversation(conversation_id, user_id)
             {recovered, false}
           else
@@ -1218,7 +1218,7 @@ defmodule LiteskillWeb.ChatLive do
       user_id = socket.assigns.current_user.id
 
       Chat.recover_stream(conversation.id, user_id)
-      Projector.sync()
+      Process.sleep(50)
 
       {:ok, messages} = Chat.list_messages(conversation.id, user_id)
       {:ok, fresh_conv} = Chat.get_conversation(conversation.id, user_id)

@@ -28,6 +28,7 @@
   {"lib/liteskill/rbac/permissions.ex", :call_without_opaque},
   {"lib/liteskill/runs/runner.ex", :call_without_opaque},
   {"lib/liteskill/llm/tool_utils.ex", :call_without_opaque},
+  {"lib/liteskill_web/live/chat_live.ex", :call_without_opaque},
 
   # -- 4. Jido library upstream issues --
   {"deps/jido/lib/jido/agent.ex", :pattern_match},

@@ -76,13 +76,17 @@ defmodule Liteskill.Chat.StreamRegistry do
   @impl true
   def init(opts) do
     # Create the ETS table (or reuse if it already exists)
-    try do
-      :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
-    rescue
-      ArgumentError -> :ok
-    end
+    reused =
+      try do
+        :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
+        false
+      rescue
+        ArgumentError -> true
+      end
 
     recovery_delay_ms = Keyword.get(opts, :recovery_delay_ms, @default_recovery_delay_ms)
+
+    if reused, do: cleanup_stale_entries(recovery_delay_ms)
 
     {:ok, %{monitors: %{}, recovery_delay_ms: recovery_delay_ms}}
   end
@@ -144,6 +148,10 @@ defmodule Liteskill.Chat.StreamRegistry do
       Logger.debug("StreamRegistry: skipping recovery for #{conv_id} — new stream active")
     else
       recovery_delay = state.recovery_delay_ms
+      # Capture the GenServer pid so the Task child can schedule retries
+      # back to this specific process instance (avoids relying on name
+      # registration which may be unavailable during a restart).
+      registry_pid = self()
 
       Task.Supervisor.start_child(Liteskill.TaskSupervisor, fn ->
         try do
@@ -168,7 +176,7 @@ defmodule Liteskill.Chat.StreamRegistry do
               )
 
               Process.send_after(
-                __MODULE__,
+                registry_pid,
                 {:recover, conv_id, attempt + 1},
                 backoff
               )
@@ -186,4 +194,19 @@ defmodule Liteskill.Chat.StreamRegistry do
 
     {:noreply, state}
   end
+
+  # coveralls-ignore-start — only reachable on crash-restart with existing ETS table
+  defp cleanup_stale_entries(recovery_delay_ms) do
+    @table
+    |> :ets.tab2list()
+    |> Enum.each(fn {conv_id, pid} ->
+      if !Process.alive?(pid) do
+        :ets.delete(@table, conv_id)
+        Logger.info("StreamRegistry: cleaned stale entry for #{conv_id} (pid #{inspect(pid)} dead)")
+        Process.send_after(self(), {:recover, conv_id, 0}, recovery_delay_ms)
+      end
+    end)
+  end
+
+  # coveralls-ignore-stop
 end

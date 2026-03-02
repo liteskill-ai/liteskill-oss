@@ -317,15 +317,10 @@ defmodule Liteskill.Chat.ConversationAggregate do
     state
   end
 
-  def apply_event(state, %{event_type: "AssistantChunkReceived", data: data}) do
-    chunk = %{
-      chunk_index: data["chunk_index"],
-      delta_text: data["delta_text"],
-      delta_type: data["delta_type"]
-    }
-
-    current_stream = %{state.current_stream | chunks: [chunk | state.current_stream.chunks]}
-    %{state | current_stream: current_stream}
+  def apply_event(state, %{event_type: "AssistantChunkReceived"}) do
+    # Chunks are projected to the DB by the Projector — no need to accumulate
+    # them in aggregate state. Skipping avoids O(n^2) replay cost during streaming.
+    state
   end
 
   def apply_event(state, %{event_type: "AssistantStreamCompleted", data: data}) do

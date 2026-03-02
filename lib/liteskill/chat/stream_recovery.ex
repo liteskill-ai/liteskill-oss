@@ -36,6 +36,10 @@ defmodule Liteskill.Chat.StreamRecovery do
     {:noreply, state}
   end
 
+  # coveralls-ignore-start — catch-all for unexpected messages (e.g. late monitors)
+  def handle_info(_msg, state), do: {:noreply, state}
+  # coveralls-ignore-stop
+
   defp sweep(threshold_minutes) do
     stuck = Liteskill.Chat.list_stuck_streaming(threshold_minutes)
 
@@ -44,7 +48,15 @@ defmodule Liteskill.Chat.StreamRecovery do
 
       Enum.each(stuck, fn conversation ->
         Logger.info("StreamRecovery: recovering #{conversation.id}")
-        Liteskill.Chat.recover_stream_by_id(conversation.id)
+
+        try do
+          Liteskill.Chat.recover_stream_by_id(conversation.id)
+        rescue
+          # coveralls-ignore-start — requires transient DB/Ecto error to trigger
+          e ->
+            Logger.error("StreamRecovery: failed to recover #{conversation.id}: #{Exception.message(e)}")
+            # coveralls-ignore-stop
+        end
       end)
     end
   end

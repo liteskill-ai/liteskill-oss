@@ -37,7 +37,14 @@ defmodule LiteskillWeb.PipelineLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    conversations = Chat.list_conversations(socket.assigns.current_user.id)
+    user_id = socket.assigns.current_user.id
+
+    {conversations, has_admin_access} =
+      if connected?(socket) do
+        {Chat.list_conversations(user_id), Liteskill.Rbac.has_any_admin_permission?(user_id)}
+      else
+        {[], false}
+      end
 
     {:ok,
      socket
@@ -46,7 +53,7 @@ defmodule LiteskillWeb.PipelineLive do
        conversations: conversations,
        conversation: nil,
        sidebar_open: true,
-       has_admin_access: Liteskill.Rbac.has_any_admin_permission?(socket.assigns.current_user.id),
+       has_admin_access: has_admin_access,
        single_user_mode: Liteskill.SingleUser.enabled?()
      ), layout: {Layouts, :chat}}
   end

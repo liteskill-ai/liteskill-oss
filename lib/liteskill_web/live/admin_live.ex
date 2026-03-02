@@ -54,7 +54,10 @@ defmodule LiteskillWeb.AdminLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    conversations = Liteskill.Chat.list_conversations(socket.assigns.current_user.id)
+    conversations =
+      if connected?(socket),
+        do: Liteskill.Chat.list_conversations(socket.assigns.current_user.id),
+        else: []
 
     {:ok,
      socket
