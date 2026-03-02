@@ -76,7 +76,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: liteskill_test
+          POSTGRES_DB: postgres
         ports:
           - 5432:5432
         options: >-
@@ -110,15 +110,16 @@ jobs:
       - name: Compile
         run: mix compile
 
-      - name: Set up database user
+      - name: Set up database
         run: |
-          psql -h localhost -U postgres -c "CREATE USER liteskill WITH PASSWORD 'liteskill' CREATEDB;"
-          psql -h localhost -U postgres -c "GRANT ALL ON SCHEMA public TO liteskill;"
+          psql -h localhost -U postgres -c "CREATE USER liteskill WITH PASSWORD 'liteskill';"
+          psql -h localhost -U postgres -c "CREATE DATABASE liteskill_test OWNER liteskill;"
+          psql -h localhost -U postgres -d liteskill_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
         env:
           PGPASSWORD: postgres
 
       - name: Run tests with coverage
-        run: mix ecto.create --quiet && mix ecto.migrate --quiet && mix coveralls
+        run: mix ecto.migrate --quiet && mix coveralls
 
   dialyzer:
     name: Dialyzer
@@ -187,7 +188,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: liteskill_test
+          POSTGRES_DB: postgres
         ports:
           - 5432:5432
         options: >-
@@ -221,15 +222,16 @@ jobs:
       - name: Compile
         run: mix compile
 
-      - name: Set up database user
+      - name: Set up database
         run: |
-          psql -h localhost -U postgres -c "CREATE USER liteskill WITH PASSWORD 'liteskill' CREATEDB;"
-          psql -h localhost -U postgres -c "GRANT ALL ON SCHEMA public TO liteskill;"
+          psql -h localhost -U postgres -c "CREATE USER liteskill WITH PASSWORD 'liteskill';"
+          psql -h localhost -U postgres -c "CREATE DATABASE liteskill_test OWNER liteskill;"
+          psql -h localhost -U postgres -d liteskill_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
         env:
           PGPASSWORD: postgres
 
       - name: Run E2E tests
-        run: mix test.e2e
+        run: mix ecto.migrate --quiet && mix test.e2e
 
       - name: Upload screenshots
         if: always()
